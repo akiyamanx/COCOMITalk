@@ -252,3 +252,12 @@ const App = (() => {
 document.addEventListener('DOMContentLoaded', () => {
   App.init();
 });
+
+// v0.3追加 - Service Worker登録
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js')
+      .then((reg) => console.log('[App] SW登録完了:', reg.scope))
+      .catch((err) => console.warn('[App] SW登録失敗:', err));
+  });
+}
