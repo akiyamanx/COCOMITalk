@@ -143,8 +143,42 @@ const ChatCore = (() => {
     isProcessing = true;
     showTyping();
 
-    // v0.1: API未接続なのでデモ返答
-    _demoReply(text);
+    // v0.2追加 - API接続（ここちゃんのみ、他はデモ返答）
+    if (currentSister === 'koko' && typeof ApiGemini !== 'undefined' && ApiGemini.hasApiKey()) {
+      _apiReply(text);
+    } else {
+      _demoReply(text);
+    }
+  }
+
+  /**
+   * API経由で返答を取得（v0.2追加）
+   */
+  async function _apiReply(userText) {
+    try {
+      const systemPrompt = (typeof KokoSystemPrompt !== 'undefined')
+        ? KokoSystemPrompt.getPrompt()
+        : '';
+
+      const history = chatHistories[currentSister];
+      const reply = await ApiGemini.sendMessage(userText, systemPrompt, history);
+
+      hideTyping();
+      addMessage('ai', reply);
+      chatHistories[currentSister].push({ role: 'assistant', content: reply });
+
+    } catch (error) {
+      console.error('[ChatCore] API返答エラー:', error);
+      hideTyping();
+      // エラー時はエラーメッセージを表示
+      const errorMsg = error.message.includes('APIキー')
+        ? 'APIキーが設定されてないみたい…⚙️設定からキーを入れてね！'
+        : `ごめんね、通信エラーだった…💦（${error.message}）`;
+      addMessage('ai', errorMsg);
+    } finally {
+      isProcessing = false;
+      btnSend.disabled = msgInput.value.trim().length === 0;
+    }
   }
 
   /**
