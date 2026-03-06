@@ -1,10 +1,11 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v0.3 Session C - PWA強化（キャッシュ更新＋オフライン画面）
+// v0.4 Session D - token-monitor.js追加
 
-const CACHE_NAME = 'cocomitalk-v0.3';
+const CACHE_NAME = 'cocomitalk-v0.4';
 
-// v0.3更新 - 全ファイルをキャッシュ対象に
+// v0.4更新 - token-monitor.js追加
 const CACHE_FILES = [
   './',
   './index.html',
@@ -12,6 +13,7 @@ const CACHE_FILES = [
   './app.js',
   './chat-core.js',
   './chat-history.js',
+  './token-monitor.js',
   './api-gemini.js',
   './prompts/koko-system.js',
   './manifest.json',

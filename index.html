@@ -92,6 +92,8 @@
       </div>
       <div class="input-footer">
         <span id="model-indicator" class="model-indicator">Gemini 2.5 Flash</span>
+        <!-- v0.4追加 - トークン使用量表示 -->
+        <span id="token-cost" class="token-cost" title="今月のトークン使用量">--</span>
         <span id="char-count" class="char-count"></span>
       </div>
     </footer>
@@ -143,6 +145,12 @@
           <h3>🗑️ 会話履歴</h3>
           <button id="btn-clear-history" class="btn-danger">全ての会話履歴をクリア</button>
         </section>
+        <!-- v0.4追加 - トークン使用量モニター -->
+        <section class="settings-section" style="margin-top:24px;">
+          <h3>📊 トークン使用量</h3>
+          <div id="token-detail-area">読み込み中...</div>
+          <button id="btn-clear-tokens" class="btn-danger" style="margin-top:12px;">使用量データをリセット</button>
+        </section>
       </div>
     </div>
   </div>
@@ -151,6 +159,7 @@
   <script src="prompts/koko-system.js"></script>
   <script src="api-gemini.js"></script>
   <script src="chat-history.js"></script>
+  <script src="token-monitor.js"></script>
   <script src="chat-core.js"></script>
   <script src="app.js"></script>
 </body>

@@ -1,6 +1,7 @@
 // COCOMITalk - Gemini API接続
 // このファイルはGemini APIとの通信を管理する
 // v0.1 Session B - API接続基盤
+// v0.4 Session D - usageMetadata取得＋TokenMonitor連携
 'use strict';
 
 /**
@@ -60,7 +61,17 @@ const ApiGemini = (() => {
       }
 
       const data = await response.json();
-      return _extractText(data);
+      const text = _extractText(data);
+
+      // v0.4追加 - トークン使用量を記録
+      const usage = data?.usageMetadata;
+      if (usage && typeof TokenMonitor !== 'undefined') {
+        const inputTokens = usage.promptTokenCount || 0;
+        const outputTokens = usage.candidatesTokenCount || 0;
+        TokenMonitor.record(modelName, inputTokens, outputTokens);
+      }
+
+      return text;
 
     } catch (error) {
       console.error('[ApiGemini] 通信エラー:', error);

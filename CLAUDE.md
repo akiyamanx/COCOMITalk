@@ -31,6 +31,7 @@ COCOMITalk/
 ├── api-openai.js         OpenAI API呼び出し（Session C）
 ├── api-claude.js         Claude API呼び出し（Session C）
 ├── chat-history.js       IndexedDB会話履歴（Session C）
+├── token-monitor.js      トークン使用量モニター（Session D）
 ├── voice-io.js           音声入出力（Phase 2）
 ├── prompts/              プロンプトファイル（Session B）
 │   ├── koko-system.js    ここちゃん用システムプロンプト
@@ -52,8 +53,10 @@ COCOMITalk/
 - 500行制限、コメント・バージョン番号確認
 - LINE通知（GitHub Pages URL含む）
 
-## 現在のバージョン: v0.1（Session A）
+## 現在のバージョン: v0.4（Session D）
 - チャットUI表示
 - 三姉妹タブ切替
-- デモ返答（API未接続）
+- Gemini API接続（ここちゃん会話）
+- IndexedDB会話履歴
 - PWA基盤（manifest + Service Worker）
+- トークン使用量モニター（月別集計＋料金概算）

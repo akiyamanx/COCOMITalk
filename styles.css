@@ -261,3 +261,73 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
 @media (min-width: 641px) {
   .app { border-left: 1px solid var(--border); border-right: 1px solid var(--border); }
 }
+
+/* ===== v0.4追加 - トークンモニター ===== */
+
+/* フッターのトークン料金表示 */
+.token-cost {
+  font-size: 0.7rem;
+  color: var(--text-light, #999);
+  background: rgba(0,0,0,0.05);
+  padding: 2px 8px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.token-cost:hover {
+  background: rgba(0,0,0,0.1);
+}
+
+/* 設定モーダル - トークン詳細 */
+.token-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.token-stat {
+  flex: 1 1 45%;
+  background: var(--bg, #f8f8f8);
+  border-radius: 8px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+}
+.token-stat.highlight {
+  background: linear-gradient(135deg, #fff3e0, #ffe0b2);
+  flex: 1 1 100%;
+}
+.stat-label {
+  font-size: 0.72rem;
+  color: var(--text-light, #999);
+}
+.stat-value {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text, #333);
+}
+.token-stat.highlight .stat-value {
+  color: #e65100;
+  font-size: 1.15rem;
+}
+.token-section-title {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-light, #999);
+  margin: 8px 0 4px;
+}
+.token-model-row, .token-daily-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.05);
+  font-size: 0.82rem;
+}
+.model-name, .daily-date {
+  color: var(--text, #333);
+  font-weight: 500;
+}
+.model-usage, .daily-usage {
+  color: var(--text-light, #999);
+}

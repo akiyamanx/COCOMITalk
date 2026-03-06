@@ -1,6 +1,7 @@
 // COCOMITalk - アプリ初期化・画面管理
 // このファイルはアプリ全体の初期化、スプラッシュ画面、タブ切替、設定を管理する
 // v0.1 Session A - 基盤構築
+// v0.4 Session D - TokenMonitor初期化＋設定画面にトークン詳細
 
 'use strict';
 
@@ -41,9 +42,19 @@ const App = (() => {
   /**
    * アプリ起動
    */
-  function init() {
+  async function init() {
     // スプラッシュ画面の処理
     _handleSplash();
+
+    // v0.4追加 - TokenMonitor初期化（DBバージョン管理のため先に実行）
+    if (typeof TokenMonitor !== 'undefined') {
+      try {
+        await TokenMonitor.init();
+        await TokenMonitor.loadAndDisplay();
+      } catch (e) {
+        console.warn('[App] TokenMonitor初期化エラー:', e);
+      }
+    }
 
     // チャットコア初期化
     ChatCore.init();
@@ -57,7 +68,7 @@ const App = (() => {
     // 保存済み設定を読み込み
     _loadSettings();
 
-    console.log('[App] COCOMITalk v0.1 起動完了');
+    console.log('[App] COCOMITalk v0.4 起動完了');
   }
 
   /**
@@ -133,9 +144,20 @@ const App = (() => {
     const btnSave = document.getElementById('btn-save-settings');
 
     // 開く
-    btnOpen.addEventListener('click', () => {
+    btnOpen.addEventListener('click', async () => {
       modal.classList.remove('hidden');
       _loadSettingsToForm();
+      // v0.4追加 - トークン詳細表示
+      if (typeof TokenMonitor !== 'undefined') {
+        const detailArea = document.getElementById('token-detail-area');
+        if (detailArea) {
+          try {
+            detailArea.innerHTML = await TokenMonitor.getDetailReportHTML();
+          } catch (e) {
+            detailArea.innerHTML = '<p>データ読み込みエラー</p>';
+          }
+        }
+      }
     });
 
     // 閉じる
@@ -156,6 +178,18 @@ const App = (() => {
         if (confirm('全ての会話履歴を削除しますか？\nこの操作は取り消せません。')) {
           await ChatCore.clearHistory();
           closeModal();
+        }
+      });
+    }
+
+    // v0.4追加 - トークン使用量リセット
+    const btnClearTokens = document.getElementById('btn-clear-tokens');
+    if (btnClearTokens) {
+      btnClearTokens.addEventListener('click', async () => {
+        if (confirm('トークン使用量データをリセットしますか？\nこの操作は取り消せません。')) {
+          if (typeof TokenMonitor !== 'undefined') {
+            await TokenMonitor.clearAll();
+          }
         }
       });
     }

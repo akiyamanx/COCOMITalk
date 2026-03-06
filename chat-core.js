@@ -1,6 +1,7 @@
 // COCOMITalk - チャットコア
 // このファイルはチャットUIのメッセージ送受信を管理する
 // v0.3 Session C - IndexedDB会話履歴保存対応
+// v0.4 Session D - メッセージにトークン数表示
 
 'use strict';
 

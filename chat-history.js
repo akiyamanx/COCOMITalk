@@ -1,6 +1,7 @@
 // COCOMITalk - 会話履歴管理（IndexedDB）
 // このファイルはIndexedDBを使って会話履歴を永続保存する
 // v0.3 Session C - リロードしても会話が消えない
+// v0.4 Session D - DB_VERSION=2はTokenMonitor側で管理（ストア追加）
 'use strict';
 
 /**
@@ -10,7 +11,7 @@
 const ChatHistory = (() => {
 
   const DB_NAME = 'cocomitalk-db';
-  const DB_VERSION = 1;
+  const DB_VERSION = 2; // v0.4 - TokenMonitorと統一
   const STORE_NAME = 'conversations';
 
   let db = null;
@@ -20,6 +21,11 @@ const ChatHistory = (() => {
    * @returns {Promise<IDBDatabase>}
    */
   function init() {
+    // v0.4追加 - 既にTokenMonitorがDBを開いている場合はそちらを使う
+    if (db) {
+      return Promise.resolve(db);
+    }
+
     return new Promise((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
@@ -29,6 +35,10 @@ const ChatHistory = (() => {
         if (!database.objectStoreNames.contains(STORE_NAME)) {
           // 姉妹キーをprimaryKeyにする
           database.createObjectStore(STORE_NAME, { keyPath: 'sisterKey' });
+        }
+        // v0.4追加 - TokenMonitor用ストア（こちらからも作成できるように）
+        if (!database.objectStoreNames.contains('token_usage')) {
+          database.createObjectStore('token_usage', { keyPath: 'monthKey' });
         }
         console.log('[ChatHistory] DBスキーマ作成完了');
       };
