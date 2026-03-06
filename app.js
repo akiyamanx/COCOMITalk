@@ -148,6 +148,17 @@ const App = (() => {
       _saveSettings();
       closeModal();
     });
+
+    // v0.3追加 - 履歴クリア
+    const btnClear = document.getElementById('btn-clear-history');
+    if (btnClear) {
+      btnClear.addEventListener('click', async () => {
+        if (confirm('全ての会話履歴を削除しますか？\nこの操作は取り消せません。')) {
+          await ChatCore.clearHistory();
+          closeModal();
+        }
+      });
+    }
   }
 
   /**

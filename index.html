@@ -138,6 +138,11 @@
         </section>
         <!-- 保存ボタン -->
         <button id="btn-save-settings" class="btn-primary">保存する</button>
+        <!-- v0.3追加 - 履歴クリア -->
+        <section class="settings-section" style="margin-top:24px;">
+          <h3>🗑️ 会話履歴</h3>
+          <button id="btn-clear-history" class="btn-danger">全ての会話履歴をクリア</button>
+        </section>
       </div>
     </div>
   </div>
@@ -145,6 +150,7 @@
   <!-- スクリプト読み込み -->
   <script src="prompts/koko-system.js"></script>
   <script src="api-gemini.js"></script>
+  <script src="chat-history.js"></script>
   <script src="chat-core.js"></script>
   <script src="app.js"></script>
 </body>

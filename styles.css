@@ -230,6 +230,12 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
   border-radius: var(--radius-md); transition: opacity 0.2s;
 }
 .btn-primary:hover { opacity: 0.9; }
+.btn-danger {
+  width: 100%; padding: 13px; background: #E55; color: white;
+  font-size: 14px; font-weight: 700; border-radius: var(--radius-md);
+  transition: opacity 0.2s; margin-top: 8px;
+}
+.btn-danger:hover { opacity: 0.9; }
 
 /* ===== アニメーション ===== */
 @keyframes splashBounce {

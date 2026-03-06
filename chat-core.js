@@ -1,6 +1,6 @@
 // COCOMITalk - チャットコア
 // このファイルはチャットUIのメッセージ送受信を管理する
-// v0.1 Session A - 基盤構築
+// v0.3 Session C - IndexedDB会話履歴保存対応
 
 'use strict';
 
@@ -56,7 +56,7 @@ const ChatCore = (() => {
   /**
    * 初期化
    */
-  function init() {
+  async function init() {
     chatArea = document.getElementById('chat-area');
     msgInput = document.getElementById('msg-input');
     btnSend = document.getElementById('btn-send');
@@ -66,6 +66,9 @@ const ChatCore = (() => {
     // イベントリスナー設定
     _setupInputEvents();
     _setupSendEvents();
+
+    // v0.3追加 - IndexedDBから履歴読み込み
+    await _loadAllHistories();
 
     console.log('[ChatCore] 初期化完了');
   }
@@ -136,8 +139,9 @@ const ChatCore = (() => {
     btnSend.disabled = true;
     charCount.textContent = '';
 
-    // 履歴に追加
+    // 履歴に追加＋IndexedDB保存（v0.3追加）
     chatHistories[currentSister].push({ role: 'user', content: text });
+    _saveHistory();
 
     // タイピングインジケーター表示
     isProcessing = true;
@@ -166,6 +170,7 @@ const ChatCore = (() => {
       hideTyping();
       addMessage('ai', reply);
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
+      _saveHistory(); // v0.3追加 - IndexedDBに保存
 
     } catch (error) {
       console.error('[ChatCore] API返答エラー:', error);
@@ -195,6 +200,7 @@ const ChatCore = (() => {
       hideTyping();
       addMessage('ai', reply);
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
+      _saveHistory(); // v0.3追加 - IndexedDBに保存
       isProcessing = false;
       btnSend.disabled = msgInput.value.trim().length === 0;
     }, delay);
@@ -387,6 +393,74 @@ const ChatCore = (() => {
     return currentSister;
   }
 
+  /**
+   * IndexedDBに現在の姉妹の履歴を保存（v0.3追加）
+   */
+  function _saveHistory() {
+    if (typeof ChatHistory !== 'undefined') {
+      ChatHistory.save(currentSister, chatHistories[currentSister]).catch(e => {
+        console.warn('[ChatCore] 履歴保存エラー:', e);
+      });
+    }
+  }
+
+  /**
+   * IndexedDBから全姉妹の履歴を読み込み（v0.3追加）
+   */
+  async function _loadAllHistories() {
+    if (typeof ChatHistory === 'undefined') return;
+
+    try {
+      await ChatHistory.init();
+
+      for (const key of ['koko', 'gpt', 'claude']) {
+        const saved = await ChatHistory.load(key);
+        if (saved && saved.length > 0) {
+          chatHistories[key] = saved;
+        }
+      }
+
+      // 現在の姉妹の履歴を画面に表示
+      const history = chatHistories[currentSister];
+      if (history.length > 0) {
+        if (welcomeMsg) welcomeMsg.classList.add('hidden');
+        history.forEach(msg => {
+          addMessage(msg.role === 'user' ? 'user' : 'ai', msg.content);
+        });
+      }
+
+      console.log('[ChatCore] 履歴読み込み完了');
+    } catch (e) {
+      console.warn('[ChatCore] 履歴読み込みエラー:', e);
+    }
+  }
+
+  /**
+   * 会話履歴をクリア（v0.3追加 - 設定画面から呼べる）
+   */
+  async function clearHistory(sisterKey) {
+    if (sisterKey) {
+      chatHistories[sisterKey] = [];
+      if (typeof ChatHistory !== 'undefined') {
+        await ChatHistory.clear(sisterKey);
+      }
+    } else {
+      chatHistories.koko = [];
+      chatHistories.gpt = [];
+      chatHistories.claude = [];
+      if (typeof ChatHistory !== 'undefined') {
+        await ChatHistory.clearAll();
+      }
+    }
+    _clearChat();
+    if (welcomeMsg) {
+      welcomeMsg.classList.remove('hidden');
+      const sister = SISTERS[currentSister];
+      welcomeMsg.querySelector('.welcome-icon').textContent = sister.welcomeIcon;
+      welcomeMsg.querySelector('.welcome-text').textContent = sister.welcomeText;
+    }
+  }
+
   // --- 公開API ---
   return {
     init,
@@ -395,6 +469,7 @@ const ChatCore = (() => {
     hideTyping,
     switchSister,
     getCurrentSister,
+    clearHistory,
     SISTERS,
   };
 })();
