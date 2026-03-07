@@ -215,3 +215,46 @@
 .meeting-active .input-area {
   display: none;
 }
+
+/* ========== v0.9追加 - 人数切替ボタン＋グループモード ========== */
+
+/* 👤⇔👥ボタン */
+.people-btn {
+  background: transparent;
+  border: 2px solid #ddd;
+  border-radius: 12px;
+  padding: 4px 10px;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  line-height: 1;
+}
+.people-btn:active {
+  transform: scale(0.92);
+}
+.people-btn.people-active {
+  background: rgba(255, 107, 157, 0.15);
+  border-color: #FF6B9D;
+}
+
+/* グループモード時にタブを隠す */
+.sister-tabs.tabs-hidden {
+  display: none;
+}
+
+/* グループ応答の姉妹名タグ */
+.msg-sister-name {
+  font-size: 0.78rem;
+  font-weight: 700;
+  font-family: 'Zen Maru Gothic', sans-serif;
+  margin-bottom: 4px;
+}
+
+/* グループタイピング時の姉妹名 */
+.typing-name {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  margin-bottom: 2px;
+  font-family: 'Zen Maru Gothic', sans-serif;
+}

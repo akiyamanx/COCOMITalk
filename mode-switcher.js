@@ -1,25 +1,35 @@
 // COCOMITalk - モード切替統合モジュール
 // このファイルはnormal/dev/meetingモードの切替とプロンプト＋モデルグレードの連動を管理する
 // v0.8 Step 3 - 新規作成
+// v0.9 Step 3.5 - solo/group（👤⇔👥）人数モード追加
 
 'use strict';
 
 /**
  * モード切替モジュール
- * - ボタン1つでnormal→dev→meeting循環
+ * - 2軸構造: トーンモード（normal/dev/meeting）× 人数モード（solo/group）
  * - プロンプト（*SystemPrompt.setMode）とモデルグレード（各APIモジュール）を連動
  * - UIのインジケーター更新も担当
  */
 const ModeSwitcher = (() => {
 
-  // --- モード定義 ---
+  // --- トーンモード定義 ---
   const MODES = ['normal', 'dev', 'meeting'];
+
+  // --- 人数モード定義（v0.9追加） ---
+  const PEOPLE_MODES = ['solo', 'group'];
 
   // --- モード別表示設定 ---
   const MODE_DISPLAY = {
     normal: { label: '💬 普段', short: 'N', color: 'var(--active-primary)' },
     dev: { label: '🔧 開発', short: 'D', color: '#FF9800' },
     meeting: { label: '🏛️ 会議', short: 'M', color: '#F44336' },
+  };
+
+  // --- 人数モード表示設定（v0.9追加） ---
+  const PEOPLE_DISPLAY = {
+    solo: { label: '👤', tooltip: '1対1モード' },
+    group: { label: '👥', tooltip: 'みんなモード（三姉妹全員）' },
   };
 
   // --- モード別モデルグレード ---
@@ -51,6 +61,7 @@ const ModeSwitcher = (() => {
   };
 
   let currentMode = 'normal';
+  let peopleMode = 'solo'; // v0.9追加 - 'solo' or 'group'
 
   /**
    * 次のモードに切替（循環: normal→dev→meeting→normal）
@@ -157,6 +168,48 @@ const ModeSwitcher = (() => {
     return currentMode === 'meeting';
   }
 
+  // --- v0.9追加 - 人数モード制御 ---
+
+  /**
+   * 人数モードを切替（solo⇔group）
+   * @returns {string} 切替後の人数モード
+   */
+  function togglePeopleMode() {
+    peopleMode = (peopleMode === 'solo') ? 'group' : 'solo';
+    _updatePeopleUI(peopleMode);
+    console.log(`[ModeSwitcher] 人数モード切替: ${peopleMode}`);
+    return peopleMode;
+  }
+
+  /**
+   * 人数モードを取得
+   */
+  function getPeopleMode() {
+    return peopleMode;
+  }
+
+  /**
+   * グループモードかどうか
+   */
+  function isGroupMode() {
+    return peopleMode === 'group';
+  }
+
+  /**
+   * 人数モードボタンのUI更新（v0.9追加）
+   */
+  function _updatePeopleUI(mode) {
+    const btn = document.getElementById('btn-people');
+    if (btn) {
+      const display = PEOPLE_DISPLAY[mode];
+      btn.textContent = display.label;
+      btn.title = display.tooltip;
+      btn.dataset.people = mode;
+      // グループモード時はアクティブ色
+      btn.classList.toggle('people-active', mode === 'group');
+    }
+  }
+
   /**
    * モード一覧を取得
    */
@@ -180,6 +233,10 @@ const ModeSwitcher = (() => {
     getModes,
     getModeDisplay,
     onSisterSwitch,
+    // v0.9追加 - 人数モード
+    togglePeopleMode,
+    getPeopleMode,
+    isGroupMode,
     MODE_MODELS,
   };
 })();

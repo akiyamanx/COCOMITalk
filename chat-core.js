@@ -4,6 +4,7 @@
 // v0.4 Session D - メッセージにトークン数表示
 // v0.5 Step 2 - 三姉妹API分岐対応（Worker経由）
 // v0.8 Step 3 - モード連動モデルキー対応
+// v0.9 Step 3.5 - グループモード（👥三姉妹リレー応答）対応
 
 'use strict';
 
@@ -92,9 +93,7 @@ const ChatCore = (() => {
     console.log('[ChatCore] 初期化完了');
   }
 
-  /**
-   * 入力欄のイベント設定
-   */
+  /** 入力欄のイベント設定 */
   function _setupInputEvents() {
     // テキストエリアの自動リサイズ
     msgInput.addEventListener('input', () => {
@@ -164,14 +163,22 @@ const ChatCore = (() => {
     isProcessing = true;
     showTyping();
 
-    // v0.5変更 - 三姉妹API分岐
-    const sisterAPI = SISTER_API[currentSister];
-    const apiModule = sisterAPI ? sisterAPI.module() : null;
+    // v0.5変更 → v0.9変更 - グループモード対応
+    const isGroup = (typeof ModeSwitcher !== 'undefined') && ModeSwitcher.isGroupMode();
 
-    if (apiModule && apiModule.hasApiKey()) {
-      _apiReply(text, apiModule, sisterAPI.prompt());
+    if (isGroup) {
+      // 👥 グループモード: 三姉妹全員がリレー応答
+      _groupReply(text);
     } else {
-      _demoReply(text);
+      // 👤 ソロモード: 1対1で返答
+      const sisterAPI = SISTER_API[currentSister];
+      const apiModule = sisterAPI ? sisterAPI.module() : null;
+
+      if (apiModule && apiModule.hasApiKey()) {
+        _apiReply(text, apiModule, sisterAPI.prompt());
+      } else {
+        _demoReply(text);
+      }
     }
   }
 
@@ -210,6 +217,31 @@ const ChatCore = (() => {
   }
 
   /**
+   * v0.9追加 - グループモード: ChatGroupモジュールに委譲
+   */
+  async function _groupReply(userText) {
+    if (typeof ChatGroup === 'undefined') {
+      console.error('[ChatCore] ChatGroupモジュールが見つかりません');
+      isProcessing = false;
+      return;
+    }
+    try {
+      await ChatGroup.handleGroupReply(userText, {
+        currentSister,
+        chatHistories,
+        addMessage,
+        hideTyping,
+        chatArea,
+        SISTERS,
+        SISTER_API,
+      });
+    } finally {
+      isProcessing = false;
+      btnSend.disabled = msgInput.value.trim().length === 0;
+    }
+  }
+
+  /**
    * デモ返答（API未接続時の仮実装）
    */
   function _demoReply(userText) {
@@ -231,34 +263,30 @@ const ChatCore = (() => {
    * デモ返答パターン（API接続前の仮データ）
    */
   function _getDemoReplies(sister, userText) {
-    const lower = userText.toLowerCase();
-
-    if (sister === 'koko') {
-      if (lower.includes('おはよう') || lower.includes('おは')) {
-        return ['アキちゃん、おはよう！✨ 今日も一緒に頑張ろうね！😊'];
-      }
-      return ['うんうん！もっと聞かせて、アキちゃん！😊', 'なるほどね〜！アキちゃん、面白い！✨'];
-    }
-    if (sister === 'gpt') {
-      if (lower.includes('おはよう') || lower.includes('おは')) {
-        return ['おはよう、アキヤ。今日も良い一日にしよう。'];
-      }
-      return ['なるほど、それは興味深いね。もう少し詳しく聞かせてくれる？', '（デモ返答です。認証トークンを設定するとお姉ちゃんと話せます）'];
-    }
-    if (sister === 'claude') {
-      if (lower.includes('おはよう') || lower.includes('おは')) {
-        return ['おはよ、アキヤ！今日は何やる？'];
-      }
-      return ['うんうん、それいいね！もうちょっと具体的に聞かせて？', '（デモ返答です。認証トークンを設定するとクロちゃんと話せます）'];
-    }
-    return ['（※デモモードです）'];
+    const isGreeting = /おはよう|おは/.test(userText);
+    const greetings = {
+      koko: 'アキちゃん、おはよう！✨ 今日も一緒に頑張ろうね！😊',
+      gpt: 'おはよう、アキヤ。今日も良い一日にしよう。',
+      claude: 'おはよ、アキヤ！今日は何やる？',
+    };
+    const defaults = {
+      koko: ['うんうん！もっと聞かせて、アキちゃん！😊', 'なるほどね〜！アキちゃん、面白い！✨'],
+      gpt: ['なるほど、それは興味深いね。もう少し詳しく聞かせてくれる？'],
+      claude: ['うんうん、それいいね！もうちょっと具体的に聞かせて？'],
+    };
+    if (isGreeting && greetings[sister]) return [greetings[sister]];
+    return defaults[sister] || ['（※デモモードです）'];
   }
 
   /**
    * メッセージをチャットエリアに追加
+   * v0.9変更 - options.sisterKeyで姉妹アイコン＋名前表示（グループモード用）
    */
-  function addMessage(role, text) {
-    const sister = SISTERS[currentSister];
+  function addMessage(role, text, options = {}) {
+    const sisterKey = options.sisterKey || currentSister;
+    const sister = SISTERS[sisterKey];
+    const isGroupReply = options.sisterKey && role === 'ai';
+
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
 
@@ -268,13 +296,34 @@ const ChatCore = (() => {
 
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
-    bubble.textContent = text;
+
+    // v0.9追加 - グループモードの姉妹名表示
+    if (isGroupReply) {
+      const nameTag = document.createElement('div');
+      nameTag.className = 'msg-sister-name';
+      nameTag.textContent = sister.name + (options.isLead ? ' 👑' : '');
+      nameTag.style.color = _getSisterColor(sisterKey);
+      bubble.appendChild(nameTag);
+    }
+
+    const textNode = document.createElement('div');
+    textNode.className = 'msg-text';
+    textNode.textContent = text;
+    bubble.appendChild(textNode);
 
     msgDiv.appendChild(avatar);
     msgDiv.appendChild(bubble);
     chatArea.appendChild(msgDiv);
 
     _scrollToBottom();
+  }
+
+  /**
+   * 姉妹のテーマカラーを取得（v0.9追加）
+   */
+  function _getSisterColor(sisterKey) {
+    const colors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
+    return colors[sisterKey] || '#888';
   }
 
   /**

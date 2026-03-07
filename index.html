@@ -3,6 +3,7 @@
 <!-- v0.1 Session A - 基盤構築 -->
 <!-- v0.5 Step 2 - 三姉妹API接続＋スクリプト追加 -->
 <!-- v0.8 Step 3 - モード切替ボタン＋会議専用画面追加 -->
+<!-- v0.9 Step 3.5 - 👤⇔👥人数切替ボタン追加 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -51,6 +52,8 @@
       <div class="header-right">
         <!-- v0.8追加 - モード切替ボタン -->
         <button id="btn-mode" class="mode-btn" data-mode="normal" aria-label="モード切替">💬 普段</button>
+        <!-- v0.9追加 - 人数切替ボタン（ソロ⇔みんな） -->
+        <button id="btn-people" class="people-btn" data-people="solo" aria-label="人数切替" title="1対1モード">👤</button>
         <button id="btn-settings" class="icon-btn" aria-label="設定">⚙️</button>
       </div>
     </header>
@@ -210,6 +213,7 @@
   <script src="meeting-router.js"></script>
   <script src="meeting-relay.js"></script>
   <script src="meeting-ui.js"></script>
+  <script src="chat-group.js"></script>
   <script src="chat-core.js"></script>
   <script src="app.js"></script>
 </body>

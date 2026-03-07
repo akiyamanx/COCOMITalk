@@ -74,6 +74,9 @@ const App = (() => {
     // v0.8追加 - モード切替ボタン設定
     _setupModeButton();
 
+    // v0.9追加 - 人数切替ボタン設定
+    _setupPeopleButton();
+
     // v0.8追加 - 会議UI初期化
     if (typeof MeetingUI !== 'undefined') {
       MeetingUI.init();
@@ -85,7 +88,7 @@ const App = (() => {
     // 保存済み設定を読み込み
     _loadSettings();
 
-    console.log('[App] COCOMITalk v0.8 起動完了');
+    console.log('[App] COCOMITalk v0.9 起動完了');
   }
 
   /**
@@ -160,6 +163,36 @@ const App = (() => {
       }
 
       console.log(`[App] モード切替: ${newMode}`);
+    });
+  }
+
+  /**
+   * v0.9追加 - 人数切替ボタンの設定（👤⇔👥）
+   */
+  function _setupPeopleButton() {
+    const peopleBtn = document.getElementById('btn-people');
+    if (!peopleBtn) return;
+
+    peopleBtn.addEventListener('click', () => {
+      if (typeof ModeSwitcher === 'undefined') return;
+
+      const newPeople = ModeSwitcher.togglePeopleMode();
+
+      // グループモード時は三姉妹タブを非表示にする（全員で話すため）
+      const tabNav = document.querySelector('.sister-tabs');
+      if (tabNav) {
+        tabNav.classList.toggle('tabs-hidden', newPeople === 'group');
+      }
+
+      // プレースホルダー更新
+      const msgInput = document.getElementById('msg-input');
+      if (msgInput) {
+        msgInput.placeholder = (newPeople === 'group')
+          ? 'みんなに話しかけてね...'
+          : ChatCore.SISTERS[ChatCore.getCurrentSister()].placeholder;
+      }
+
+      console.log(`[App] 人数モード切替: ${newPeople}`);
     });
   }
 
