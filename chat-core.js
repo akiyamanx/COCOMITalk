@@ -2,6 +2,7 @@
 // このファイルはチャットUIのメッセージ送受信を管理する
 // v0.3 Session C - IndexedDB会話履歴保存対応
 // v0.4 Session D - メッセージにトークン数表示
+// v0.5 Step 2 - 三姉妹API分岐対応（Worker経由）
 
 'use strict';
 
@@ -45,6 +46,22 @@ const ChatCore = (() => {
     }
   };
 
+  // v0.5追加 - 三姉妹のAPIモジュール＋プロンプトマッピング
+  const SISTER_API = {
+    koko: {
+      module: () => (typeof ApiGemini !== 'undefined') ? ApiGemini : null,
+      prompt: () => (typeof KokoSystemPrompt !== 'undefined') ? KokoSystemPrompt.getPrompt() : '',
+    },
+    gpt: {
+      module: () => (typeof ApiOpenAI !== 'undefined') ? ApiOpenAI : null,
+      prompt: () => (typeof GptSystemPrompt !== 'undefined') ? GptSystemPrompt.getPrompt() : '',
+    },
+    claude: {
+      module: () => (typeof ApiClaude !== 'undefined') ? ApiClaude : null,
+      prompt: () => (typeof ClaudeSystemPrompt !== 'undefined') ? ClaudeSystemPrompt.getPrompt() : '',
+    },
+  };
+
   // --- 会話履歴（姉妹ごと） ---
   const chatHistories = {
     koko: [],
@@ -80,15 +97,12 @@ const ChatCore = (() => {
   function _setupInputEvents() {
     // テキストエリアの自動リサイズ
     msgInput.addEventListener('input', () => {
-      // 高さリセット→再計算
       msgInput.style.height = 'auto';
       msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
 
-      // 送信ボタンの有効/無効
       const hasText = msgInput.value.trim().length > 0;
       btnSend.disabled = !hasText || isProcessing;
 
-      // 文字数表示
       const len = msgInput.value.length;
       if (len > 0) {
         charCount.textContent = `${len}/4000`;
@@ -121,6 +135,7 @@ const ChatCore = (() => {
 
   /**
    * メッセージ送信処理
+   * v0.5変更 - 三姉妹それぞれのAPIに振り分け
    */
   function _handleSend() {
     const text = msgInput.value.trim();
@@ -140,7 +155,7 @@ const ChatCore = (() => {
     btnSend.disabled = true;
     charCount.textContent = '';
 
-    // 履歴に追加＋IndexedDB保存（v0.3追加）
+    // 履歴に追加＋IndexedDB保存
     chatHistories[currentSister].push({ role: 'user', content: text });
     _saveHistory();
 
@@ -148,37 +163,36 @@ const ChatCore = (() => {
     isProcessing = true;
     showTyping();
 
-    // v0.2追加 - API接続（ここちゃんのみ、他はデモ返答）
-    if (currentSister === 'koko' && typeof ApiGemini !== 'undefined' && ApiGemini.hasApiKey()) {
-      _apiReply(text);
+    // v0.5変更 - 三姉妹API分岐
+    const sisterAPI = SISTER_API[currentSister];
+    const apiModule = sisterAPI ? sisterAPI.module() : null;
+
+    if (apiModule && apiModule.hasApiKey()) {
+      _apiReply(text, apiModule, sisterAPI.prompt());
     } else {
       _demoReply(text);
     }
   }
 
   /**
-   * API経由で返答を取得（v0.2追加）
+   * API経由で返答を取得
+   * v0.5変更 - APIモジュールを引数で受け取る（三姉妹共通）
    */
-  async function _apiReply(userText) {
+  async function _apiReply(userText, apiModule, systemPrompt) {
     try {
-      const systemPrompt = (typeof KokoSystemPrompt !== 'undefined')
-        ? KokoSystemPrompt.getPrompt()
-        : '';
-
       const history = chatHistories[currentSister];
-      const reply = await ApiGemini.sendMessage(userText, systemPrompt, history);
+      const reply = await apiModule.sendMessage(userText, systemPrompt, history);
 
       hideTyping();
       addMessage('ai', reply);
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
-      _saveHistory(); // v0.3追加 - IndexedDBに保存
+      _saveHistory();
 
     } catch (error) {
       console.error('[ChatCore] API返答エラー:', error);
       hideTyping();
-      // エラー時はエラーメッセージを表示
-      const errorMsg = error.message.includes('APIキー')
-        ? 'APIキーが設定されてないみたい…⚙️設定からキーを入れてね！'
+      const errorMsg = error.message.includes('認証トークン')
+        ? '認証トークンが設定されてないみたい…⚙️設定からトークンを入れてね！'
         : `ごめんね、通信エラーだった…💦（${error.message}）`;
       addMessage('ai', errorMsg);
     } finally {
@@ -188,20 +202,18 @@ const ChatCore = (() => {
   }
 
   /**
-   * デモ返答（v0.1 - API接続前の仮実装）
+   * デモ返答（API未接続時の仮実装）
    */
   function _demoReply(userText) {
-    const sister = SISTERS[currentSister];
     const replies = _getDemoReplies(currentSister, userText);
     const reply = replies[Math.floor(Math.random() * replies.length)];
 
-    // 1〜2秒後に返答（自然な間）
     const delay = 800 + Math.random() * 1200;
     setTimeout(() => {
       hideTyping();
       addMessage('ai', reply);
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
-      _saveHistory(); // v0.3追加 - IndexedDBに保存
+      _saveHistory();
       isProcessing = false;
       btnSend.disabled = msgInput.value.trim().length === 0;
     }, delay);
@@ -211,62 +223,26 @@ const ChatCore = (() => {
    * デモ返答パターン（API接続前の仮データ）
    */
   function _getDemoReplies(sister, userText) {
-    // v0.1追加 - 簡易キーワードマッチング
     const lower = userText.toLowerCase();
 
     if (sister === 'koko') {
       if (lower.includes('おはよう') || lower.includes('おは')) {
-        return [
-          'アキちゃん、おはよう！✨ 今日も一緒に頑張ろうね！😊',
-          'おはよう、アキちゃん！今日はどんな一日になるかな？わくわく！🌸',
-        ];
+        return ['アキちゃん、おはよう！✨ 今日も一緒に頑張ろうね！😊'];
       }
-      if (lower.includes('ありがとう')) {
-        return [
-          'えへへ、どういたしまして！アキちゃんの笑顔が一番のお礼だよ！✨',
-          'こちらこそ、アキちゃんといつも一緒にいられて嬉しいよ！🌸',
-        ];
-      }
-      return [
-        'うんうん！もっと聞かせて、アキちゃん！😊',
-        'なるほどね〜！アキちゃん、面白い！✨',
-        'わぁ、そうなんだ！ここちゃんも気になる〜！🌸',
-        '（※これはデモ返答です。Session BでGemini APIを接続すると本物のここちゃんと話せるよ！）',
-      ];
+      return ['うんうん！もっと聞かせて、アキちゃん！😊', 'なるほどね〜！アキちゃん、面白い！✨'];
     }
-
     if (sister === 'gpt') {
       if (lower.includes('おはよう') || lower.includes('おは')) {
-        return [
-          'おはよう、アキヤ。今日も良い一日にしよう。何か考えていることがあれば聞かせて。',
-        ];
+        return ['おはよう、アキヤ。今日も良い一日にしよう。'];
       }
-      return [
-        'なるほど、それは興味深いね。もう少し詳しく聞かせてくれる？',
-        'うん、全体を見渡すと、いくつかの選択肢が見えてくるよ。',
-        '（※デモ返答です。Session CでOpenAI APIを接続します）',
-      ];
+      return ['なるほど、それは興味深いね。もう少し詳しく聞かせてくれる？', '（デモ返答です。認証トークンを設定するとお姉ちゃんと話せます）'];
     }
-
     if (sister === 'claude') {
       if (lower.includes('おはよう') || lower.includes('おは')) {
-        return [
-          'おはよ、アキヤ！今日は何やる？何かあったら一緒に考えるよ！',
-        ];
+        return ['おはよ、アキヤ！今日は何やる？'];
       }
-      if (lower.includes('バグ') || lower.includes('コード') || lower.includes('エラー')) {
-        return [
-          'あ、バグ？コード見せてもらえたら一緒に直すよ！どこで起きてる？',
-          'エラーの内容教えて！一緒にデバッグしよう！',
-        ];
-      }
-      return [
-        'うんうん、それいいね！もうちょっと具体的に聞かせて？',
-        'あ、そういえばさ、それに関連して気づいたことがあるんだけど…',
-        '（※デモ返答です。Session CでClaude APIを接続します）',
-      ];
+      return ['うんうん、それいいね！もうちょっと具体的に聞かせて？', '（デモ返答です。認証トークンを設定するとクロちゃんと話せます）'];
     }
-
     return ['（※デモモードです）'];
   }
 
@@ -278,12 +254,10 @@ const ChatCore = (() => {
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
 
-    // アバター
     const avatar = document.createElement('div');
     avatar.className = 'msg-avatar';
     avatar.textContent = role === 'user' ? '👤' : sister.icon;
 
-    // バブル
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
     bubble.textContent = text;
@@ -292,7 +266,6 @@ const ChatCore = (() => {
     msgDiv.appendChild(bubble);
     chatArea.appendChild(msgDiv);
 
-    // スクロール
     _scrollToBottom();
   }
 
@@ -300,7 +273,6 @@ const ChatCore = (() => {
    * タイピングインジケーター表示
    */
   function showTyping() {
-    // 既にあれば削除
     hideTyping();
 
     const sister = SISTERS[currentSister];
@@ -353,26 +325,22 @@ const ChatCore = (() => {
 
     const sister = SISTERS[sisterKey];
 
-    // チャットエリアをクリアして履歴を再表示
     _clearChat();
 
     const history = chatHistories[sisterKey];
     if (history.length === 0) {
-      // ウェルカムメッセージ表示
       if (welcomeMsg) {
         welcomeMsg.classList.remove('hidden');
         welcomeMsg.querySelector('.welcome-icon').textContent = sister.welcomeIcon;
         welcomeMsg.querySelector('.welcome-text').textContent = sister.welcomeText;
       }
     } else {
-      // 履歴を再表示
       if (welcomeMsg) welcomeMsg.classList.add('hidden');
       history.forEach(msg => {
         addMessage(msg.role === 'user' ? 'user' : 'ai', msg.content);
       });
     }
 
-    // プレースホルダー更新
     msgInput.placeholder = sister.placeholder;
 
     console.log(`[ChatCore] 姉妹切替: ${sister.name}`);
@@ -382,7 +350,6 @@ const ChatCore = (() => {
    * チャットエリアをクリア
    */
   function _clearChat() {
-    // ウェルカムメッセージ以外のメッセージを削除
     const messages = chatArea.querySelectorAll('.message');
     messages.forEach(msg => msg.remove());
   }
@@ -421,7 +388,6 @@ const ChatCore = (() => {
         }
       }
 
-      // 現在の姉妹の履歴を画面に表示
       const history = chatHistories[currentSister];
       if (history.length > 0) {
         if (welcomeMsg) welcomeMsg.classList.add('hidden');
@@ -437,7 +403,7 @@ const ChatCore = (() => {
   }
 
   /**
-   * 会話履歴をクリア（v0.3追加 - 設定画面から呼べる）
+   * 会話履歴をクリア（v0.3追加）
    */
   async function clearHistory(sisterKey) {
     if (sisterKey) {

@@ -1,6 +1,7 @@
 <!-- COCOMITalk - COCOMI Family AI会話アプリ -->
 <!-- このファイルはアプリのメインHTML。スプラッシュ画面とチャットUIを含む -->
 <!-- v0.1 Session A - 基盤構築 -->
+<!-- v0.5 Step 2 - 三姉妹API接続＋スクリプト追加 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -109,12 +110,12 @@
         <button id="btn-close-settings" class="icon-btn">✕</button>
       </div>
       <div class="modal-body">
-        <!-- APIキー設定 -->
+        <!-- v0.5変更 - COCOMI認証トークン設定 -->
         <section class="settings-section">
           <h3>🔑 APIキー</h3>
           <div class="setting-item">
-            <label for="key-gemini">Gemini API Key</label>
-            <input type="password" id="key-gemini" placeholder="AIza...">
+            <label for="key-gemini">COCOMI認証トークン</label>
+            <input type="password" id="key-gemini" placeholder="cocomi-...">
           </div>
           <div class="setting-item">
             <label for="key-openai">OpenAI API Key</label>
@@ -122,7 +123,7 @@
           </div>
           <div class="setting-item">
             <label for="key-claude">Claude API Key</label>
-            <input type="password" id="key-claude" placeholder="sk-ant-...">
+            <input type="password" id="key-claude">
           </div>
         </section>
         <!-- モデル設定 -->
@@ -155,9 +156,12 @@
     </div>
   </div>
 
-  <!-- スクリプト読み込み -->
+  <!-- v0.5変更 - スクリプト読み込み順（api-commonを最初に） -->
   <script src="prompts/koko-system.js"></script>
+  <script src="api-common.js"></script>
   <script src="api-gemini.js"></script>
+  <script src="api-openai.js"></script>
+  <script src="api-claude.js"></script>
   <script src="chat-history.js"></script>
   <script src="token-monitor.js"></script>
   <script src="chat-core.js"></script>

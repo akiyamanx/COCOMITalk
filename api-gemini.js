@@ -1,13 +1,14 @@
 // COCOMITalk - Gemini API接続（Worker中継版）
-// このファイルはGemini APIとの通信をcocomi-api-relay Worker経由で管理する
+// このファイルはここちゃん（Gemini）APIとの通信をWorker経由で管理する
 // v0.1 Session B - API接続基盤
 // v0.4 Session D - usageMetadata取得＋TokenMonitor連携
-// v0.5 Step 1 - Worker中継に切替（APIキーをフロントから除去）
+// v0.5 Step 2 - Worker中継＋ApiCommon共通化
+
 'use strict';
 
 /**
  * Gemini API接続モジュール（Worker中継版）
- * Gemini 2.5 Flash をデフォルトモデルとして使用
+ * ここちゃん（Gemini）との会話を担当
  */
 const ApiGemini = (() => {
 
@@ -22,23 +23,6 @@ const ApiGemini = (() => {
   // デフォルトモデル
   const DEFAULT_MODEL = 'flash-25';
 
-  // v0.5追加 - Worker中継URL（APIキーはWorker側で管理）
-  const WORKER_URL = 'https://cocomi-api-relay.k-akiyaman.workers.dev';
-
-  /**
-   * v0.5追加 - Worker認証トークンを取得
-   * ※ 設定画面のGemini APIキー欄を認証トークン入力に流用
-   * ※ Step 2で専用のcocomiAuthToken欄に移行予定
-   */
-  function _getAuthToken() {
-    try {
-      const settings = JSON.parse(localStorage.getItem('cocomitalk-settings') || '{}');
-      return settings.geminiKey || '';
-    } catch {
-      return '';
-    }
-  }
-
   /**
    * Gemini APIにメッセージを送信（Worker中継版）
    * @param {string} userMessage - ユーザーのメッセージ
@@ -49,10 +33,9 @@ const ApiGemini = (() => {
    * @returns {Promise<string>} AIの返答テキスト
    */
   async function sendMessage(userMessage, systemPrompt, history = [], options = {}) {
-    // v0.5変更 - APIキーの代わりに認証トークンを確認
-    const authToken = _getAuthToken();
-    if (!authToken) {
-      throw new Error('COCOMI認証トークンが設定されていません。設定画面のGemini APIキー欄にCOCOMI認証トークンを入力してください。');
+    // v0.5変更 - ApiCommonで認証チェック
+    if (!ApiCommon.hasAuthToken()) {
+      throw new Error('COCOMI認証トークンが設定されていません。設定画面のGemini APIキー欄にトークンを入力してください。');
     }
 
     const modelKey = options.model || DEFAULT_MODEL;
@@ -65,23 +48,8 @@ const ApiGemini = (() => {
     body.model = modelName;
 
     try {
-      // v0.5変更 - Worker経由でリクエスト
-      const response = await fetch(`${WORKER_URL}/gemini`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-COCOMI-AUTH': authToken,  // v0.5追加 - Worker認証
-        },
-        body: JSON.stringify(body),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        const errorMsg = errorData?.error?.message || errorData?.error || `HTTP ${response.status}`;
-        throw new Error(`Gemini API エラー: ${errorMsg}`);
-      }
-
-      const data = await response.json();
+      // v0.5変更 - ApiCommon経由でリクエスト
+      const data = await ApiCommon.callAPI('gemini', body);
       const text = _extractText(data);
 
       // v0.4追加 - トークン使用量を記録（変更なし）
@@ -108,7 +76,7 @@ const ApiGemini = (() => {
     const contents = [];
 
     // 履歴を追加（直近10ターン）
-    const recentHistory = history.slice(-20); // 10ターン = 20メッセージ
+    const recentHistory = history.slice(-20);
     for (const msg of recentHistory) {
       contents.push({
         role: msg.role === 'user' ? 'user' : 'model',
@@ -175,7 +143,7 @@ const ApiGemini = (() => {
    * v0.5変更 - 認証トークンが設定されているか確認
    */
   function hasApiKey() {
-    return !!_getAuthToken();
+    return ApiCommon.hasAuthToken();
   }
 
   /**
