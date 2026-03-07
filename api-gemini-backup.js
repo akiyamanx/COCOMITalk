@@ -1,12 +1,11 @@
-// COCOMITalk - Gemini API接続（Worker中継版）
-// このファイルはGemini APIとの通信をcocomi-api-relay Worker経由で管理する
+// COCOMITalk - Gemini API接続
+// このファイルはGemini APIとの通信を管理する
 // v0.1 Session B - API接続基盤
 // v0.4 Session D - usageMetadata取得＋TokenMonitor連携
-// v0.5 Step 1 - Worker中継に切替（APIキーをフロントから除去）
 'use strict';
 
 /**
- * Gemini API接続モジュール（Worker中継版）
+ * Gemini API接続モジュール
  * Gemini 2.5 Flash をデフォルトモデルとして使用
  */
 const ApiGemini = (() => {
@@ -22,69 +21,49 @@ const ApiGemini = (() => {
   // デフォルトモデル
   const DEFAULT_MODEL = 'flash-25';
 
-  // v0.5追加 - Worker中継URL（APIキーはWorker側で管理）
-  const WORKER_URL = 'https://cocomi-api-relay.k-akiyaman.workers.dev';
+  // APIエンドポイント
+  const BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
   /**
-   * v0.5追加 - Worker認証トークンを取得
-   * ※ 設定画面のGemini APIキー欄を認証トークン入力に流用
-   * ※ Step 2で専用のcocomiAuthToken欄に移行予定
-   */
-  function _getAuthToken() {
-    try {
-      const settings = JSON.parse(localStorage.getItem('cocomitalk-settings') || '{}');
-      return settings.geminiKey || '';
-    } catch {
-      return '';
-    }
-  }
-
-  /**
-   * Gemini APIにメッセージを送信（Worker中継版）
+   * Gemini APIにメッセージを送信
    * @param {string} userMessage - ユーザーのメッセージ
    * @param {string} systemPrompt - システムプロンプト
    * @param {Array} history - 会話履歴（{role, content}の配列）
    * @param {Object} options - オプション
    * @param {string} options.model - モデルキー（flash-lite/flash/flash-25/pro）
+   * @param {string} options.apiKey - APIキー
    * @returns {Promise<string>} AIの返答テキスト
    */
   async function sendMessage(userMessage, systemPrompt, history = [], options = {}) {
-    // v0.5変更 - APIキーの代わりに認証トークンを確認
-    const authToken = _getAuthToken();
-    if (!authToken) {
-      throw new Error('COCOMI認証トークンが設定されていません。設定画面のGemini APIキー欄にCOCOMI認証トークンを入力してください。');
+    const apiKey = options.apiKey || _getApiKey();
+    if (!apiKey) {
+      throw new Error('Gemini APIキーが設定されていません。設定画面からキーを入力してください。');
     }
 
     const modelKey = options.model || DEFAULT_MODEL;
     const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
+    const url = `${BASE_URL}/${modelName}:generateContent?key=${apiKey}`;
 
-    // リクエストボディ構築（従来と同じ）
+    // リクエストボディ構築
     const body = _buildRequestBody(userMessage, systemPrompt, history);
 
-    // v0.5追加 - Worker用にmodelフィールドを追加
-    body.model = modelName;
-
     try {
-      // v0.5変更 - Worker経由でリクエスト
-      const response = await fetch(`${WORKER_URL}/gemini`, {
+      const response = await fetch(url, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-COCOMI-AUTH': authToken,  // v0.5追加 - Worker認証
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        const errorMsg = errorData?.error?.message || errorData?.error || `HTTP ${response.status}`;
+        const errorMsg = errorData?.error?.message || `HTTP ${response.status}`;
         throw new Error(`Gemini API エラー: ${errorMsg}`);
       }
 
       const data = await response.json();
       const text = _extractText(data);
 
-      // v0.4追加 - トークン使用量を記録（変更なし）
+      // v0.4追加 - トークン使用量を記録
       const usage = data?.usageMetadata;
       if (usage && typeof TokenMonitor !== 'undefined') {
         const inputTokens = usage.promptTokenCount || 0;
@@ -101,7 +80,7 @@ const ApiGemini = (() => {
   }
 
   /**
-   * リクエストボディを構築（従来と同じ）
+   * リクエストボディを構築
    */
   function _buildRequestBody(userMessage, systemPrompt, history) {
     // 会話履歴をGemini形式に変換
@@ -151,11 +130,12 @@ const ApiGemini = (() => {
   }
 
   /**
-   * レスポンスからテキストを抽出（従来と同じ）
+   * レスポンスからテキストを抽出
    */
   function _extractText(data) {
     const candidates = data?.candidates;
     if (!candidates || candidates.length === 0) {
+      // ブロックされた場合
       const blockReason = data?.promptFeedback?.blockReason;
       if (blockReason) {
         return 'ごめんね、その内容にはうまく答えられないみたい…💦 別の聞き方で試してみて！';
@@ -172,10 +152,22 @@ const ApiGemini = (() => {
   }
 
   /**
-   * v0.5変更 - 認証トークンが設定されているか確認
+   * LocalStorageからAPIキーを取得
+   */
+  function _getApiKey() {
+    try {
+      const settings = JSON.parse(localStorage.getItem('cocomitalk-settings') || '{}');
+      return settings.geminiKey || '';
+    } catch {
+      return '';
+    }
+  }
+
+  /**
+   * APIキーが設定されているか確認
    */
   function hasApiKey() {
-    return !!_getAuthToken();
+    return !!_getApiKey();
   }
 
   /**
