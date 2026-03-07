@@ -138,12 +138,23 @@ const MeetingUI = (() => {
    * 会議終了処理
    */
   function _handleEndMeeting() {
-    addSystemMessage('会議を終了しました。お疲れさまでした！🎉');
-    _hideActionButtons();
+    // v0.8修正 - 画面を閉じてnormalモードに戻す
+    hide();
+
+    // モードをnormalに戻す
+    if (typeof ModeSwitcher !== 'undefined') {
+      ModeSwitcher.setMode('normal');
+    }
+
+    // チャットエリアをクリア（次の会議用）
+    _clearChat();
     currentRouting = null;
 
     // 入力欄を再有効化
-    if (topicInput) topicInput.disabled = false;
+    if (topicInput) {
+      topicInput.disabled = false;
+      topicInput.value = '';
+    }
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
     if (btnStart) btnStart.disabled = false;
   }
