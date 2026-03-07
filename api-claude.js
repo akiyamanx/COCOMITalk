@@ -1,6 +1,7 @@
 // COCOMITalk - Claude API接続（Worker中継版）
 // このファイルはクロちゃん（Claude）APIとの通信をWorker経由で管理する
 // v0.5 Step 2 - 新規作成
+// v0.8 Step 3 - モデルグレード切替対応（Opus追加）
 
 'use strict';
 
@@ -11,9 +12,11 @@
 const ApiClaude = (() => {
 
   // --- モデル定義 ---
+  // v0.8 Step 3 - モデルグレード切替用にOpus追加
   const MODELS = {
     'haiku': 'claude-haiku-4-5-20251001',
     'sonnet': 'claude-sonnet-4-20250514',
+    'opus': 'claude-opus-4-6-20260205',
   };
 
   // デフォルトモデル（コスト安全: まず安いモデルでテスト）

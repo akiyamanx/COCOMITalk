@@ -3,6 +3,7 @@
 // v0.3 Session C - IndexedDB会話履歴保存対応
 // v0.4 Session D - メッセージにトークン数表示
 // v0.5 Step 2 - 三姉妹API分岐対応（Worker経由）
+// v0.8 Step 3 - モード連動モデルキー対応
 
 'use strict';
 
@@ -177,11 +178,18 @@ const ChatCore = (() => {
   /**
    * API経由で返答を取得
    * v0.5変更 - APIモジュールを引数で受け取る（三姉妹共通）
+   * v0.8変更 - ModeSwitcherからモデルキーを取得して渡す
    */
   async function _apiReply(userText, apiModule, systemPrompt) {
     try {
       const history = chatHistories[currentSister];
-      const reply = await apiModule.sendMessage(userText, systemPrompt, history);
+
+      // v0.8追加 - モード連動のモデルキー取得
+      const modelKey = (typeof ModeSwitcher !== 'undefined')
+        ? ModeSwitcher.getModelKey(currentSister)
+        : undefined;
+
+      const reply = await apiModule.sendMessage(userText, systemPrompt, history, { model: modelKey });
 
       hideTyping();
       addMessage('ai', reply);

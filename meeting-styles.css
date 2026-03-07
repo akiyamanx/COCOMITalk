@@ -1,0 +1,217 @@
+/* COCOMITalk - 会議画面＋モードボタン スタイル */
+/* このファイルは会議専用画面とモード切替ボタンのスタイルを定義する */
+/* v0.8 Step 3 - 新規作成 */
+
+/* --- モード切替ボタン --- */
+.mode-btn {
+  padding: 4px 12px;
+  border-radius: 16px;
+  border: 2px solid var(--active-primary, #FF6B9D);
+  background: transparent;
+  color: var(--text, #333);
+  font-size: 0.82rem;
+  font-weight: 600;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+.mode-btn:active {
+  transform: scale(0.95);
+}
+.mode-btn[data-mode="dev"] {
+  border-color: #FF9800;
+  background: rgba(255, 152, 0, 0.1);
+}
+.mode-btn[data-mode="meeting"] {
+  border-color: #F44336;
+  background: rgba(244, 67, 54, 0.1);
+}
+
+/* --- 会議専用画面 --- */
+.meeting-screen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: #FAFAFA;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+.meeting-screen.hidden {
+  display: none;
+}
+
+/* 会議ヘッダー */
+.meeting-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #F44336, #E91E63);
+  color: white;
+  box-shadow: 0 2px 8px rgba(244, 67, 54, 0.3);
+}
+.meeting-header .header-logo {
+  font-size: 1.3rem;
+}
+.meeting-header .header-title {
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: 'Zen Maru Gothic', sans-serif;
+  margin-left: 8px;
+}
+.meeting-header .icon-btn {
+  color: white;
+  font-size: 1.2rem;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+/* 会議チャットエリア */
+.meeting-chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 会議メッセージ共通 */
+.meeting-msg {
+  max-width: 92%;
+  animation: fadeInUp 0.3s ease;
+}
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* 姉妹メッセージ */
+.meeting-msg-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.meeting-avatar {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+}
+.meeting-name {
+  font-weight: 700;
+  font-size: 0.85rem;
+  font-family: 'Zen Maru Gothic', sans-serif;
+}
+.meeting-lead-badge {
+  font-size: 0.72rem;
+  background: #FFF3E0;
+  color: #E65100;
+  padding: 1px 6px;
+  border-radius: 8px;
+  font-weight: 600;
+}
+.meeting-thinking {
+  font-size: 0.75rem;
+  color: #999;
+  font-style: italic;
+}
+.meeting-msg-body {
+  background: white;
+  padding: 10px 14px;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  line-height: 1.6;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+  margin-left: 34px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ユーザーメッセージ */
+.user-msg {
+  align-self: flex-end;
+}
+.user-msg .meeting-msg-body {
+  background: #E8F5E9;
+}
+
+/* システムメッセージ */
+.system-msg {
+  align-self: center;
+  max-width: 85%;
+  background: #F5F5F5;
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  color: #666;
+  line-height: 1.5;
+  text-align: center;
+}
+
+/* 会議入力エリア */
+.meeting-input-area {
+  padding: 12px 16px;
+  background: white;
+  border-top: 1px solid #eee;
+}
+.meeting-topic-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 2px solid #eee;
+  border-radius: 12px;
+  font-size: 0.92rem;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  resize: none;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.meeting-topic-input:focus {
+  border-color: #F44336;
+}
+
+/* アクションボタン */
+.meeting-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 8px;
+}
+.meeting-actions.hidden {
+  display: none;
+}
+.meeting-action-btn {
+  padding: 8px 16px;
+  border: 2px solid #F44336;
+  border-radius: 20px;
+  background: transparent;
+  color: #F44336;
+  font-weight: 600;
+  font-size: 0.85rem;
+  font-family: 'Zen Maru Gothic', sans-serif;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.meeting-action-btn:active {
+  background: #F44336;
+  color: white;
+}
+
+/* 通常画面が会議中に非表示にする部分 */
+.meeting-active .sister-tabs,
+.meeting-active .chat-area,
+.meeting-active .input-area {
+  display: none;
+}

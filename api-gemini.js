@@ -3,6 +3,7 @@
 // v0.1 Session B - API接続基盤
 // v0.4 Session D - usageMetadata取得＋TokenMonitor連携
 // v0.5 Step 2 - Worker中継＋ApiCommon共通化
+// v0.8 Step 3 - モデルグレード切替対応（flash-3/pro-3.1追加）
 
 'use strict';
 
@@ -13,11 +14,14 @@
 const ApiGemini = (() => {
 
   // --- モデル定義 ---
+  // v0.8 Step 3 - モデルグレード切替用に追加
   const MODELS = {
     'flash-lite': 'gemini-2.0-flash-lite',
     'flash': 'gemini-2.0-flash',
     'flash-25': 'gemini-2.5-flash',
+    'flash-3': 'gemini-3-flash',
     'pro': 'gemini-2.5-pro-preview-03-25',
+    'pro-31': 'gemini-3.1-pro',
   };
 
   // デフォルトモデル

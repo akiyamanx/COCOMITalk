@@ -3,6 +3,7 @@
 // v0.1 Session A - 基盤構築
 // v0.4 Session D - TokenMonitor初期化＋設定画面にトークン詳細
 // v0.7 Step 2完了 - 姉妹別モデルインジケーター表示
+// v0.8 Step 3 - モード切替ボタン＋会議画面連携
 
 'use strict';
 
@@ -70,13 +71,21 @@ const App = (() => {
     // タブ切り替え設定
     _setupTabs();
 
+    // v0.8追加 - モード切替ボタン設定
+    _setupModeButton();
+
+    // v0.8追加 - 会議UI初期化
+    if (typeof MeetingUI !== 'undefined') {
+      MeetingUI.init();
+    }
+
     // 設定モーダル設定
     _setupSettings();
 
     // 保存済み設定を読み込み
     _loadSettings();
 
-    console.log('[App] COCOMITalk v0.7 起動完了');
+    console.log('[App] COCOMITalk v0.8 起動完了');
   }
 
   /**
@@ -115,12 +124,42 @@ const App = (() => {
         // テーマカラー変更
         _applyTheme(sisterKey);
 
-        // v0.7追加 - モデルインジケーターを姉妹別に更新
-        _updateModelIndicatorForSister(sisterKey);
+        // v0.7追加 → v0.8変更 - ModeSwitcher経由でインジケーター更新
+        if (typeof ModeSwitcher !== 'undefined') {
+          ModeSwitcher.onSisterSwitch(sisterKey);
+        }
 
         // チャット切り替え
         ChatCore.switchSister(sisterKey);
       });
+    });
+  }
+
+  /**
+   * v0.8追加 - モード切替ボタンの設定
+   */
+  function _setupModeButton() {
+    const modeBtn = document.getElementById('btn-mode');
+    if (!modeBtn) return;
+
+    modeBtn.addEventListener('click', () => {
+      if (typeof ModeSwitcher === 'undefined') return;
+
+      const newMode = ModeSwitcher.cycleMode();
+
+      // meetingモード → 会議画面を表示
+      if (newMode === 'meeting') {
+        if (typeof MeetingUI !== 'undefined') {
+          MeetingUI.show();
+        }
+      } else {
+        // normal/devに戻った → 会議画面を閉じる
+        if (typeof MeetingUI !== 'undefined' && MeetingUI.getIsVisible()) {
+          MeetingUI.hide();
+        }
+      }
+
+      console.log(`[App] モード切替: ${newMode}`);
     });
   }
 
@@ -276,16 +315,6 @@ const App = (() => {
       console.log('[App] 設定保存完了');
     } catch (e) {
       console.error('[App] 設定保存エラー:', e);
-    }
-  }
-
-  /**
-   * v0.7追加 - 姉妹別にモデルインジケーターを更新
-   */
-  function _updateModelIndicatorForSister(sisterKey) {
-    const indicator = document.getElementById('model-indicator');
-    if (indicator) {
-      indicator.textContent = SISTER_MODEL_NAMES[sisterKey] || 'Unknown';
     }
   }
 

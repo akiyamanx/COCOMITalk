@@ -2,6 +2,7 @@
 <!-- このファイルはアプリのメインHTML。スプラッシュ画面とチャットUIを含む -->
 <!-- v0.1 Session A - 基盤構築 -->
 <!-- v0.5 Step 2 - 三姉妹API接続＋スクリプト追加 -->
+<!-- v0.8 Step 3 - モード切替ボタン＋会議専用画面追加 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -19,6 +20,8 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
+  <!-- v0.8追加 - 会議画面スタイル -->
+  <link rel="stylesheet" href="meeting-styles.css">
 </head>
 <body>
 
@@ -46,6 +49,8 @@
         <span class="header-title">COCOMITalk</span>
       </div>
       <div class="header-right">
+        <!-- v0.8追加 - モード切替ボタン -->
+        <button id="btn-mode" class="mode-btn" data-mode="normal" aria-label="モード切替">💬 普段</button>
         <button id="btn-settings" class="icon-btn" aria-label="設定">⚙️</button>
       </div>
     </header>
@@ -99,6 +104,41 @@
       </div>
     </footer>
 
+  </div>
+
+  <!-- ========== 会議専用画面（v0.8 Step 3追加） ========== -->
+  <div id="meeting-screen" class="meeting-screen hidden">
+    <header class="meeting-header">
+      <div class="header-left">
+        <span class="header-logo">🏛️</span>
+        <span class="header-title">COCOMITalk 会議室</span>
+      </div>
+      <div class="header-right">
+        <button id="btn-meeting-end" class="icon-btn" aria-label="会議終了">✕</button>
+      </div>
+    </header>
+
+    <!-- 会議チャットエリア -->
+    <main class="meeting-chat"></main>
+
+    <!-- 議題入力エリア -->
+    <footer class="meeting-input-area">
+      <div class="input-wrapper">
+        <textarea
+          class="meeting-topic-input"
+          placeholder="議題を入力してください..."
+          rows="1"
+          maxlength="2000"
+        ></textarea>
+        <button id="btn-meeting-start" class="btn-send" aria-label="会議開始">
+          <span class="send-arrow">▶</span>
+        </button>
+      </div>
+      <!-- アクションボタン（ラウンド完了後に表示） -->
+      <div class="meeting-actions hidden">
+        <button id="btn-meeting-continue" class="meeting-action-btn">🔄 もう1ラウンド</button>
+      </div>
+    </footer>
   </div>
 
   <!-- ========== 設定モーダル ========== -->
@@ -156,16 +196,20 @@
     </div>
   </div>
 
-  <!-- v0.5変更 - スクリプト読み込み順（api-commonを最初に） -->
+  <!-- v0.8変更 - スクリプト読み込み順（mode-switcher＋会議系追加） -->
   <script src="prompts/koko-system.js"></script>
-    <script src="prompts/gpt-system.js"></script>
-    <script src="prompts/claude-system.js"></script>
+  <script src="prompts/gpt-system.js"></script>
+  <script src="prompts/claude-system.js"></script>
   <script src="api-common.js"></script>
   <script src="api-gemini.js"></script>
   <script src="api-openai.js"></script>
   <script src="api-claude.js"></script>
   <script src="chat-history.js"></script>
   <script src="token-monitor.js"></script>
+  <script src="mode-switcher.js"></script>
+  <script src="meeting-router.js"></script>
+  <script src="meeting-relay.js"></script>
+  <script src="meeting-ui.js"></script>
   <script src="chat-core.js"></script>
   <script src="app.js"></script>
 </body>
