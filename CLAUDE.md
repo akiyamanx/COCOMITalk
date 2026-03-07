@@ -53,10 +53,12 @@ COCOMITalk/
 - 500行制限、コメント・バージョン番号確認
 - LINE通知（GitHub Pages URL含む）
 
-## 現在のバージョン: v0.4（Session D）
+## 現在のバージョン: v0.7（Step 2完了）
 - チャットUI表示
-- 三姉妹タブ切替
-- Gemini API接続（ここちゃん会話）
+- 三姉妹タブ切替（姉妹別モデルインジケーター表示）
+- 三姉妹API接続（Gemini/OpenAI/Claude - Worker中継）
+- 三姉妹システムプロンプト（3モード: normal/dev/meeting）
 - IndexedDB会話履歴
 - PWA基盤（manifest + Service Worker）
-- トークン使用量モニター（月別集計＋料金概算）
+- トークン使用量モニター（三姉妹全API対応＋姉妹カラー表示）
+- COCOMI CI配置（cocomi-ci.yml）

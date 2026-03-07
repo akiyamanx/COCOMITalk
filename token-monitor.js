@@ -1,6 +1,7 @@
 // COCOMITalk - トークン使用量モニター
 // このファイルはAPIのトークン使用量をIndexedDBに記録し、料金を計算する
 // v0.4 Session D - 使用量の見える化
+// v0.7 Step 2完了 - 三姉妹全API対応（モデルID統一＋姉妹カラー表示）
 'use strict';
 
 /**
@@ -8,7 +9,7 @@
  * - 毎回のAPI呼び出しでトークン数を記録
  * - 月別に集計してIndexedDBに保存
  * - モデル別の料金単価から概算コストを計算
- * - UIにリアルタイム表示
+ * - UIにリアルタイム表示（三姉妹カラー対応）
  */
 const TokenMonitor = (() => {
 
@@ -18,19 +19,45 @@ const TokenMonitor = (() => {
   const STORE_NAME = 'token_usage';
 
   // --- モデル別料金（USD / 1Mトークン）2026年3月時点 ---
+  // v0.7更新 - APIモジュールが実際に送信するモデルIDに合わせる
   const MODEL_PRICING = {
-    // Gemini系
-    'gemini-2.0-flash-lite': { input: 0.075, output: 0.30 },
-    'gemini-2.0-flash': { input: 0.10, output: 0.40 },
-    'gemini-2.5-flash': { input: 0.30, output: 2.50 },
-    'gemini-2.5-pro-preview-03-25': { input: 1.25, output: 10.00 },
-    // Claude系（将来用）
-    'claude-haiku-4.5': { input: 1.00, output: 5.00 },
-    'claude-sonnet-4.6': { input: 3.00, output: 15.00 },
-    'claude-opus-4.6': { input: 5.00, output: 25.00 },
-    // OpenAI系（将来用）
-    'gpt-4o': { input: 2.50, output: 10.00 },
-    'gpt-4o-mini': { input: 0.15, output: 0.60 },
+    // Gemini系（api-gemini.jsのMODELS値と一致）
+    'gemini-2.0-flash-lite': { input: 0.075, output: 0.30, sister: 'koko' },
+    'gemini-2.0-flash': { input: 0.10, output: 0.40, sister: 'koko' },
+    'gemini-2.5-flash': { input: 0.15, output: 1.25, sister: 'koko' },
+    'gemini-2.5-pro-preview-03-25': { input: 1.25, output: 10.00, sister: 'koko' },
+    // v0.7追加 - 将来のモデルグレード切替用
+    'gemini-3-flash': { input: 0.20, output: 1.00, sister: 'koko' },
+    'gemini-3.1-pro': { input: 2.00, output: 12.00, sister: 'koko' },
+    // Claude系（api-claude.jsのMODELS値と一致）
+    'claude-haiku-4-5-20251001': { input: 1.00, output: 5.00, sister: 'claude' },
+    'claude-sonnet-4-20250514': { input: 3.00, output: 15.00, sister: 'claude' },
+    'claude-opus-4-6-20260205': { input: 5.00, output: 25.00, sister: 'claude' },
+    // OpenAI系（api-openai.jsのMODELS値と一致）
+    'gpt-4o-mini': { input: 0.15, output: 0.60, sister: 'gpt' },
+    'gpt-4o': { input: 2.50, output: 10.00, sister: 'gpt' },
+  };
+
+  // v0.7追加 - モデルIDから短い表示名へのマッピング
+  const MODEL_DISPLAY_NAMES = {
+    'gemini-2.0-flash-lite': 'Flash Lite',
+    'gemini-2.0-flash': 'Flash 2.0',
+    'gemini-2.5-flash': 'Flash 2.5',
+    'gemini-2.5-pro-preview-03-25': 'Pro 2.5',
+    'gemini-3-flash': 'Flash 3',
+    'gemini-3.1-pro': 'Pro 3.1',
+    'claude-haiku-4-5-20251001': 'Haiku 4.5',
+    'claude-sonnet-4-20250514': 'Sonnet 4',
+    'claude-opus-4-6-20260205': 'Opus 4.6',
+    'gpt-4o-mini': '4o-mini',
+    'gpt-4o': '4o',
+  };
+
+  // v0.7追加 - 姉妹カラー（詳細レポート用）
+  const SISTER_COLORS = {
+    koko: '#FF6B9D',
+    gpt: '#6B5CE7',
+    claude: '#E6783E',
   };
 
   // USD→JPYレート（大まかな概算用）
@@ -209,10 +236,10 @@ const TokenMonitor = (() => {
         totalUSD += (usage.input / 1000000) * pricing.input;
         totalUSD += (usage.output / 1000000) * pricing.output;
       } else {
-        // 不明なモデルはGemini 2.5 Flashの料金で概算
-        const fallback = MODEL_PRICING['gemini-2.5-flash'];
-        totalUSD += (usage.input / 1000000) * fallback.input;
-        totalUSD += (usage.output / 1000000) * fallback.output;
+        // v0.7変更 - 不明なモデルは安全側で概算（gpt-4o-miniの料金）
+        console.warn(`[TokenMonitor] 未知のモデル: ${model}、gpt-4o-miniの料金で概算`);
+        totalUSD += (usage.input / 1000000) * 0.15;
+        totalUSD += (usage.output / 1000000) * 0.60;
       }
     }
     return totalUSD;
@@ -301,15 +328,47 @@ const TokenMonitor = (() => {
     html += `</div>`;
     html += `</div>`;
 
-    // モデル別
+    // v0.7変更 - 姉妹別集計（三姉妹カラー表示）
+    const sisterTotals = { koko: { input: 0, output: 0, calls: 0, cost: 0 }, gpt: { input: 0, output: 0, calls: 0, cost: 0 }, claude: { input: 0, output: 0, calls: 0, cost: 0 } };
     const models = Object.entries(data.byModel);
+    for (const [model, usage] of models) {
+      const pricing = MODEL_PRICING[model];
+      const sister = pricing?.sister || 'koko';
+      sisterTotals[sister].input += usage.input;
+      sisterTotals[sister].output += usage.output;
+      sisterTotals[sister].calls += usage.calls;
+      if (pricing) {
+        sisterTotals[sister].cost += (usage.input / 1000000) * pricing.input + (usage.output / 1000000) * pricing.output;
+      }
+    }
+
+    // 姉妹別サマリー
+    const sisterNames = { koko: '🌸 ここちゃん', gpt: '🌙 お姉ちゃん', claude: '🔮 クロちゃん' };
+    const activeSisters = Object.entries(sisterTotals).filter(([, s]) => s.calls > 0);
+    if (activeSisters.length > 0) {
+      html += `<div class="token-models">`;
+      html += `<p class="token-section-title">姉妹別</p>`;
+      for (const [key, usage] of activeSisters) {
+        const color = SISTER_COLORS[key] || '#999';
+        const costJPYSister = usage.cost * USD_TO_JPY;
+        html += `<div class="token-model-row" style="border-left:3px solid ${color};padding-left:8px;">`;
+        html += `<span class="model-name">${sisterNames[key]}</span>`;
+        html += `<span class="model-usage">${usage.calls}回 / ${((usage.input + usage.output) / 10000).toFixed(1)}万tk / ¥${Math.ceil(costJPYSister)}</span>`;
+        html += `</div>`;
+      }
+      html += `</div>`;
+    }
+
+    // モデル別（詳細）
     if (models.length > 0) {
       html += `<div class="token-models">`;
-      html += `<p class="token-section-title">モデル別</p>`;
+      html += `<p class="token-section-title">モデル別（詳細）</p>`;
       for (const [model, usage] of models) {
-        const shortName = model.replace('gemini-', '').replace('-preview-03-25', '');
+        const displayName = MODEL_DISPLAY_NAMES[model] || model;
+        const pricing = MODEL_PRICING[model];
+        const color = pricing ? (SISTER_COLORS[pricing.sister] || '#999') : '#999';
         html += `<div class="token-model-row">`;
-        html += `<span class="model-name">${shortName}</span>`;
+        html += `<span class="model-name" style="color:${color}">${displayName}</span>`;
         html += `<span class="model-usage">${usage.calls}回 / ${(usage.input + usage.output).toLocaleString()}tk</span>`;
         html += `</div>`;
       }

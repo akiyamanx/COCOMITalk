@@ -2,6 +2,7 @@
 // このファイルはアプリ全体の初期化、スプラッシュ画面、タブ切替、設定を管理する
 // v0.1 Session A - 基盤構築
 // v0.4 Session D - TokenMonitor初期化＋設定画面にトークン詳細
+// v0.7 Step 2完了 - 姉妹別モデルインジケーター表示
 
 'use strict';
 
@@ -39,6 +40,13 @@ const App = (() => {
     quality: '高品質モード',
   };
 
+  // v0.7追加 - 姉妹別のデフォルトモデル表示名
+  const SISTER_MODEL_NAMES = {
+    koko: 'Gemini 2.5 Flash',
+    gpt: 'GPT-4o-mini',
+    claude: 'Claude Haiku 4.5',
+  };
+
   /**
    * アプリ起動
    */
@@ -68,7 +76,7 @@ const App = (() => {
     // 保存済み設定を読み込み
     _loadSettings();
 
-    console.log('[App] COCOMITalk v0.4 起動完了');
+    console.log('[App] COCOMITalk v0.7 起動完了');
   }
 
   /**
@@ -106,6 +114,9 @@ const App = (() => {
 
         // テーマカラー変更
         _applyTheme(sisterKey);
+
+        // v0.7追加 - モデルインジケーターを姉妹別に更新
+        _updateModelIndicatorForSister(sisterKey);
 
         // チャット切り替え
         ChatCore.switchSister(sisterKey);
@@ -265,6 +276,16 @@ const App = (() => {
       console.log('[App] 設定保存完了');
     } catch (e) {
       console.error('[App] 設定保存エラー:', e);
+    }
+  }
+
+  /**
+   * v0.7追加 - 姉妹別にモデルインジケーターを更新
+   */
+  function _updateModelIndicatorForSister(sisterKey) {
+    const indicator = document.getElementById('model-indicator');
+    if (indicator) {
+      indicator.textContent = SISTER_MODEL_NAMES[sisterKey] || 'Unknown';
     }
   }
 
