@@ -75,6 +75,18 @@ const MeetingUI = (() => {
     if (btnEnd) {
       btnEnd.addEventListener('click', _handleEndMeeting);
     }
+
+    // v0.9追加 - 議事録ダウンロードボタン
+    const btnMinutes = meetingScreen.querySelector('#btn-meeting-minutes');
+    if (btnMinutes) {
+      btnMinutes.addEventListener('click', _handleDownloadMinutes);
+    }
+
+    // v0.9追加 - 指示書生成ボタン
+    const btnDoc = meetingScreen.querySelector('#btn-meeting-doc');
+    if (btnDoc) {
+      btnDoc.addEventListener('click', _handleGenerateDoc);
+    }
   }
 
   /**
@@ -158,6 +170,102 @@ const MeetingUI = (() => {
     }
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
     if (btnStart) btnStart.disabled = false;
+  }
+
+  /**
+   * v0.9追加 - 議事録をMarkdownでダウンロード
+   */
+  function _handleDownloadMinutes() {
+    if (typeof MeetingRelay === 'undefined') return;
+    const history = MeetingRelay.getHistory();
+    if (!history || history.length === 0) {
+      addSystemMessage('まだ発言がないよ。会議を始めてからダウンロードしてね');
+      return;
+    }
+
+    // 議事録Markdown生成
+    const now = new Date();
+    const dateStr = now.toISOString().slice(0, 10);
+    const timeStr = now.toTimeString().slice(0, 5);
+    let md = `# COCOMI Family 会議議事録\n`;
+    md += `- 日時: ${dateStr} ${timeStr}\n`;
+    if (currentRouting) {
+      md += `- カテゴリ: ${currentRouting.label}\n`;
+      md += `- 主担当: ${SISTER_DISPLAY[currentRouting.lead]?.name || currentRouting.lead}\n`;
+    }
+    md += `\n---\n\n`;
+
+    let lastRound = 0;
+    for (const msg of history) {
+      if (msg.round !== lastRound) {
+        md += `## ラウンド ${msg.round}\n\n`;
+        lastRound = msg.round;
+      }
+      const sister = SISTER_DISPLAY[msg.sister] || { emoji: '?', name: msg.sister };
+      const leadMark = msg.isLead ? ' 👑主担当' : '';
+      md += `### ${sister.emoji} ${sister.name}${leadMark}\n\n`;
+      md += `${msg.content}\n\n---\n\n`;
+    }
+
+    // ダウンロード実行
+    const blob = new Blob([md], { type: 'text/markdown; charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `COCOMI会議_${dateStr}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    addSystemMessage('📝 議事録をダウンロードしたよ！');
+  }
+
+  /**
+   * v0.9追加 - 会議履歴から指示書を生成（DocGeneratorに渡す）
+   */
+  async function _handleGenerateDoc() {
+    if (typeof MeetingRelay === 'undefined' || typeof DocGenerator === 'undefined') {
+      addSystemMessage('指示書生成モジュールが読み込まれていません');
+      return;
+    }
+    const history = MeetingRelay.getHistory();
+    if (!history || history.length === 0) {
+      addSystemMessage('まだ発言がないよ。会議を始めてから📋を押してね');
+      return;
+    }
+
+    // 会議履歴をDocGeneratorが受け取れる形式に変換
+    const chatMessages = history.map(msg => {
+      const sister = SISTER_DISPLAY[msg.sister] || { name: msg.sister };
+      return {
+        role: 'ai',
+        content: `【${sister.name}】\n${msg.content}`,
+      };
+    });
+
+    addSystemMessage('📋 指示書を生成中... お姉ちゃんが統合→クロちゃんがチェック');
+
+    try {
+      const result = await DocGenerator.generate(chatMessages);
+      if (result.success && result.files.length > 0) {
+        // 各ファイルをダウンロード
+        for (const file of result.files) {
+          const blob = new Blob([file.content], { type: 'text/markdown; charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = file.name;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+        }
+        addSystemMessage(`📋 指示書${result.files.length}ファイルをダウンロードしたよ！`);
+      }
+    } catch (error) {
+      addSystemMessage(`指示書生成エラー: ${error.message}`);
+    }
   }
 
   /**

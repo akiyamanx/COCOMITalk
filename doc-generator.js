@@ -1,6 +1,7 @@
 // COCOMITalk - 指示書自動生成モジュール
 // このファイルは三姉妹の議論から指示書（CLAUDE.md＋設計書＋ステップ指示書）を自動生成する
 // v1.0 - 語りコードの完成形：お姉ちゃん統合→クロちゃん最終チェックの2段階生成
+// v1.1 2026-03-08 - GPT-5系のdeveloperロール＋max_completion_tokens対応
 
 'use strict';
 
@@ -165,12 +166,18 @@ const DocGenerator = (() => {
       const body = {
         model: modelName,
         messages: [
-          { role: 'system', content: systemPrompt },
+          // v1.1修正 - GPT-5系はdeveloperロール
+          { role: modelName.startsWith('gpt-5') ? 'developer' : 'system', content: systemPrompt },
           { role: 'user', content: userContent },
         ],
-        temperature: 0.3,
-        max_tokens: 4096, // 指示書生成は長い出力が必要
       };
+      // v1.1修正 - GPT-5系はmax_completion_tokens（リーズニングトークン対策）
+      if (modelName.startsWith('gpt-5')) {
+        body.max_completion_tokens = 8192;
+      } else {
+        body.max_tokens = 4096;
+        body.temperature = 0.3;
+      }
       const data = await ApiCommon.callAPI('openai', body);
       return data?.choices?.[0]?.message?.content || null;
     }
