@@ -183,8 +183,10 @@
 }
 
 /* アクションボタン */
+/* v0.9修正 - flex-wrapでスマホ画面でも全ボタン表示 */
 .meeting-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   justify-content: center;
   margin-top: 8px;
@@ -193,16 +195,17 @@
   display: none;
 }
 .meeting-action-btn {
-  padding: 8px 16px;
+  padding: 7px 12px;
   border: 2px solid #F44336;
   border-radius: 20px;
   background: transparent;
   color: #F44336;
   font-weight: 600;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   font-family: 'Zen Maru Gothic', sans-serif;
   cursor: pointer;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 .meeting-action-btn:active {
   background: #F44336;
