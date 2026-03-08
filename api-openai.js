@@ -1,6 +1,7 @@
 // COCOMITalk - OpenAI API接続（Worker中継版）
 // このファイルはお姉ちゃん（GPT）APIとの通信をWorker経由で管理する
 // v0.5 Step 2 - 新規作成
+// v1.1 - GPT-5系のmax_completion_tokens対応（バグ修正）
 
 'use strict';
 
@@ -45,9 +46,13 @@ const ApiOpenAI = (() => {
       model: modelName,
       messages: messages,
       temperature: 0.5,
-      // v1.0変更 - モードに応じて出力上限を調整
-      max_tokens: options.maxTokens || 1024,
     };
+    // v1.1修正 - GPT-5系はmax_completion_tokens、旧モデル（4o系）はmax_tokens
+    if (modelName.startsWith('gpt-5')) {
+      body.max_completion_tokens = options.maxTokens || 1024;
+    } else {
+      body.max_tokens = options.maxTokens || 1024;
+    }
 
     try {
       // v0.5 - Worker経由でリクエスト
