@@ -1,11 +1,5 @@
 <!-- COCOMITalk - COCOMI Family AI会話アプリ -->
-<!-- このファイルはアプリのメインHTML。スプラッシュ画面とチャットUIを含む -->
-<!-- v0.1 Session A - 基盤構築 -->
-<!-- v0.5 Step 2 - 三姉妹API接続＋スクリプト追加 -->
-<!-- v0.8 Step 3 - モード切替ボタン＋会議専用画面追加 -->
-<!-- v0.9 Step 3.5 - 👤⇔👥人数切替ボタン追加 -->
-<!-- v0.9.5 設定画面リニューアル - 三姉妹×モード別モデル設定 -->
-<!-- v1.1 Step 3.5 - 会議履歴IndexedDB保存＋過去会議一覧画面 -->
+<!-- v1.2 デバッグパネル追加（設定画面バグ調査用・修正後削除） -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -18,15 +12,28 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>">
   <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎙️</text></svg>">
-  <!-- Google Fonts - 温かみのある日本語フォント -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Zen+Maru+Gothic:wght@400;500;700&family=M+PLUS+Rounded+1c:wght@400;500;700&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
-  <!-- v0.8追加 - 会議画面スタイル -->
   <link rel="stylesheet" href="meeting-styles.css">
 </head>
 <body>
+
+  <!-- デバッグパネル（JSエラーを画面上部に赤字表示・原因特定したら削除） -->
+  <div id="dbg" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#1a1a2e;color:#F44336;font-size:12px;padding:8px;max-height:35vh;overflow:auto;font-family:monospace;white-space:pre-wrap;border-bottom:3px solid #F44336;">
+    <b style="color:#FF6B9D">🔍デバッグ</b>
+    <button onclick="this.parentElement.style.display='none'" style="float:right;background:#333;color:#fff;border:none;padding:2px 8px;border-radius:4px">✕</button>
+    <div id="dbg-log"></div>
+  </div>
+  <script>
+  (function(){
+    var p=document.getElementById('dbg'),l=document.getElementById('dbg-log');
+    window._dbg=function(m){p.style.display='block';l.textContent+='\n'+m;};
+    window.onerror=function(msg,src,line){window._dbg('❌ '+(src?src.split('/').pop():'?')+':'+line+' → '+msg);};
+    window.addEventListener('unhandledrejection',function(e){window._dbg('❌ Promise: '+e.reason);});
+  })();
+  </script>
 
   <!-- ========== スプラッシュ画面 ========== -->
   <div id="splash-screen" class="splash">
@@ -44,23 +51,17 @@
 
   <!-- ========== メインアプリ ========== -->
   <div id="app" class="app hidden">
-
-    <!-- ヘッダー -->
     <header class="app-header">
       <div class="header-left">
         <span class="header-logo">🎙️</span>
         <span class="header-title">COCOMITalk</span>
       </div>
       <div class="header-right">
-        <!-- v0.8追加 - モード切替ボタン -->
         <button id="btn-mode" class="mode-btn" data-mode="normal" aria-label="モード切替">💬 普段</button>
-        <!-- v0.9追加 - 人数切替ボタン（ソロ⇔みんな） -->
         <button id="btn-people" class="people-btn" data-people="solo" aria-label="人数切替" title="1対1モード">👤</button>
         <button id="btn-settings" class="icon-btn" aria-label="設定">⚙️</button>
       </div>
     </header>
-
-    <!-- 三姉妹タブ -->
     <nav class="sister-tabs">
       <button class="tab active" data-sister="koko">
         <span class="tab-icon">🌸</span>
@@ -75,60 +76,40 @@
         <span class="tab-name">クロちゃん</span>
       </button>
     </nav>
-
-    <!-- チャットエリア -->
     <main id="chat-area" class="chat-area">
-      <!-- ウェルカムメッセージ（初回表示） -->
       <div id="welcome-msg" class="welcome">
         <div class="welcome-icon">🌸</div>
         <p class="welcome-text">ここちゃんとお話ししよう！</p>
         <p class="welcome-hint">下のメッセージ欄に話しかけてね</p>
       </div>
-      <!-- メッセージはここに動的に追加される -->
     </main>
-
-    <!-- 入力エリア -->
     <footer class="input-area">
-      <!-- v1.0追加 - 指示書生成ステータス -->
       <div id="doc-gen-status" class="doc-gen-status hidden"></div>
-      <!-- v1.0追加 - ファイルプレビュー（添付時に表示） -->
       <div id="file-preview" class="file-preview hidden"></div>
       <div class="input-wrapper">
-        <!-- v1.0追加 - 📎ファイル添付ボタン＋hidden input -->
         <button id="btn-attach" class="btn-attach" aria-label="ファイル添付" title="📎 ファイルを添付">
           <span>📎</span>
         </button>
         <input type="file" id="file-input" class="hidden" accept=".md,.txt,.js,.json,.css,.html,.csv,.yml,.yaml,.xml,.py,.sh,.toml,.jpg,.jpeg,.png,.webp,.gif">
-        <textarea
-          id="msg-input"
-          class="msg-input"
-          placeholder="メッセージを入力..."
-          rows="1"
-          maxlength="4000"
-        ></textarea>
+        <textarea id="msg-input" class="msg-input" placeholder="メッセージを入力..." rows="1" maxlength="4000"></textarea>
         <button id="btn-send" class="btn-send" aria-label="送信" disabled>
           <span class="send-arrow">↑</span>
         </button>
-        <!-- v0.9.3追加 - 姉妹だけで会話を続けるボタン（グループモード時のみ表示） -->
         <button id="btn-continue-talk" class="btn-continue-talk hidden" aria-label="みんなで話して" title="姉妹たちだけで会話を続ける">
           <span>🔄</span>
         </button>
       </div>
       <div class="input-footer">
         <span id="model-indicator" class="model-indicator">Gemini 2.5 Flash</span>
-        <!-- v1.0追加 - 💾会話保存ボタン＋📋指示書生成ボタン -->
         <button id="btn-generate-doc" class="btn-download" aria-label="指示書生成" title="📋 指示書を自動生成">📋</button>
         <button id="btn-download" class="btn-download" aria-label="会話を保存" title="💾 会話をダウンロード">💾</button>
-        <!-- v0.4追加 - トークン使用量表示 -->
         <span id="token-cost" class="token-cost" title="今月のトークン使用量">--</span>
         <span id="char-count" class="char-count"></span>
       </div>
     </footer>
-
   </div>
 
-  <!-- ========== 会議専用画面（v0.8 Step 3追加） ========== -->
-  <!-- v1.0 Step 3.5 - ヘッダーに📂📝📋常時表示＋過去会議一覧画面追加 -->
+  <!-- ========== 会議専用画面 ========== -->
   <div id="meeting-screen" class="meeting-screen hidden">
     <header class="meeting-header">
       <div class="header-left">
@@ -136,19 +117,13 @@
         <span class="header-title">COCOMITalk 会議室</span>
       </div>
       <div class="header-right">
-        <!-- v1.0追加 - 📂過去の会議一覧 -->
         <button id="btn-meeting-archive" class="icon-btn" aria-label="過去の会議" title="過去の会議">📂</button>
-        <!-- v1.0変更 - 📝📋は常時表示（会議前はdisabled） -->
         <button id="btn-meeting-minutes" class="icon-btn" aria-label="議事録DL" title="議事録DL" disabled>📝</button>
         <button id="btn-meeting-doc" class="icon-btn" aria-label="指示書生成" title="指示書生成" disabled>📋</button>
         <button id="btn-meeting-end" class="icon-btn" aria-label="会議終了">✕</button>
       </div>
     </header>
-
-    <!-- 会議チャットエリア -->
     <main class="meeting-chat"></main>
-
-    <!-- v1.0追加 - 過去の会議一覧（📂押下時に表示） -->
     <div id="meeting-archive" class="meeting-archive hidden">
       <div class="archive-header">
         <h2>📂 過去の会議</h2>
@@ -158,21 +133,13 @@
         <p class="archive-empty">まだ会議の記録がありません</p>
       </div>
     </div>
-
-    <!-- 議題入力エリア -->
     <footer class="meeting-input-area">
       <div class="input-wrapper">
-        <textarea
-          class="meeting-topic-input"
-          placeholder="議題を入力してください..."
-          rows="1"
-          maxlength="2000"
-        ></textarea>
+        <textarea class="meeting-topic-input" placeholder="議題を入力してください..." rows="1" maxlength="2000"></textarea>
         <button id="btn-meeting-start" class="btn-send" aria-label="会議開始">
           <span class="send-arrow">▶</span>
         </button>
       </div>
-      <!-- v1.0変更 - アクションボタン（🔄のみ。📝📋はヘッダーに移動） -->
       <div class="meeting-actions hidden">
         <button id="btn-meeting-continue" class="meeting-action-btn">🔄 もう1ラウンド</button>
       </div>
@@ -188,7 +155,6 @@
         <button id="btn-close-settings" class="icon-btn">✕</button>
       </div>
       <div class="modal-body">
-        <!-- v0.9.5変更 - COCOMI認証トークン（Worker経由で1つだけ） -->
         <section class="settings-section">
           <h3>🔑 認証</h3>
           <div class="setting-item">
@@ -197,22 +163,16 @@
             <p class="setting-hint">Worker経由で全API共通の認証トークン</p>
           </div>
         </section>
-        <!-- v0.9.5新規 - 三姉妹×モード別モデル設定 -->
         <section class="settings-section">
           <h3>🤖 モデル設定</h3>
-          <div id="model-settings-area">
-            <!-- app.jsが動的に生成 -->
-          </div>
+          <div id="model-settings-area"></div>
           <button id="btn-reset-models" class="btn-secondary" style="margin-top:12px;">デフォルトに戻す</button>
         </section>
-        <!-- 保存ボタン -->
         <button id="btn-save-settings" class="btn-primary">保存する</button>
-        <!-- v0.3追加 - 履歴クリア -->
         <section class="settings-section" style="margin-top:24px;">
           <h3>🗑️ 会話履歴</h3>
           <button id="btn-clear-history" class="btn-danger">全ての会話履歴をクリア</button>
         </section>
-        <!-- v0.4追加 - トークン使用量モニター -->
         <section class="settings-section" style="margin-top:24px;">
           <h3>📊 トークン使用量</h3>
           <div id="token-detail-area">読み込み中...</div>
@@ -222,8 +182,7 @@
     </div>
   </div>
 
-  <!-- v0.8変更 - スクリプト読み込み順（mode-switcher＋会議系追加） -->
-  <!-- v1.0追加 - Markdownレンダリング用ライブラリ -->
+  <!-- スクリプト読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
   <script src="prompts/koko-system.js"></script>
   <script src="prompts/gpt-system.js"></script>
@@ -245,5 +204,16 @@
   <script src="chat-group.js"></script>
   <script src="chat-core.js"></script>
   <script src="app.js"></script>
+
+  <!-- デバッグ: 3秒後に状態チェック -->
+  <script>
+  setTimeout(function(){
+    var m='📋状態: ';
+    m+='App='+(typeof App!=='undefined'?'OK':'NG');
+    m+=' modal='+(document.getElementById('settings-modal')?'あり('+document.getElementById('settings-modal').className+')':'なし');
+    m+=' btn='+(document.getElementById('btn-settings')?'あり':'なし');
+    if(window._dbg)window._dbg(m); else alert(m);
+  },3000);
+  </script>
 </body>
 </html>
