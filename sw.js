@@ -1,21 +1,36 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v0.3 Session C - PWA強化（キャッシュ更新＋オフライン画面）
-// v0.4 Session D - token-monitor.js追加
+// v0.5 Step 3.5 - 会議系ファイル追加＋キャッシュバージョンアップ
 
-const CACHE_NAME = 'cocomitalk-v0.4';
+const CACHE_NAME = 'cocomitalk-v0.5';
 
-// v0.4更新 - token-monitor.js追加
+// v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
   './',
   './index.html',
   './styles.css',
+  './meeting-styles.css',
   './app.js',
   './chat-core.js',
+  './chat-group.js',
   './chat-history.js',
   './token-monitor.js',
+  './api-common.js',
   './api-gemini.js',
+  './api-openai.js',
+  './api-claude.js',
+  './mode-switcher.js',
+  './meeting-router.js',
+  './meeting-history.js',
+  './meeting-relay.js',
+  './meeting-ui.js',
+  './meeting-archive-ui.js',
+  './doc-generator.js',
+  './file-handler.js',
   './prompts/koko-system.js',
+  './prompts/gpt-system.js',
+  './prompts/claude-system.js',
   './manifest.json',
 ];
 
@@ -66,7 +81,8 @@ self.addEventListener('fetch', (event) => {
   // API呼び出しはキャッシュしない
   if (url.includes('generativelanguage.googleapis.com') ||
       url.includes('api.openai.com') ||
-      url.includes('api.anthropic.com')) {
+      url.includes('api.anthropic.com') ||
+      url.includes('workers.dev')) {
     return;
   }
 
