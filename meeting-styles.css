@@ -258,3 +258,32 @@
   margin-bottom: 2px;
   font-family: 'Zen Maru Gothic', sans-serif;
 }
+
+/* v0.9.3追加 - 🔄姉妹だけで会話を続けるボタン */
+.btn-continue-talk {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #ddd;
+  background: transparent;
+  font-size: 1.1rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  margin-left: 4px;
+}
+.btn-continue-talk:active {
+  transform: scale(0.9);
+  background: rgba(255, 107, 157, 0.15);
+  border-color: #FF6B9D;
+}
+.btn-continue-talk:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.btn-continue-talk.hidden {
+  display: none;
+}

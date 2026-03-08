@@ -487,13 +487,9 @@ const ChatCore = (() => {
 
   // --- 公開API ---
   return {
-    init,
-    addMessage,
-    showTyping,
-    hideTyping,
-    switchSister,
-    getCurrentSister,
-    clearHistory,
-    SISTERS,
+    init, addMessage, showTyping, hideTyping,
+    switchSister, getCurrentSister, clearHistory, SISTERS,
+    // v0.9.3 - グループモード用コンテキスト
+    getGroupContext: () => ({ currentSister, chatHistories, addMessage, hideTyping, chatArea, SISTERS, SISTER_API }),
   };
 })();

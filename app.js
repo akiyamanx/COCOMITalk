@@ -77,6 +77,9 @@ const App = (() => {
     // v0.9追加 - 人数切替ボタン設定
     _setupPeopleButton();
 
+    // v0.9.3追加 - 姉妹だけで会話続けるボタン設定
+    _setupContinueTalkButton();
+
     // v0.8追加 - 会議UI初期化
     if (typeof MeetingUI !== 'undefined') {
       MeetingUI.init();
@@ -184,6 +187,12 @@ const App = (() => {
         tabNav.classList.toggle('tabs-hidden', newPeople === 'group');
       }
 
+      // v0.9.3追加 - 🔄ボタンの表示切替
+      const continueBtn = document.getElementById('btn-continue-talk');
+      if (continueBtn) {
+        continueBtn.classList.toggle('hidden', newPeople !== 'group');
+      }
+
       // プレースホルダー更新
       const msgInput = document.getElementById('msg-input');
       if (msgInput) {
@@ -192,7 +201,32 @@ const App = (() => {
           : ChatCore.SISTERS[ChatCore.getCurrentSister()].placeholder;
       }
 
+      // グループ解除時はリレー履歴リセット
+      if (newPeople === 'solo' && typeof ChatGroup !== 'undefined') {
+        ChatGroup.resetHistory();
+      }
+
       console.log(`[App] 人数モード切替: ${newPeople}`);
+    });
+  }
+
+  /**
+   * v0.9.3追加 - 🔄姉妹だけで会話を続けるボタンの設定
+   */
+  function _setupContinueTalkButton() {
+    const btn = document.getElementById('btn-continue-talk');
+    if (!btn) return;
+
+    btn.addEventListener('click', async () => {
+      if (typeof ChatGroup === 'undefined') return;
+      if (!ChatGroup.hasPrevTurn()) return;
+
+      btn.disabled = true;
+      try {
+        await ChatGroup.continueTalk(ChatCore.getGroupContext());
+      } finally {
+        btn.disabled = false;
+      }
     });
   }
 
