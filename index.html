@@ -1,5 +1,5 @@
 <!-- COCOMITalk - COCOMI Family AI会話アプリ -->
-<!-- v1.2 デバッグパネル追加（設定画面バグ調査用・修正後削除） -->
+<!-- v1.2 Step 3.5 - 会議履歴IndexedDB保存＋過去会議一覧画面＋バグ修正完了 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -19,21 +19,6 @@
   <link rel="stylesheet" href="meeting-styles.css">
 </head>
 <body>
-
-  <!-- デバッグパネル（JSエラーを画面上部に赤字表示・原因特定したら削除） -->
-  <div id="dbg" style="display:none;position:fixed;top:0;left:0;right:0;z-index:99999;background:#1a1a2e;color:#F44336;font-size:12px;padding:8px;max-height:35vh;overflow:auto;font-family:monospace;white-space:pre-wrap;border-bottom:3px solid #F44336;">
-    <b style="color:#FF6B9D">🔍デバッグ</b>
-    <button onclick="this.parentElement.style.display='none'" style="float:right;background:#333;color:#fff;border:none;padding:2px 8px;border-radius:4px">✕</button>
-    <div id="dbg-log"></div>
-  </div>
-  <script>
-  (function(){
-    var p=document.getElementById('dbg'),l=document.getElementById('dbg-log');
-    window._dbg=function(m){p.style.display='block';l.textContent+='\n'+m;};
-    window.onerror=function(msg,src,line){window._dbg('❌ '+(src?src.split('/').pop():'?')+':'+line+' → '+msg);};
-    window.addEventListener('unhandledrejection',function(e){window._dbg('❌ Promise: '+e.reason);});
-  })();
-  </script>
 
   <!-- ========== スプラッシュ画面 ========== -->
   <div id="splash-screen" class="splash">
@@ -204,16 +189,5 @@
   <script src="chat-group.js"></script>
   <script src="chat-core.js"></script>
   <script src="app.js"></script>
-
-  <!-- デバッグ: 3秒後に状態チェック -->
-  <script>
-  setTimeout(function(){
-    var m='📋状態: ';
-    m+='App='+(typeof App!=='undefined'?'OK':'NG');
-    m+=' modal='+(document.getElementById('settings-modal')?'あり('+document.getElementById('settings-modal').className+')':'なし');
-    m+=' btn='+(document.getElementById('btn-settings')?'あり':'なし');
-    if(window._dbg)window._dbg(m); else alert(m);
-  },3000);
-  </script>
 </body>
 </html>
