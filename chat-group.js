@@ -56,11 +56,11 @@ const ChatGroup = (() => {
       try {
         if (apiModule && apiModule.hasApiKey()) {
           // v0.9.1 - 前ターン補完分を計算
-          const補完 = _getPrevTurnComplement(i, order, SISTERS);
+          const complement = _getPrevTurnComplement(i, order, SISTERS);
 
           const reply = await _callSisterInGroup(
             userText, sisterKey, isLead, sisterAPI,
-            chatHistories, relayContext, 補完, SISTERS
+            chatHistories, relayContext, complement, SISTERS
           );
 
           hideTyping();
@@ -76,8 +76,9 @@ const ChatGroup = (() => {
       } catch (error) {
         hideTyping();
         const errMsg = `ごめん、通信エラーだった…💦（${error.message}）`;
-        addMessage('ai', errMsg, { sisterKey, isLead });
-        relayContext.push({ sisterKey, content: errMsg, isLead });
+        // v0.9.4 - エラーは画面表示のみ、履歴には入れない（トークン節約）
+        addMessage('ai', errMsg, { sisterKey, isLead, noHistory: true });
+        relayContext.push({ sisterKey, content: '（通信エラーのため発言なし）', isLead });
         console.error(`[ChatGroup] ${sister.name} グループ応答エラー:`, error);
       }
     }
@@ -292,8 +293,8 @@ const ChatGroup = (() => {
       } catch (error) {
         hideTyping();
         const errMsg = `ごめん、通信エラーだった…💦（${error.message}）`;
-        addMessage('ai', errMsg, { sisterKey });
-        relayContext.push({ sisterKey, content: errMsg, isLead });
+        addMessage('ai', errMsg, { sisterKey, noHistory: true });
+        relayContext.push({ sisterKey, content: '（通信エラーのため発言なし）', isLead });
       }
     }
 

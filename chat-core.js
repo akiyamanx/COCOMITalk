@@ -311,6 +311,11 @@ const ChatCore = (() => {
     textNode.textContent = text;
     bubble.appendChild(textNode);
 
+    // v0.9.4 - エラー表示のみ（履歴に入れない）の場合は薄く表示
+    if (options.noHistory) {
+      msgDiv.classList.add('msg-no-history');
+    }
+
     msgDiv.appendChild(avatar);
     msgDiv.appendChild(bubble);
     chatArea.appendChild(msgDiv);

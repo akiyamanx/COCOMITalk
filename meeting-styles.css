@@ -287,3 +287,11 @@
 .btn-continue-talk.hidden {
   display: none;
 }
+
+/* v0.9.4追加 - エラー表示のみ（履歴に入らない）メッセージ */
+.msg-no-history {
+  opacity: 0.5;
+}
+.msg-no-history .msg-bubble {
+  border-left: 3px solid #F44336;
+}
