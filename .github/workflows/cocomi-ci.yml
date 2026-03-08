@@ -1,6 +1,7 @@
 # COCOMI CI - COCOMITalk品質チェック
 # 全COCOMIリポ共通のCI基盤（cocomi-ci.yml v1.1準拠）
 # v1.0 - 初期配置
+# v1.2 - 2026-03-08 LINE通知step追加
 
 name: COCOMI CI
 
@@ -99,3 +100,50 @@ jobs:
           done
           echo "---"
           echo "合計: ${TOTAL}行"
+
+      # 7. LINE通知（成功時）
+      - name: LINE通知（成功）
+        if: success()
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: |
+          REPO_NAME="${{ github.repository }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          PAGES_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME#*/}/"
+          MESSAGE="✅ CI合格！
+🏛️ ${REPO_NAME}
+📝 ${SHORT_SHA}: ${COMMIT_MSG}
+🌐 アプリ: ${PAGES_URL}"
+          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${LINE_TOKEN}" \
+            -d "$(jq -n \
+              --arg to "$LINE_USER_ID" \
+              --arg text "$MESSAGE" \
+              '{to: $to, messages: [{type: "text", text: $text}]}')"
+
+      # 8. LINE通知（失敗時）
+      - name: LINE通知（失敗）
+        if: failure()
+        env:
+          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
+        run: |
+          REPO_NAME="${{ github.repository }}"
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          PAGES_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME#*/}/"
+          MESSAGE="🔴 CI不合格！
+🏛️ ${REPO_NAME}
+📝 ${SHORT_SHA}: ${COMMIT_MSG}
+🔍 詳細: ${{ github.server_url }}/${{ github.repository }}/actions
+🌐 アプリ: ${PAGES_URL}"
+          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${LINE_TOKEN}" \
+            -d "$(jq -n \
+              --arg to "$LINE_USER_ID" \
+              --arg text "$MESSAGE" \
+              '{to: $to, messages: [{type: "text", text: $text}]}')"
