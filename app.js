@@ -35,7 +35,7 @@ const App = (() => {
     // スプラッシュ画面の処理
     _handleSplash();
 
-    // v0.4追加 - TokenMonitor初期化（DBバージョン管理のため先に実行）
+    // TokenMonitor初期化
     if (typeof TokenMonitor !== 'undefined') {
       try {
         await TokenMonitor.init();
@@ -45,35 +45,15 @@ const App = (() => {
       }
     }
 
-    // チャットコア初期化
     ChatCore.init();
-
-    // タブ切り替え設定
     _setupTabs();
-
-    // v0.8追加 - モード切替ボタン設定
     _setupModeButton();
-
-    // v0.9追加 - 人数切替ボタン設定
     _setupPeopleButton();
-
-    // v0.9.3追加 - 姉妹だけで会話続けるボタン設定
     _setupContinueTalkButton();
-
-    // v0.8追加 - 会議UI初期化
-    if (typeof MeetingUI !== 'undefined') {
-      MeetingUI.init();
-    }
-
-    // v1.0追加 - ファイル入出力ボタン設定
+    if (typeof MeetingUI !== 'undefined') MeetingUI.init();
     _setupFileButtons();
-
-    // 設定モーダル設定
     _setupSettings();
-
-    // 保存済み設定を読み込み
     _loadSettings();
-
     console.log('[App] COCOMITalk v1.0 起動完了');
   }
 
@@ -81,8 +61,6 @@ const App = (() => {
   function _handleSplash() {
     const splash = document.getElementById('splash-screen');
     const app = document.getElementById('app');
-
-    // 1.5秒後にスプラッシュをフェードアウト
     setTimeout(() => {
       splash.classList.add('fade-out');
 
@@ -472,6 +450,33 @@ const App = (() => {
         }
         const sisterName = ChatCore.SISTERS[sister]?.name || sister;
         FileHandler.downloadChat(history, `COCOMITalk_${sisterName}`);
+      });
+    }
+
+    // 📋ボタン → 指示書自動生成
+    const btnGenDoc = document.getElementById('btn-generate-doc');
+    if (btnGenDoc) {
+      btnGenDoc.addEventListener('click', async () => {
+        if (typeof DocGenerator === 'undefined' || typeof ChatCore === 'undefined') return;
+        if (DocGenerator.isGenerating()) return;
+        // 現在の姉妹の会話履歴を取得（グループならkoko基準）
+        const sister = ChatCore.getCurrentSister();
+        const history = ChatCore.getHistory(sister);
+        if (!history || history.length === 0) {
+          alert('まだ会話がないよ！先に三姉妹と議論してから📋を押してね');
+          return;
+        }
+        btnGenDoc.disabled = true;
+        try {
+          const result = await DocGenerator.generate(history);
+          if (result.success && result.files.length > 0) {
+            await FileHandler.downloadAsZip(result.files);
+          }
+        } catch (err) {
+          alert(`指示書生成エラー: ${err.message}`);
+        } finally {
+          btnGenDoc.disabled = false;
+        }
       });
     }
   }

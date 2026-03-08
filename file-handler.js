@@ -226,6 +226,47 @@ const FileHandler = (() => {
     return `${(bytes / (1024 * 1024)).toFixed(1)}MB`;
   }
 
+  // v1.0追加 - 複数ファイルをZIPにまとめてダウンロード（JSZipをCDNで使用）
+  async function downloadAsZip(files, zipName = 'COCOMITalk_指示書') {
+    const date = new Date().toISOString().split('T')[0];
+    const fullZipName = `${zipName}_${date}.zip`;
+
+    // JSZipが読み込まれているか確認（CDNから動的に読み込み）
+    if (typeof JSZip === 'undefined') {
+      try {
+        await _loadScript('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js');
+      } catch (e) {
+        // JSZip読み込み失敗時は個別ダウンロードにフォールバック
+        console.warn('[FileHandler] JSZip読み込み失敗、個別DLにフォールバック');
+        files.forEach(f => downloadText(f.content, f.name, 'text/markdown'));
+        return;
+      }
+    }
+
+    const zip = new JSZip();
+    files.forEach(f => zip.file(f.name, f.content));
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fullZipName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  }
+
+  // 外部スクリプトを動的に読み込むヘルパー
+  function _loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error(`スクリプト読み込み失敗: ${src}`));
+      document.head.appendChild(s);
+    });
+  }
+
   /**
    * 対応ファイル形式の説明テキスト
    */
@@ -241,6 +282,7 @@ const FileHandler = (() => {
     clearAttachment,
     downloadText,
     downloadChat,
+    downloadAsZip,
     getSupportedFormatsText,
   };
 })();

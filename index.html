@@ -88,6 +88,8 @@
 
     <!-- 入力エリア -->
     <footer class="input-area">
+      <!-- v1.0追加 - 指示書生成ステータス -->
+      <div id="doc-gen-status" class="doc-gen-status hidden"></div>
       <!-- v1.0追加 - ファイルプレビュー（添付時に表示） -->
       <div id="file-preview" class="file-preview hidden"></div>
       <div class="input-wrapper">
@@ -113,7 +115,8 @@
       </div>
       <div class="input-footer">
         <span id="model-indicator" class="model-indicator">Gemini 2.5 Flash</span>
-        <!-- v1.0追加 - 💾会話保存ボタン -->
+        <!-- v1.0追加 - 💾会話保存ボタン＋📋指示書生成ボタン -->
+        <button id="btn-generate-doc" class="btn-download" aria-label="指示書生成" title="📋 指示書を自動生成">📋</button>
         <button id="btn-download" class="btn-download" aria-label="会話を保存" title="💾 会話をダウンロード">💾</button>
         <!-- v0.4追加 - トークン使用量表示 -->
         <span id="token-cost" class="token-cost" title="今月のトークン使用量">--</span>
@@ -212,6 +215,7 @@
   <script src="chat-history.js"></script>
   <script src="token-monitor.js"></script>
   <script src="file-handler.js"></script>
+  <script src="doc-generator.js"></script>
   <script src="mode-switcher.js"></script>
   <script src="meeting-router.js"></script>
   <script src="meeting-relay.js"></script>
