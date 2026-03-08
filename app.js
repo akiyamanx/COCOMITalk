@@ -4,6 +4,7 @@
 // v0.4 Session D - TokenMonitor初期化＋設定画面にトークン詳細
 // v0.7 Step 2完了 - 姉妹別モデルインジケーター表示
 // v0.8 Step 3 - モード切替ボタン＋会議画面連携
+// v0.9.5 設定画面リニューアル - 三姉妹×モード別モデル設定UI
 
 'use strict';
 
@@ -33,20 +34,7 @@ const App = (() => {
     }
   };
 
-  // --- モデル表示名 ---
-  const MODEL_NAMES = {
-    auto: 'スマートルーティング',
-    flash: 'Gemini Flash',
-    balanced: 'Gemini 2.5 Flash',
-    quality: '高品質モード',
-  };
-
-  // v0.7追加 - 姉妹別のデフォルトモデル表示名
-  const SISTER_MODEL_NAMES = {
-    koko: 'Gemini 2.5 Flash',
-    gpt: 'GPT-4o-mini',
-    claude: 'Claude Haiku 4.5',
-  };
+  // v0.9.5 - 旧MODEL_NAMES＋SISTER_MODEL_NAMES削除（ModeSwitcher.getAvailableModels()に統合済み）
 
   /**
    * アプリ起動
@@ -310,22 +298,20 @@ const App = (() => {
         }
       });
     }
+
+    // v0.9.5追加 - モデル設定デフォルトリセットボタン
+    _setupResetModels();
   }
 
   /**
    * 設定をLocalStorageから読み込み
+   * v0.9.5変更 - 旧routingMode削除、ModeSwitcher連携のみ
    */
   function _loadSettings() {
     try {
       const saved = localStorage.getItem('cocomitalk-settings');
       if (!saved) return;
-
-      const settings = JSON.parse(saved);
-
-      // ルーティングモードのインジケーター更新
-      const routingMode = settings.routingMode || 'balanced';
-      _updateModelIndicator(routingMode);
-
+      // 認証トークンはapi-common.jsが直接読む
       console.log('[App] 設定読み込み完了');
     } catch (e) {
       console.warn('[App] 設定読み込みエラー:', e);
@@ -334,29 +320,20 @@ const App = (() => {
 
   /**
    * 設定をフォームに反映
+   * v0.9.5変更 - 認証トークンのみ＋モデル設定UI動的生成
    */
   function _loadSettingsToForm() {
     try {
       const saved = localStorage.getItem('cocomitalk-settings');
-      if (!saved) return;
-
-      const settings = JSON.parse(saved);
-
-      // APIキーをフォームに反映
-      if (settings.geminiKey) {
-        document.getElementById('key-gemini').value = settings.geminiKey;
+      if (saved) {
+        const settings = JSON.parse(saved);
+        // 認証トークン
+        if (settings.geminiKey) {
+          document.getElementById('key-gemini').value = settings.geminiKey;
+        }
       }
-      if (settings.openaiKey) {
-        document.getElementById('key-openai').value = settings.openaiKey;
-      }
-      if (settings.claudeKey) {
-        document.getElementById('key-claude').value = settings.claudeKey;
-      }
-
-      // ルーティングモード
-      if (settings.routingMode) {
-        document.getElementById('routing-mode').value = settings.routingMode;
-      }
+      // v0.9.5追加 - モデル設定UIを動的に生成
+      _buildModelSettingsUI();
     } catch (e) {
       console.warn('[App] フォーム反映エラー:', e);
     }
@@ -364,20 +341,17 @@ const App = (() => {
 
   /**
    * 設定を保存
+   * v0.9.5変更 - 認証トークンのみ＋モデル設定はModeSwitcher経由で別保存
    */
   function _saveSettings() {
     try {
       const settings = {
         geminiKey: document.getElementById('key-gemini').value.trim(),
-        openaiKey: document.getElementById('key-openai').value.trim(),
-        claudeKey: document.getElementById('key-claude').value.trim(),
-        routingMode: document.getElementById('routing-mode').value,
       };
-
       localStorage.setItem('cocomitalk-settings', JSON.stringify(settings));
 
-      // モデルインジケーター更新
-      _updateModelIndicator(settings.routingMode);
+      // v0.9.5追加 - モデル設定を各ドロップダウンから読み取りModeSwitcherに反映
+      _saveModelSettings();
 
       console.log('[App] 設定保存完了');
     } catch (e) {
@@ -386,13 +360,106 @@ const App = (() => {
   }
 
   /**
-   * モデルインジケーター更新
+   * v0.9.5新規 - モデル設定UIを動的に生成
    */
-  function _updateModelIndicator(routingMode) {
-    const indicator = document.getElementById('model-indicator');
-    if (indicator) {
-      indicator.textContent = MODEL_NAMES[routingMode] || 'Gemini 2.5 Flash';
-    }
+  function _buildModelSettingsUI() {
+    const area = document.getElementById('model-settings-area');
+    if (!area || typeof ModeSwitcher === 'undefined') return;
+
+    const models = ModeSwitcher.getAvailableModels();
+    const defaults = ModeSwitcher.DEFAULT_MODE_MODELS;
+    const modes = ModeSwitcher.getModes();
+    const modeLabels = { normal: '💬 普段モード', dev: '🔧 開発モード', meeting: '🏛️ 会議モード' };
+    const sisterLabels = { koko: '🌸 ここちゃん', gpt: '🌙 お姉ちゃん', claude: '🔮 クロちゃん' };
+
+    let html = '';
+    modes.forEach(mode => {
+      html += `<div class="model-mode-block" data-mode="${mode}">`;
+      html += `<h4 class="model-mode-title">${modeLabels[mode]}</h4>`;
+      ['koko', 'gpt', 'claude'].forEach(sister => {
+        const currentKey = _getModelKeyForMode(mode, sister);
+        const sid = `model-${mode}-${sister}`;
+        html += `<div class="setting-item model-select-row">`;
+        html += `<label for="${sid}">${sisterLabels[sister]}</label>`;
+        html += `<select id="${sid}" class="model-select">`;
+        models[sister].forEach(m => {
+          const sel = (m.key === currentKey) ? ' selected' : '';
+          html += `<option value="${m.key}"${sel}>${m.name} ${m.tier}</option>`;
+        });
+        html += `</select></div>`;
+      });
+      if (mode === 'meeting') {
+        html += `<p class="setting-hint">💰 会議1ターン: 約¥30〜80（最上位モデル時）</p>`;
+      }
+      html += `</div>`;
+    });
+    area.innerHTML = html;
+  }
+
+  /**
+   * v0.9.5新規 - 指定モード×姉妹のモデルキーを取得（設定画面用）
+   * ModeSwitcher.getModelKey()は現在のモードしか見れないので、
+   * LocalStorageのカスタム設定 or デフォルトから直接取得
+   */
+  function _getModelKeyForMode(mode, sister) {
+    try {
+      const saved = localStorage.getItem('cocomitalk-custom-models');
+      if (saved) {
+        const custom = JSON.parse(saved);
+        if (custom[mode]?.[sister]) return custom[mode][sister];
+      }
+    } catch (e) { /* デフォルトにフォールバック */ }
+    return ModeSwitcher.DEFAULT_MODE_MODELS[mode]?.[sister];
+  }
+
+  /**
+   * v0.9.5新規 - モデル設定をドロップダウンから読み取りModeSwitcherに反映
+   */
+  function _saveModelSettings() {
+    if (typeof ModeSwitcher === 'undefined') return;
+
+    const modes = ModeSwitcher.getModes();
+    modes.forEach(mode => {
+      const models = {};
+      ['koko', 'gpt', 'claude'].forEach(sister => {
+        const select = document.getElementById(`model-${mode}-${sister}`);
+        if (select) models[sister] = select.value;
+      });
+      // 3つとも取得できた場合のみ保存
+      if (models.koko && models.gpt && models.claude) {
+        ModeSwitcher.setCustomModels(mode, models);
+      }
+    });
+  }
+
+  /**
+   * v0.9.5新規 - デフォルトリセット処理のセットアップ
+   */
+  function _setupResetModels() {
+    const btn = document.getElementById('btn-reset-models');
+    if (!btn) return;
+
+    btn.addEventListener('click', () => {
+      if (!confirm('モデル設定をデフォルトに戻しますか？')) return;
+
+      // カスタム設定をクリア
+      try {
+        localStorage.removeItem('cocomitalk-custom-models');
+      } catch (e) { /* ignore */ }
+
+      // UIを再生成（デフォルト値で表示される）
+      _buildModelSettingsUI();
+
+      // ModeSwitcherの全モードをデフォルトに戻す
+      if (typeof ModeSwitcher !== 'undefined') {
+        const defaults = ModeSwitcher.DEFAULT_MODE_MODELS;
+        ModeSwitcher.getModes().forEach(mode => {
+          ModeSwitcher.setCustomModels(mode, defaults[mode]);
+        });
+      }
+
+      console.log('[App] モデル設定をデフォルトにリセット');
+    });
   }
 
   // --- 公開API ---

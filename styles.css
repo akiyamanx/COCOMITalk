@@ -332,3 +332,63 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
 .model-usage, .daily-usage {
   color: var(--text-light, #999);
 }
+
+/* v0.9.5追加 - モデル設定UI */
+.model-mode-block {
+  background: var(--bg-light, #f8f8f8);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.model-mode-block[data-mode="normal"] { border-left: 3px solid var(--koko-primary, #FF6B9D); }
+.model-mode-block[data-mode="dev"] { border-left: 3px solid #FF9800; }
+.model-mode-block[data-mode="meeting"] { border-left: 3px solid #F44336; }
+.model-mode-title {
+  font-size: 0.85rem;
+  font-weight: 700;
+  margin: 0 0 8px 0;
+  color: var(--text, #333);
+}
+.model-select-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 0;
+}
+.model-select-row label {
+  font-size: 0.8rem;
+  white-space: nowrap;
+  min-width: 100px;
+}
+.model-select {
+  flex: 1;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.12);
+  background: #fff;
+  font-size: 0.78rem;
+  font-family: inherit;
+  color: var(--text, #333);
+  max-width: 180px;
+}
+.setting-hint {
+  font-size: 0.72rem;
+  color: var(--text-light, #999);
+  margin: 4px 0 0 0;
+}
+.btn-secondary {
+  width: 100%;
+  padding: 10px;
+  border: 1px solid rgba(0,0,0,0.15);
+  border-radius: 12px;
+  background: #fff;
+  color: var(--text, #333);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+.btn-secondary:active {
+  background: #f0f0f0;
+}

@@ -4,6 +4,7 @@
 <!-- v0.5 Step 2 - 三姉妹API接続＋スクリプト追加 -->
 <!-- v0.8 Step 3 - モード切替ボタン＋会議専用画面追加 -->
 <!-- v0.9 Step 3.5 - 👤⇔👥人数切替ボタン追加 -->
+<!-- v0.9.5 設定画面リニューアル - 三姉妹×モード別モデル設定 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -157,34 +158,22 @@
         <button id="btn-close-settings" class="icon-btn">✕</button>
       </div>
       <div class="modal-body">
-        <!-- v0.5変更 - COCOMI認証トークン設定 -->
+        <!-- v0.9.5変更 - COCOMI認証トークン（Worker経由で1つだけ） -->
         <section class="settings-section">
-          <h3>🔑 APIキー</h3>
+          <h3>🔑 認証</h3>
           <div class="setting-item">
             <label for="key-gemini">COCOMI認証トークン</label>
             <input type="password" id="key-gemini" placeholder="cocomi-...">
-          </div>
-          <div class="setting-item">
-            <label for="key-openai">OpenAI API Key</label>
-            <input type="password" id="key-openai" placeholder="sk-...">
-          </div>
-          <div class="setting-item">
-            <label for="key-claude">Claude API Key</label>
-            <input type="password" id="key-claude">
+            <p class="setting-hint">Worker経由で全API共通の認証トークン</p>
           </div>
         </section>
-        <!-- モデル設定 -->
+        <!-- v0.9.5新規 - 三姉妹×モード別モデル設定 -->
         <section class="settings-section">
           <h3>🤖 モデル設定</h3>
-          <div class="setting-item">
-            <label for="routing-mode">ルーティングモード</label>
-            <select id="routing-mode">
-              <option value="auto">スマートルーティング（自動）</option>
-              <option value="flash">Gemini Flash（最安）</option>
-              <option value="balanced">Gemini 2.5 Flash（バランス）</option>
-              <option value="quality">高品質モード</option>
-            </select>
+          <div id="model-settings-area">
+            <!-- app.jsが動的に生成 -->
           </div>
+          <button id="btn-reset-models" class="btn-secondary" style="margin-top:12px;">デフォルトに戻す</button>
         </section>
         <!-- 保存ボタン -->
         <button id="btn-save-settings" class="btn-primary">保存する</button>
