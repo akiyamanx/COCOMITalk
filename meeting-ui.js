@@ -88,12 +88,6 @@ const MeetingUI = (() => {
     if (btnArchive) {
       btnArchive.addEventListener('click', _handleShowArchive);
     }
-
-    // v1.0追加 - 一覧画面の閉じるボタン
-    const btnArchiveClose = meetingScreen.querySelector('#btn-archive-close');
-    if (btnArchiveClose) {
-      btnArchiveClose.addEventListener('click', _handleHideArchive);
-    }
   }
 
   /** 会議開始処理 */
