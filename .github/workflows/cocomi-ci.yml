@@ -1,7 +1,5 @@
 # COCOMI CI - COCOMITalk品質チェック
-# 全COCOMIリポ共通のCI基盤（cocomi-ci.yml v1.1準拠）
-# v1.0 - 初期配置
-# v1.3 - 2026-03-08 console.logを警告のみに変更、LINE_CHANNEL_ACCESS_TOKEN対応
+# v1.4 - 2026-03-08 YAML構文エラー修正（MESSAGE複数行をjqで組み立て）
 
 name: COCOMI CI
 
@@ -17,7 +15,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 500行制限チェック（COCOMI全リポ共通ルール）
+      # 1. 500行制限チェック
       - name: 500行制限チェック
         run: |
           echo "=== 500行制限チェック ==="
@@ -25,14 +23,14 @@ jobs:
           for file in $(find . -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v node_modules | grep -v .github); do
             LINES=$(wc -l < "$file")
             if [ "$LINES" -gt 500 ]; then
-              echo "❌ $file: ${LINES}行（500行超過！）"
+              echo "❌ $file: ${LINES}行（500行超過）"
               OVER_LIMIT=1
             else
               echo "✅ $file: ${LINES}行"
             fi
           done
           if [ "$OVER_LIMIT" -eq 1 ]; then
-            echo "::error::500行を超えるファイルがあります。分割してください。"
+            echo "::error::500行を超えるファイルがあります。"
             exit 1
           fi
           echo "✅ 全ファイル500行以内"
@@ -63,7 +61,7 @@ jobs:
             fi
           done
 
-      # 4. console.log検出（v1.3変更: 警告のみ・CIは落とさない）
+      # 4. console.log検出（警告のみ・CIは落とさない）
       - name: console.log検出
         run: |
           echo "=== console.log検出（情報のみ） ==="
@@ -75,7 +73,7 @@ jobs:
               COUNT=$((COUNT + LOGS))
             fi
           done
-          echo "合計: ${COUNT}件のconsole.log（本番前に要確認）"
+          echo "合計: ${COUNT}件（開発中のため警告のみ）"
 
       # 5. TODO/FIXME検出
       - name: TODO/FIXME検出
@@ -93,7 +91,6 @@ jobs:
             printf "  %4d行  %s\n" "$LINES" "$file"
             TOTAL=$((TOTAL + LINES))
           done
-          echo "---"
           echo "合計: ${TOTAL}行"
 
       # 7. LINE通知（成功時）
@@ -103,18 +100,15 @@ jobs:
           LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: |
-          REPO_NAME="${{ github.repository }}"
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          PAGES_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME#*/}/"
-          MESSAGE="✅ CI合格！
-🏛️ ${REPO_NAME}
-📝 ${SHORT_SHA}: ${COMMIT_MSG}
-🌐 アプリ: ${PAGES_URL}"
+          REPO="${{ github.repository }}"
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          MSG="${{ github.event.head_commit.message }}"
+          URL="https://${{ github.repository_owner }}.github.io/${REPO#*/}/"
+          TEXT="CI合格! ${REPO} ${SHA}: ${MSG} アプリ: ${URL}"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
-            -d "$(jq -n --arg to "$LINE_USER_ID" --arg text "$MESSAGE" '{to: $to, messages: [{type: "text", text: $text}]}')"
+            -d "{\"to\":\"${LINE_USER_ID}\",\"messages\":[{\"type\":\"text\",\"text\":\"${TEXT}\"}]}"
 
       # 8. LINE通知（失敗時）
       - name: LINE通知（失敗）
@@ -123,16 +117,12 @@ jobs:
           LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: |
-          REPO_NAME="${{ github.repository }}"
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          PAGES_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME#*/}/"
-          MESSAGE="🔴 CI不合格！
-🏛️ ${REPO_NAME}
-📝 ${SHORT_SHA}: ${COMMIT_MSG}
-🔍 詳細: ${{ github.server_url }}/${{ github.repository }}/actions
-🌐 アプリ: ${PAGES_URL}"
+          REPO="${{ github.repository }}"
+          SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          MSG="${{ github.event.head_commit.message }}"
+          ACTIONS_URL="${{ github.server_url }}/${{ github.repository }}/actions"
+          TEXT="CI不合格! ${REPO} ${SHA}: ${MSG} 詳細: ${ACTIONS_URL}"
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
-            -d "$(jq -n --arg to "$LINE_USER_ID" --arg text "$MESSAGE" '{to: $to, messages: [{type: "text", text: $text}]}')"
+            -d "{\"to\":\"${LINE_USER_ID}\",\"messages\":[{\"type\":\"text\",\"text\":\"${TEXT}\"}]}"
