@@ -4,6 +4,7 @@
 // v0.4 Session D - usageMetadata取得＋TokenMonitor連携
 // v0.5 Step 2 - Worker中継＋ApiCommon共通化
 // v0.8 Step 3 - モデルグレード切替対応（flash-3/pro-3.1追加）
+// v0.9 2026-03-08 - maxOutputTokens増加（1024→4096、会議モードで発言が途切れるバグ修正）
 
 'use strict';
 
@@ -49,8 +50,8 @@ const ApiGemini = (() => {
     // リクエストボディ構築（v1.0変更 - 添付ファイル対応）
     const body = _buildRequestBody(userMessage, systemPrompt, history, options.attachment);
 
-    // v1.0追加 - モードに応じて出力上限を調整
-    body.generationConfig.maxOutputTokens = options.maxTokens || 1024;
+    // v0.9修正 - 出力上限を4096に増加（会議モードでここちゃんの発言が途切れるバグ修正）
+    body.generationConfig.maxOutputTokens = options.maxTokens || 4096;
 
     // v0.5追加 - Worker用にmodelフィールドを追加
     body.model = modelName;
@@ -114,8 +115,8 @@ const ApiGemini = (() => {
         temperature: 0.85,
         topP: 0.95,
         topK: 40,
-        // maxOutputTokensはsendMessage側で上書き
-        maxOutputTokens: 1024,
+        // v0.9修正 - maxOutputTokensはsendMessage側で上書き（デフォルト4096）
+        maxOutputTokens: 4096,
       },
     };
 

@@ -1,6 +1,7 @@
 // このファイルはクロちゃん（Claude）APIとの通信をWorker経由で管理する
 // v1.1 2026-03-08 - Opus 4.6のtemperature非対応修正（Opusはtemperature省略）
 // v1.2 2026-03-08 - モデル名修正（claude-opus-4-6-20260205 → claude-opus-4-6）
+// v1.3 2026-03-08 - max_tokens増加（1024→4096、会議モードで発言途切れ防止）
 
 'use strict';
 
@@ -41,7 +42,7 @@ const ApiClaude = (() => {
     // リクエストボディ（Anthropic形式、systemは別パラメータ）
     const body = {
       model     : modelName,
-      max_tokens: options.maxTokens || 1024,
+      max_tokens: options.maxTokens || 4096,
       messages  : messages,
     };
 
