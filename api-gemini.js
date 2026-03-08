@@ -15,13 +15,14 @@ const ApiGemini = (() => {
 
   // --- モデル定義 ---
   // v0.8 Step 3 - モデルグレード切替用に追加
+  // v0.9.5修正 - 正しいAPIモデル名に修正（Gemini 3系は-preview必須）
   const MODELS = {
     'flash-lite': 'gemini-2.0-flash-lite',
     'flash': 'gemini-2.0-flash',
     'flash-25': 'gemini-2.5-flash',
-    'flash-3': 'gemini-3-flash',
+    'flash-3': 'gemini-3-flash-preview',
     'pro': 'gemini-2.5-pro-preview-03-25',
-    'pro-31': 'gemini-3.1-pro',
+    'pro-31': 'gemini-3.1-pro-preview',
   };
 
   // デフォルトモデル
