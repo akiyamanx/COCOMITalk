@@ -5,6 +5,9 @@
 // v1.3 2026-03-08 - GPT-5系max_completion_tokens増加（1024→4096、リーズニングトークン対策）
 //                  - GPT-5系はdeveloperロール使用（system→developer）
 //                  - エラー詳細ログ追加
+// v1.4 2026-03-09 - max_completion_tokens 4096→8192（リーズニングトークン枯渇対策）
+//                  - 空レスポンス時のリトライ機能追加（最大2回、安全ガイド準拠）
+//                  - _extractText()戻り値をオブジェクト化（{text, retryable}）
 
 'use strict';
 
@@ -54,30 +57,49 @@ const ApiOpenAI = (() => {
       messages: messages,
     };
 
-    // v1.3修正 - gpt-5系はmax_completion_tokens（リーズニングトークン含む→4096必要）
-    //           それ以外はmax_tokens（1024で十分）
+    // v1.4修正 - GPT-5系のmax_completion_tokensを8192に増加
+    // リーズニングトークンが3000〜4000消費するため、4096では出力枠が足りない
     if (modelName.startsWith('gpt-5')) {
-      body.max_completion_tokens = options.maxTokens || 4096;
+      body.max_completion_tokens = options.maxTokens || 8192;
     } else {
       body.max_tokens = options.maxTokens || 1024;
     }
 
-    try {
-      const data = await ApiCommon.callAPI('openai', body);
-      const text = _extractText(data);
+    // v1.4追加 - リトライロジック（安全ガイド準拠: 最大2回リトライ）
+    const MAX_RETRIES = 2;
 
-      // トークン使用量を記録
-      const usage = data?.usage;
-      if (typeof TokenMonitor !== 'undefined') {
-        const inputTokens  = usage?.prompt_tokens     || 0;
-        const outputTokens = usage?.completion_tokens || 0;
-        TokenMonitor.record(modelName, inputTokens, outputTokens);
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        const data = await ApiCommon.callAPI('openai', body);
+        const result = _extractText(data);
+
+        // トークン使用量を記録（リトライ時も毎回記録）
+        const usage = data?.usage;
+        if (typeof TokenMonitor !== 'undefined') {
+          const inputTokens  = usage?.prompt_tokens     || 0;
+          const outputTokens = usage?.completion_tokens || 0;
+          TokenMonitor.record(modelName, inputTokens, outputTokens);
+        }
+
+        if (result.text) {
+          return result.text;
+        }
+
+        // リトライ不可 or 最終試行 → エラーメッセージを返す
+        if (!result.retryable || attempt === MAX_RETRIES) {
+          console.warn(`[ApiOpenAI] リトライ不可 or 最終試行（attempt=${attempt}）`);
+          return 'ごめん、お姉ちゃんの回答生成に失敗しちゃった…💦 もう一度試してみてね！';
+        }
+
+        // リトライ前に待機（指数バックオフ: 1秒→2秒）
+        console.log(`[ApiOpenAI] リトライ ${attempt + 1}/${MAX_RETRIES}（finish_reason=length）`);
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
+
+      } catch (error) {
+        console.error('[ApiOpenAI] 通信エラー:', error);
+        if (attempt === MAX_RETRIES) throw error;
+        await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));
       }
-
-      return text;
-    } catch (error) {
-      console.error('[ApiOpenAI] 通信エラー:', error);
-      throw error;
     }
   }
 
@@ -119,22 +141,24 @@ const ApiOpenAI = (() => {
 
   /**
    * レスポンスからテキストを抽出
+   * v1.4修正 - 戻り値を{text, retryable}オブジェクトに変更
    */
   function _extractText(data) {
     if (data?.error) {
       const errMsg = data?.error?.message || '不明なエラー';
       console.error('[ApiOpenAI] APIエラーレスポンス:', JSON.stringify(data.error));
-      return `ごめん、お姉ちゃん側でエラーが起きたよ！🌙 ${errMsg}`;
+      return { text: `ごめん、お姉ちゃん側でエラーが起きたよ！🌙 ${errMsg}`, retryable: false };
     }
 
     const text = data?.choices?.[0]?.message?.content;
     if (!text) {
-      // v1.3追加 - デバッグ用にレスポンス構造をログ出力
-      console.warn('[ApiOpenAI] contentが空。finish_reason:', data?.choices?.[0]?.finish_reason);
+      const reason = data?.choices?.[0]?.finish_reason || 'unknown';
+      console.warn('[ApiOpenAI] contentが空。finish_reason:', reason);
       console.warn('[ApiOpenAI] usage:', JSON.stringify(data?.usage));
-      return 'あれ？お姉ちゃんの返事が来なかった。もう一回試してみて！';
+      // v1.4追加 - finish_reason=lengthはトークン不足 → リトライで改善の可能性あり
+      return { text: null, retryable: (reason === 'length') };
     }
-    return text;
+    return { text, retryable: false };
   }
 
   /**

@@ -3,6 +3,8 @@
 // v0.8 Step 3 - 新規作成
 // v0.9 2026-03-08 - Markdownレンダリング対応（marked.js使用）
 // v1.0 Step 3.5 - ヘッダー📝📋常時表示＋📂アーカイブ委譲
+// v1.1 2026-03-09 - restoreDisplay()追加（セッション復元用）
+//                  - _handleContinue()をtopicInput使用に変更（prompt()廃止）
 'use strict';
 
 /**
@@ -96,19 +98,12 @@ const MeetingUI = (() => {
     const topic = topicInput.value.trim();
     if (!topic) return;
 
-    // 入力欄をクリア＆無効化
     topicInput.value = '';
     topicInput.disabled = true;
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
     if (btnStart) btnStart.disabled = true;
-
-    // チャットエリアをクリア
     _clearChat();
-
-    // アキヤの議題を表示
     addUserMessage(topic);
-
-    // 議題分析（動的ルーティング）
     addSystemMessage('議題を分析中... 🔍');
 
     try {
@@ -129,13 +124,22 @@ const MeetingUI = (() => {
     }
   }
 
-  /** 追加ラウンド処理 */
+  /** 追加ラウンド処理 v1.1改善 - topicInput欄を使う（prompt()廃止） */
   async function _handleContinue() {
     if (!currentRouting) return;
 
-    // 簡易入力（将来: 追加指示入力欄）
-    const followUp = prompt('追加の指示や質問を入力してください:');
-    if (!followUp) return;
+    // topicInput欄から追加指示を取得
+    const followUp = topicInput ? topicInput.value.trim() : '';
+    if (!followUp) {
+      if (topicInput) {
+        topicInput.placeholder = '↑ 追加の質問や指示を入力してからボタンを押してね';
+        topicInput.focus();
+      }
+      return;
+    }
+
+    // 入力をクリア
+    if (topicInput) topicInput.value = '';
 
     addUserMessage(followUp);
     _hideActionButtons();
@@ -171,12 +175,8 @@ const MeetingUI = (() => {
   function _handleDownloadMinutes() {
     if (typeof MeetingRelay === 'undefined') return;
     const history = MeetingRelay.getHistory();
-    if (!history || history.length === 0) {
-      addSystemMessage('まだ発言がないよ。会議を始めてからダウンロードしてね');
-      return;
-    }
+    if (!history || history.length === 0) { addSystemMessage('まだ発言がないよ。会議を始めてからダウンロードしてね'); return; }
 
-    // 議事録Markdown生成
     const now = new Date();
     const dateStr = now.toISOString().slice(0, 10);
     const timeStr = now.toTimeString().slice(0, 5);
@@ -216,15 +216,9 @@ const MeetingUI = (() => {
 
   /** v0.9追加 - 会議履歴から指示書を生成 */
   async function _handleGenerateDoc() {
-    if (typeof MeetingRelay === 'undefined' || typeof DocGenerator === 'undefined') {
-      addSystemMessage('指示書生成モジュールが読み込まれていません');
-      return;
-    }
+    if (typeof MeetingRelay === 'undefined' || typeof DocGenerator === 'undefined') { addSystemMessage('指示書生成モジュールが未読み込み'); return; }
     const history = MeetingRelay.getHistory();
-    if (!history || history.length === 0) {
-      addSystemMessage('まだ発言がないよ。会議を始めてから📋を押してね');
-      return;
-    }
+    if (!history || history.length === 0) { addSystemMessage('まだ発言がないよ。会議を始めてから📋を押してね'); return; }
 
     // 会議履歴をDocGeneratorが受け取れる形式に変換
     const chatMessages = history.map(msg => {
@@ -443,15 +437,6 @@ const MeetingUI = (() => {
   }
 
   /**
-   * v1.0追加 - HTMLエスケープ（XSS防止）
-   */
-  function _escapeHtml(text) {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
-  }
-
-  /**
    * スクロールを最下部に
    */
   function _scrollToBottom() {
@@ -460,6 +445,30 @@ const MeetingUI = (() => {
         chatArea.scrollTop = chatArea.scrollHeight;
       });
     }
+  }
+
+  /**
+   * v1.1追加 - IndexedDBから復元した会議内容を画面に再描画
+   * @param {Object} meeting - 会議データ
+   * @param {Object} routing - ルーティング情報
+   */
+  function restoreDisplay(meeting, routing) {
+    if (!meeting) return;
+
+    _clearChat();
+    currentRouting = routing;
+    addSystemMessage('📂 前回の会議を復元しました');
+    if (routing) showRoutingResult(routing);
+
+    let lastRound = 0;
+    for (const msg of meeting.history) {
+      if (msg.round !== lastRound) { addSystemMessage(`--- ラウンド ${msg.round} ---`); lastRound = msg.round; }
+      if (msg.sister === 'user') { addUserMessage(msg.content); }
+      else { addSisterMessage(msg.sister, msg.content, msg.isLead); }
+    }
+
+    _showActionButtons();
+    if (topicInput) { topicInput.disabled = false; topicInput.placeholder = '追加の質問や指示を入力...'; }
   }
 
   return {
@@ -473,5 +482,6 @@ const MeetingUI = (() => {
     addSystemMessage,
     showTyping,
     hideTyping,
+    restoreDisplay,
   };
 })();

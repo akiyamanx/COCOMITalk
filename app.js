@@ -1,6 +1,7 @@
 // COCOMITalk - アプリ初期化・画面管理
 // このファイルはアプリ全体の初期化、スプラッシュ画面、タブ切替、設定を管理する
 // v1.0 - 設定画面リニューアル＋ファイル入出力ボタン / v1.1 - MeetingHistory初期化追加
+// v1.2 2026-03-09 - 進行中の会議の自動復元機能追加（_restoreActiveMeeting）
 'use strict';
 
 /** アプリケーションモジュール */
@@ -55,6 +56,8 @@ const App = (() => {
     if (typeof MeetingUI !== 'undefined') MeetingUI.init();
     // v1.0追加 - 会議アーカイブUI初期化
     if (typeof MeetingArchiveUI !== 'undefined') MeetingArchiveUI.init();
+    // v1.2追加 - 進行中の会議があれば復元
+    await _restoreActiveMeeting();
     _setupFileButtons();
     _setupSettings();
     _loadSettings();
@@ -386,35 +389,54 @@ const App = (() => {
   function _setupResetModels() {
     const btn = document.getElementById('btn-reset-models');
     if (!btn) return;
-
     btn.addEventListener('click', () => {
       if (!confirm('モデル設定をデフォルトに戻しますか？')) return;
-
-      // カスタム設定をクリア
-      try {
-        localStorage.removeItem('cocomitalk-custom-models');
-      } catch (e) { /* ignore */ }
-
-      // UIを再生成（デフォルト値で表示される）
+      try { localStorage.removeItem('cocomitalk-custom-models'); } catch (e) { /* ignore */ }
       _buildModelSettingsUI();
-
-      // ModeSwitcherの全モードをデフォルトに戻す
       if (typeof ModeSwitcher !== 'undefined') {
         const defaults = ModeSwitcher.DEFAULT_MODE_MODELS;
-        ModeSwitcher.getModes().forEach(mode => {
-          ModeSwitcher.setCustomModels(mode, defaults[mode]);
-        });
+        ModeSwitcher.getModes().forEach(mode => { ModeSwitcher.setCustomModels(mode, defaults[mode]); });
       }
-
       console.log('[App] モデル設定をデフォルトにリセット');
     });
   }
 
-  // v1.0新規 - 📎ファイル添付＋💾ダウンロードボタンの設定
+  /**
+   * v1.2追加 - 進行中の会議をIndexedDBから復元
+   */
+  async function _restoreActiveMeeting() {
+    if (typeof MeetingHistory === 'undefined' || typeof MeetingRelay === 'undefined' || typeof MeetingUI === 'undefined') return;
+    try {
+      const meetings = await MeetingHistory.getAllMeetings();
+      // 最新の「in_progress」会議を探す
+      const active = meetings.find(m => m.status === 'in_progress');
+      if (!active) {
+        // in_progressがなければ、直近1時間以内のcompleted会議を復元候補にする
+        const oneHourAgo = Date.now() - (60 * 60 * 1000);
+        const recent = meetings.find(m => m.status === 'completed' && new Date(m.date).getTime() > oneHourAgo);
+        if (!recent) return;
+        _doRestore(recent);
+        return;
+      }
+      _doRestore(active);
+    } catch (e) {
+      console.warn('[App] 会議復元エラー（無視して続行）:', e);
+    }
+  }
+
+  /** v1.2追加 - 会議復元の実行 */
+  function _doRestore(meeting) {
+    const routing = MeetingRelay.restoreFromDB(meeting);
+    if (!routing) return;
+    if (typeof ModeSwitcher !== 'undefined') ModeSwitcher.setMode('meeting');
+    MeetingUI.show();
+    MeetingUI.restoreDisplay(meeting, routing);
+    console.log(`[App] 会議復元完了: ${meeting.id}`);
+  }
+
+  // v1.0新規 - ファイル関連ボタンの設定
   function _setupFileButtons() {
     if (typeof FileHandler === 'undefined') return;
-
-    // 📎ボタン → hidden file inputをクリック
     const btnAttach = document.getElementById('btn-attach');
     const fileInput = document.getElementById('file-input');
     if (btnAttach && fileInput) {
@@ -422,56 +444,35 @@ const App = (() => {
       fileInput.addEventListener('change', async (e) => {
         const file = e.target.files[0];
         if (!file) return;
-        try {
-          const att = await FileHandler.readFile(file);
-          FileHandler.setAttachment(att);
-        } catch (err) {
-          alert(err.message);
-        }
-        fileInput.value = ''; // 同じファイルを再選択できるようにリセット
+        try { const att = await FileHandler.readFile(file); FileHandler.setAttachment(att); }
+        catch (err) { alert(err.message); }
+        fileInput.value = '';
       });
     }
-
-    // 💾ボタン → 会話ログをダウンロード
     const btnDownload = document.getElementById('btn-download');
     if (btnDownload) {
       btnDownload.addEventListener('click', () => {
         if (typeof ChatCore === 'undefined') return;
         const sister = ChatCore.getCurrentSister();
         const history = ChatCore.getHistory(sister);
-        if (!history || history.length === 0) {
-          alert('まだ会話がないよ！');
-          return;
-        }
-        const sisterName = ChatCore.SISTERS[sister]?.name || sister;
-        FileHandler.downloadChat(history, `COCOMITalk_${sisterName}`);
+        if (!history || history.length === 0) { alert('まだ会話がないよ！'); return; }
+        FileHandler.downloadChat(history, `COCOMITalk_${ChatCore.SISTERS[sister]?.name || sister}`);
       });
     }
-
-    // 📋ボタン → 指示書自動生成
     const btnGenDoc = document.getElementById('btn-generate-doc');
     if (btnGenDoc) {
       btnGenDoc.addEventListener('click', async () => {
         if (typeof DocGenerator === 'undefined' || typeof ChatCore === 'undefined') return;
         if (DocGenerator.isGenerating()) return;
-        // 現在の姉妹の会話履歴を取得（グループならkoko基準）
         const sister = ChatCore.getCurrentSister();
         const history = ChatCore.getHistory(sister);
-        if (!history || history.length === 0) {
-          alert('まだ会話がないよ！先に三姉妹と議論してから📋を押してね');
-          return;
-        }
+        if (!history || history.length === 0) { alert('まだ会話がないよ！先に三姉妹と議論してから📋を押してね'); return; }
         btnGenDoc.disabled = true;
         try {
           const result = await DocGenerator.generate(history);
-          if (result.success && result.files.length > 0) {
-            await FileHandler.downloadAsZip(result.files);
-          }
-        } catch (err) {
-          alert(`指示書生成エラー: ${err.message}`);
-        } finally {
-          btnGenDoc.disabled = false;
-        }
+          if (result.success && result.files.length > 0) await FileHandler.downloadAsZip(result.files);
+        } catch (err) { alert(`指示書生成エラー: ${err.message}`);
+        } finally { btnGenDoc.disabled = false; }
       });
     }
   }

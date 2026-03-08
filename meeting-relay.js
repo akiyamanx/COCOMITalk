@@ -2,6 +2,8 @@
 // このファイルは三姉妹が順番にAPIを呼び出すリレー会話のエンジン
 // v0.8 Step 3 - 新規作成
 // v1.0 Step 3.5 - MeetingHistory連携（リアルタイムIndexedDB保存）
+// v1.1 2026-03-09 - restoreFromDB()追加（セッション復元用）
+//                  - _buildMeetingContext()全ラウンド対応（ラウンド2以降のコンテキスト引継ぎ）
 
 'use strict';
 
@@ -206,19 +208,32 @@ const MeetingRelay = (() => {
 
   /**
    * 会議コンテキストを構築（前の姉妹の発言を履歴として渡す）
+   * v1.1修正 - 全ラウンドの履歴を含める（ラウンド2以降で前の内容が渡るように）
    */
   function _buildMeetingContext(topic, roundNum) {
     const context = [];
 
-    // 現在ラウンドの前の発言を追加
-    const currentRoundMessages = meetingHistory.filter(m => m.round === roundNum);
-    for (const msg of currentRoundMessages) {
+    for (const msg of meetingHistory) {
       const sister = SISTERS[msg.sister];
+      if (!sister) continue; // userエントリはスキップ
       const leadMark = msg.isLead ? '【主担当】' : '';
-      context.push({
-        role: 'assistant',
-        content: `${sister.emoji}${sister.name}${leadMark}:\n${msg.content}`,
-      });
+
+      if (msg.round < roundNum) {
+        // 過去ラウンド: 先頭200文字に切り詰め（トークン節約）
+        const truncated = msg.content.length > 200
+          ? msg.content.slice(0, 200) + '…（省略）'
+          : msg.content;
+        context.push({
+          role: 'assistant',
+          content: `[ラウンド${msg.round}] ${sister.emoji}${sister.name}${leadMark}:\n${truncated}`,
+        });
+      } else if (msg.round === roundNum) {
+        // 現在ラウンド: 全文
+        context.push({
+          role: 'assistant',
+          content: `${sister.emoji}${sister.name}${leadMark}:\n${msg.content}`,
+        });
+      }
     }
 
     return context;
@@ -322,6 +337,36 @@ const MeetingRelay = (() => {
     });
   }
 
+  /**
+   * v1.1追加 - IndexedDBから会議状態を復元（ページ再読み込み後の再開用）
+   * @param {Object} meeting - MeetingHistory.getMeeting()の結果
+   * @returns {Object|null} 復元されたルーティング情報
+   */
+  function restoreFromDB(meeting) {
+    if (!meeting || !meeting.routing) {
+      console.warn('[MeetingRelay] 復元データが不正');
+      return null;
+    }
+
+    // 状態を復元（userエントリを除外してmeetingHistoryに入れる）
+    meetingHistory = (meeting.history || []).filter(m => m.sister !== 'user');
+    currentMeetingId = meeting.id;
+    currentRound = _detectMaxRound(meeting.history);
+    isRunning = false;
+    abortRequested = false;
+
+    console.log(`[MeetingRelay] 会議復元: ${meeting.id}, ラウンド${currentRound}, 発言${meetingHistory.length}件`);
+    return meeting.routing;
+  }
+
+  /**
+   * v1.1追加 - 履歴から最大ラウンド番号を検出
+   */
+  function _detectMaxRound(history) {
+    if (!history || history.length === 0) return 0;
+    return Math.max(...history.map(m => m.round || 1));
+  }
+
   return {
     startMeeting,
     continueRound,
@@ -330,6 +375,7 @@ const MeetingRelay = (() => {
     getIsRunning,
     getCurrentRound,
     getCurrentMeetingId,
+    restoreFromDB,
     MAX_ROUNDS,
   };
 })();
