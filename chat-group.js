@@ -115,7 +115,8 @@ const ChatGroup = (() => {
     return complement.map(r => {
       const sister = SISTERS[r.sisterKey];
       return {
-        role: 'assistant',
+        // v0.9.5 - 他の姉妹の発言はrole:'user'で渡す（自分の発言と混同しない）
+        role: 'user',
         content: `【前の会話より】${sister.icon}${sister.name}: ${r.content}`,
       };
     });
@@ -161,11 +162,11 @@ const ChatGroup = (() => {
       history.push(entry);
     }
 
-    // 今ターンの前の姉妹の発言
+    // 今ターンの前の姉妹の発言（role:'user'で渡して自分の発言と混同させない）
     for (const prev of relayContext) {
       const prevSister = SISTERS[prev.sisterKey];
       history.push({
-        role: 'assistant',
+        role: 'user',
         content: `${prevSister.icon}${prevSister.name}: ${prev.content}`,
       });
     }
