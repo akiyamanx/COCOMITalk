@@ -1,6 +1,7 @@
 // COCOMITalk - 会議リレー制御
 // このファイルは三姉妹が順番にAPIを呼び出すリレー会話のエンジン
 // v0.8 Step 3 - 新規作成
+// v0.9 2026-03-08 - 会議モードmaxTokens:4096を明示渡し（発言途切れバグ修正）
 
 'use strict';
 
@@ -173,11 +174,12 @@ const MeetingRelay = (() => {
       : undefined;
 
     // API呼び出し
+    // v0.9修正 - maxTokens:4096を明示的に渡す（会議は長文発言が必要）
     const reply = await apiModule.sendMessage(
       `【会議議題】${topic}`,
       systemPrompt + leadInstruction,
       history,
-      { model: modelKey }
+      { model: modelKey, maxTokens: 4096 }
     );
 
     return reply;
