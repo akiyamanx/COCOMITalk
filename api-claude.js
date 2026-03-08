@@ -2,6 +2,7 @@
 // このファイルはクロちゃん（Claude）APIとの通信をWorker経由で管理する
 // v0.5 Step 2 - 新規作成
 // v0.8 Step 3 - モデルグレード切替対応（Opus追加）
+// v1.1 2026-03-08 - Opus 4.6のtemperature非対応対策（Opusはtemperature省略）
 
 'use strict';
 
@@ -47,9 +48,12 @@ const ApiClaude = (() => {
       model: modelName,
       // v1.0変更 - モードに応じて出力上限を調整
       max_tokens: options.maxTokens || 1024,
-      temperature: 0.3,
       messages: messages,
     };
+    // v1.1修正 - Opus 4.6はtemperatureが使えないため省略、他モデルは0.3
+    if (!modelName.includes('opus')) {
+      body.temperature = 0.3;
+    }
 
     // systemプロンプトは別パラメータで渡す（Anthropic独自形式）
     if (systemPrompt) {
