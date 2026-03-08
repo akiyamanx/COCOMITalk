@@ -1,56 +1,51 @@
-// COCOMITalk - Claude API接続（Worker中継版）
 // このファイルはクロちゃん（Claude）APIとの通信をWorker経由で管理する
-// v0.5 Step 2 - 新規作成
-// v0.8 Step 3 - モデルグレード切替対応（Opus追加）
-// v1.1 2026-03-08 - Opus 4.6のtemperature非対応対策（Opusはtemperature省略）
+// v1.1 2026-03-08 - Opus 4.6のtemperature非対応修正（Opusはtemperature省略）
+// v1.2 2026-03-08 - モデル名修正（claude-opus-4-6-20260205 → claude-opus-4-6）
 
 'use strict';
 
 /**
  * Claude API接続モジュール（Worker中継版）
- * クロちゃん（Claude）との会話を担当
+ * クロちゃん（Claude）との会話を管理
  */
 const ApiClaude = (() => {
 
   // --- モデル定義 ---
-  // v0.8 Step 3 - モデルグレード切替用にOpus追加
   const MODELS = {
-    'haiku': 'claude-haiku-4-5-20251001',
-    'sonnet': 'claude-sonnet-4-20250514',
-    'opus': 'claude-opus-4-6-20260205',
+    'haiku' : 'claude-haiku-4-5-20251001',
+    'opus'  : 'claude-opus-4-6',            // v1.2修正 - 正しいモデル名
+    'sonnet': 'claude-sonnet-4-6',
   };
 
-  // デフォルトモデル（コスト安全: まず安いモデルでテスト）
+  // デフォルトモデル（コスト安全・まず安いモデルでテスト）
   const DEFAULT_MODEL = 'haiku';
 
   /**
    * Claude APIにメッセージを送信
    * @param {string} userMessage - ユーザーのメッセージ
    * @param {string} systemPrompt - システムプロンプト
-   * @param {Array} history - 会話履歴（{role, content}の配列）
+   * @param {Array} history - 会話履歴（role, contentの配列）
    * @param {Object} options - オプション
-   * @param {string} options.model - モデルキー（haiku/sonnet）
-   * @returns {Promise<string>} AIの返答テキスト
+   * @param {string} options.model - モデルキー（haiku/sonnet/opus）
+   * @returns {Promise<string>} AI の返答テキスト
    */
   async function sendMessage(userMessage, systemPrompt, history = [], options = {}) {
     if (!ApiCommon.hasAuthToken()) {
       throw new Error('COCOMI認証トークンが設定されていません。設定画面からトークンを入力してください。');
     }
 
-    const modelKey = options.model || DEFAULT_MODEL;
+    const modelKey  = options.model || DEFAULT_MODEL;
     const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
+    const messages  = _buildMessages(userMessage, history, options.attachment);
 
-    // Anthropic形式のメッセージ配列を構築（v1.0変更 - 添付ファイル対応）
-    const messages = _buildMessages(userMessage, history, options.attachment);
-
-    // リクエストボディ（Anthropic形式: systemは別パラメータ）
+    // リクエストボディ（Anthropic形式、systemは別パラメータ）
     const body = {
-      model: modelName,
-      // v1.0変更 - モードに応じて出力上限を調整
+      model     : modelName,
       max_tokens: options.maxTokens || 1024,
-      messages: messages,
+      messages  : messages,
     };
-    // v1.1修正 - Opus 4.6はtemperatureが使えないため省略、他モデルは0.3
+
+    // v1.2修正 - Opus 4.6はtemperatureが使えないため省略、他モデルは0.3
     if (!modelName.includes('opus')) {
       body.temperature = 0.3;
     }
@@ -69,14 +64,13 @@ const ApiClaude = (() => {
 
       // トークン使用量を記録
       const usage = data?.usage;
-      if (usage && typeof TokenMonitor !== 'undefined') {
-        const inputTokens = usage.input_tokens || 0;
-        const outputTokens = usage.output_tokens || 0;
+      if (typeof TokenMonitor !== 'undefined') {
+        const inputTokens  = usage?.input_tokens  || 0;
+        const outputTokens = usage?.output_tokens || 0;
         TokenMonitor.record(modelName, inputTokens, outputTokens);
       }
 
       return text;
-
     } catch (error) {
       console.error('[ApiClaude] 通信エラー:', error);
       throw error;
@@ -84,7 +78,7 @@ const ApiClaude = (() => {
   }
 
   /**
-   * Anthropic形式のメッセージ配列を構築（v1.0変更 - 添付ファイル対応）
+   * Anthropic形式のメッセージ配列を構築（v1.0変更・添付ファイル対応）
    */
   function _buildMessages(userMessage, history, attachment) {
     const messages = [];
@@ -92,7 +86,7 @@ const ApiClaude = (() => {
     const recentHistory = history.slice(-20);
     for (const msg of recentHistory) {
       messages.push({
-        role: msg.role === 'user' ? 'user' : 'assistant',
+        role   : msg.role === 'user' ? 'user' : 'assistant',
         content: msg.content,
       });
     }
@@ -102,7 +96,7 @@ const ApiClaude = (() => {
       // Anthropic Vision形式（content配列）
       messages.push({ role: 'user', content: [
         { type: 'image', source: { type: 'base64', media_type: attachment.mimeType, data: attachment.content } },
-        { type: 'text', text: userMessage },
+        { type: 'text',  text: userMessage },
       ]});
     } else if (attachment && attachment.type === 'text') {
       messages.push({ role: 'user', content: `【添付ファイル: ${attachment.name}】\n${attachment.content}\n\n${userMessage}` });
@@ -120,23 +114,20 @@ const ApiClaude = (() => {
     // Anthropicのエラーチェック
     if (data?.type === 'error') {
       const errMsg = data?.error?.message || '不明なエラー';
-      return `ごめん、エラーが起きちゃった…💦（${errMsg}）`;
+      return `ごめん、エラーが起きちゃった！🌙 ${errMsg}`;
     }
 
     const content = data?.content;
     if (!content || content.length === 0) {
-      return 'あれ？クロちゃんから返事が来なかった…もう一回話しかけてみて！';
+      return 'あれ？クロちゃんの返事が来なかった。もう一回試しかてみて！';
     }
-
-    // content配列からtextブロックを結合
     const texts = content
       .filter(block => block.type === 'text')
       .map(block => block.text);
 
     if (texts.length === 0) {
-      return 'うーん、クロちゃんの言葉がうまく届かなかった…もう一回お願い！';
+      return 'ラーん、クロちゃんの返事がうまく届かなかった。もう一回お願い！';
     }
-
     return texts.join('');
   }
 
