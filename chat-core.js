@@ -5,6 +5,7 @@
 // v0.5 Step 2 - 三姉妹API分岐対応（Worker経由）
 // v0.8 Step 3 - モード連動モデルキー対応
 // v0.9 Step 3.5 - グループモード（👥三姉妹リレー応答）対応
+// v0.9.6 2026-03-08 - AI返答にMarkdownレンダリング追加
 
 'use strict';
 
@@ -309,7 +310,16 @@ const ChatCore = (() => {
 
     const textNode = document.createElement('div');
     textNode.className = 'msg-text';
-    textNode.textContent = text;
+    // v0.9.6修正 - AI返答はMarkdownレンダリング、ユーザーメッセージはテキストのまま
+    if (role === 'ai' && typeof marked !== 'undefined' && marked.parse) {
+      try {
+        textNode.innerHTML = marked.parse(text, { breaks: true, gfm: true });
+      } catch (e) {
+        textNode.textContent = text;
+      }
+    } else {
+      textNode.textContent = text;
+    }
     bubble.appendChild(textNode);
 
     // v0.9.4 - エラー表示のみ（履歴に入れない）の場合は薄く表示

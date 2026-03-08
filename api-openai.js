@@ -2,6 +2,9 @@
 // v1.0 2026-03-08 - 初期作成
 // v1.1 2026-03-08 - GPT-5系はmax_completion_tokens対応（バグ修正）
 // v1.2 2026-03-08 - モデル名をgpt-5.4に統一、max_completion_tokens分岐修正
+// v1.3 2026-03-08 - GPT-5系max_completion_tokens増加（1024→4096、リーズニングトークン対策）
+//                  - GPT-5系はdeveloperロール使用（system→developer）
+//                  - エラー詳細ログ追加
 
 'use strict';
 
@@ -21,6 +24,9 @@ const ApiOpenAI = (() => {
   // デフォルトモデル
   const DEFAULT_MODEL = 'mini';
 
+  // v1.3追加 - GPT-5系はdeveloperロール使用（sendMessageで動的に設定）
+  let _currentSystemRole = 'system';
+
   /**
    * OpenAI APIにメッセージを送信
    * @param {string} userMessage - ユーザーのメッセージ
@@ -36,6 +42,10 @@ const ApiOpenAI = (() => {
 
     const modelKey  = options.model || DEFAULT_MODEL;
     const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
+
+    // v1.3追加 - GPT-5系はdeveloperロール、それ以外はsystemロール
+    _currentSystemRole = modelName.startsWith('gpt-5') ? 'developer' : 'system';
+
     const messages  = _buildMessages(userMessage, systemPrompt, history, options.attachment);
 
     // リクエストボディ
@@ -44,9 +54,10 @@ const ApiOpenAI = (() => {
       messages: messages,
     };
 
-    // v1.2修正 - gpt-5系はmax_completion_tokens、それ以外はmax_tokens
+    // v1.3修正 - gpt-5系はmax_completion_tokens（リーズニングトークン含む→4096必要）
+    //           それ以外はmax_tokens（1024で十分）
     if (modelName.startsWith('gpt-5')) {
-      body.max_completion_tokens = options.maxTokens || 1024;
+      body.max_completion_tokens = options.maxTokens || 4096;
     } else {
       body.max_tokens = options.maxTokens || 1024;
     }
@@ -76,9 +87,10 @@ const ApiOpenAI = (() => {
   function _buildMessages(userMessage, systemPrompt, history, attachment) {
     const messages = [];
 
-    // systemプロンプト
+    // v1.3修正 - GPT-5系はdeveloperロール推奨（systemも後方互換で動くが公式推奨に合わせる）
+    // _buildMessagesはモデル名を知らないので、呼び出し側で判定して渡す
     if (systemPrompt) {
-      messages.push({ role: 'system', content: systemPrompt });
+      messages.push({ role: _currentSystemRole, content: systemPrompt });
     }
 
     // 会話履歴（最新20件）
@@ -111,11 +123,15 @@ const ApiOpenAI = (() => {
   function _extractText(data) {
     if (data?.error) {
       const errMsg = data?.error?.message || '不明なエラー';
+      console.error('[ApiOpenAI] APIエラーレスポンス:', JSON.stringify(data.error));
       return `ごめん、お姉ちゃん側でエラーが起きたよ！🌙 ${errMsg}`;
     }
 
     const text = data?.choices?.[0]?.message?.content;
     if (!text) {
+      // v1.3追加 - デバッグ用にレスポンス構造をログ出力
+      console.warn('[ApiOpenAI] contentが空。finish_reason:', data?.choices?.[0]?.finish_reason);
+      console.warn('[ApiOpenAI] usage:', JSON.stringify(data?.usage));
       return 'あれ？お姉ちゃんの返事が来なかった。もう一回試してみて！';
     }
     return text;

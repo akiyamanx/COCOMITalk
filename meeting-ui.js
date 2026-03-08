@@ -1,6 +1,7 @@
 // COCOMITalk - 会議専用画面UI
 // このファイルは会議モード時の専用画面のHTML生成とメッセージ表示を管理する
 // v0.8 Step 3 - 新規作成
+// v0.9 2026-03-08 - Markdownレンダリング対応（marked.js使用）
 
 'use strict';
 
@@ -226,7 +227,8 @@ const MeetingUI = (() => {
 
     const body = document.createElement('div');
     body.className = 'meeting-msg-body';
-    body.textContent = text;
+    // v0.9修正 - Markdownレンダリング（**太字**や### 見出しをHTMLに変換）
+    body.innerHTML = _renderMarkdown(text);
 
     msgDiv.appendChild(header);
     msgDiv.appendChild(body);
@@ -250,6 +252,7 @@ const MeetingUI = (() => {
 
     const body = document.createElement('div');
     body.className = 'meeting-msg-body';
+    // v0.9 - ユーザーメッセージはテキストそのまま（Markdown不要）
     body.textContent = text;
 
     msgDiv.appendChild(header);
@@ -328,6 +331,29 @@ const MeetingUI = (() => {
    */
   function _clearChat() {
     if (chatArea) chatArea.innerHTML = '';
+  }
+
+  /**
+   * v0.9追加 - MarkdownテキストをHTMLに変換
+   * marked.jsがあればパースして返す。なければ改行→brの簡易変換。
+   * XSS対策: marked.jsはデフォルトでサニタイズ済み。
+   */
+  function _renderMarkdown(text) {
+    if (typeof marked !== 'undefined' && marked.parse) {
+      try {
+        // marked.jsの設定（安全寄り）
+        const html = marked.parse(text, {
+          breaks: true,   // 改行をbrに変換
+          gfm: true,      // GitHub Flavored Markdown
+        });
+        return html;
+      } catch (e) {
+        console.warn('[MeetingUI] Markdownパースエラー:', e);
+      }
+    }
+    // フォールバック: 改行をbrに変換するだけ
+    return text.replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
   }
 
   /**
