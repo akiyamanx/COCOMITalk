@@ -28,7 +28,19 @@ const ChatHistory = (() => {
     }
 
     return new Promise((resolve, reject) => {
+      // v0.5 安全策: 5秒タイムアウト
+      const timeout = setTimeout(() => {
+        console.warn('[ChatHistory] DB接続タイムアウト（5秒）');
+        reject(new Error('DB接続タイムアウト'));
+      }, 5000);
+
       const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onblocked = () => {
+        console.warn('[ChatHistory] DB blocked');
+        clearTimeout(timeout);
+        reject(new Error('DB blocked'));
+      };
 
       // DB作成・アップグレード時
       request.onupgradeneeded = (event) => {
@@ -49,12 +61,14 @@ const ChatHistory = (() => {
       };
 
       request.onsuccess = (event) => {
+        clearTimeout(timeout);
         db = event.target.result;
         console.log('[ChatHistory] DB接続完了');
         resolve(db);
       };
 
       request.onerror = (event) => {
+        clearTimeout(timeout);
         console.error('[ChatHistory] DB接続エラー:', event.target.error);
         reject(event.target.error);
       };

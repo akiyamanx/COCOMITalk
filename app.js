@@ -33,23 +33,18 @@ const App = (() => {
 
     // TokenMonitor初期化
     if (typeof TokenMonitor !== 'undefined') {
-      try {
-        await TokenMonitor.init();
-        await TokenMonitor.loadAndDisplay();
-      } catch (e) {
-        console.warn('[App] TokenMonitor初期化エラー:', e);
-      }
+      try { await TokenMonitor.init(); await TokenMonitor.loadAndDisplay(); }
+      catch (e) { console.warn('[App] TokenMonitor初期化エラー:', e); }
     }
 
-    // v1.0追加 - MeetingHistory初期化（IndexedDB会議履歴）
+    // MeetingHistory初期化（TokenMonitorのDB接続を共有してblocked防止）
     if (typeof MeetingHistory !== 'undefined') {
       try {
-        await MeetingHistory.init();
-        // 古い会議の自動削除
+        if (typeof TokenMonitor !== 'undefined' && TokenMonitor.getDb()) {
+          MeetingHistory.setDb(TokenMonitor.getDb());
+        } else { await MeetingHistory.init(); }
         await MeetingHistory.trimOldMeetings();
-      } catch (e) {
-        console.warn('[App] MeetingHistory初期化エラー:', e);
-      }
+      } catch (e) { console.warn('[App] MeetingHistory初期化エラー:', e); }
     }
 
     ChatCore.init();

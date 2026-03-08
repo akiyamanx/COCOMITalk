@@ -28,40 +28,64 @@ const MeetingHistory = (() => {
    * 既存ストア（conversations, token_usage）を壊さずmeetingsを追加
    * @returns {Promise<IDBDatabase>}
    */
+  /**
+   * 外部からDB接続を受け取る（TokenMonitorと共有）
+   * @param {IDBDatabase} sharedDb
+   */
+  function setDb(sharedDb) {
+    if (sharedDb) {
+      db = sharedDb;
+      console.log('[MeetingHistory] 共有DB接続受け取り完了');
+    }
+  }
+
+  /**
+   * IndexedDB初期化
+   * 既にsetDb()でDB受け取り済みなら即resolve。
+   * そうでなければ自前で開く（フォールバック）。
+   */
   function init() {
     if (db) return Promise.resolve(db);
 
     return new Promise((resolve, reject) => {
+      // v1.0 安全策: 5秒タイムアウト（blockedでハングしないように）
+      const timeout = setTimeout(() => {
+        console.warn('[MeetingHistory] DB接続タイムアウト（5秒）');
+        reject(new Error('DB接続タイムアウト'));
+      }, 5000);
+
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
-      // DBスキーマアップグレード
+      request.onblocked = () => {
+        console.warn('[MeetingHistory] DB blocked - 他のタブを閉じてください');
+        clearTimeout(timeout);
+        reject(new Error('DB blocked'));
+      };
+
       request.onupgradeneeded = (event) => {
         const database = event.target.result;
-
-        // v0.3 既存ストア（壊さない）
         if (!database.objectStoreNames.contains('conversations')) {
           database.createObjectStore('conversations', { keyPath: 'sisterKey' });
         }
-        // v0.4 既存ストア（壊さない）
         if (!database.objectStoreNames.contains('token_usage')) {
           database.createObjectStore('token_usage', { keyPath: 'monthKey' });
         }
-        // v1.0 新規: 会議履歴ストア
         if (!database.objectStoreNames.contains(STORE_NAME)) {
           const store = database.createObjectStore(STORE_NAME, { keyPath: 'id' });
-          // 日付でソートできるようにインデックス作成
           store.createIndex('by_date', 'date', { unique: false });
           console.log('[MeetingHistory] meetingsストア作成完了');
         }
       };
 
       request.onsuccess = (event) => {
+        clearTimeout(timeout);
         db = event.target.result;
         console.log('[MeetingHistory] DB接続完了（v3）');
         resolve(db);
       };
 
       request.onerror = (event) => {
+        clearTimeout(timeout);
         console.error('[MeetingHistory] DB接続エラー:', event.target.error);
         reject(event.target.error);
       };
@@ -281,6 +305,7 @@ const MeetingHistory = (() => {
 
   return {
     init,
+    setDb,
     createMeeting,
     addEntry,
     addUserEntry,

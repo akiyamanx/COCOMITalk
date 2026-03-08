@@ -73,19 +73,28 @@ const TokenMonitor = (() => {
    */
   function init() {
     return new Promise((resolve, reject) => {
+      // v1.0 安全策: 5秒タイムアウト
+      const timeout = setTimeout(() => {
+        console.warn('[TokenMonitor] DB接続タイムアウト（5秒）');
+        reject(new Error('DB接続タイムアウト'));
+      }, 5000);
+
       const request = indexedDB.open(DB_NAME, DB_VERSION);
+
+      request.onblocked = () => {
+        console.warn('[TokenMonitor] DB blocked');
+        clearTimeout(timeout);
+        reject(new Error('DB blocked'));
+      };
 
       request.onupgradeneeded = (event) => {
         const database = event.target.result;
-        // v0.3の会話履歴ストア（既存）
         if (!database.objectStoreNames.contains('conversations')) {
           database.createObjectStore('conversations', { keyPath: 'sisterKey' });
         }
-        // v0.4追加 - トークン使用量ストア
         if (!database.objectStoreNames.contains(STORE_NAME)) {
           database.createObjectStore(STORE_NAME, { keyPath: 'monthKey' });
         }
-        // v1.0追加 - 会議履歴ストア（MeetingHistoryと統一）
         if (!database.objectStoreNames.contains('meetings')) {
           const mStore = database.createObjectStore('meetings', { keyPath: 'id' });
           mStore.createIndex('by_date', 'date', { unique: false });
@@ -94,12 +103,14 @@ const TokenMonitor = (() => {
       };
 
       request.onsuccess = (event) => {
+        clearTimeout(timeout);
         db = event.target.result;
         console.log('[TokenMonitor] DB接続完了');
         resolve(db);
       };
 
       request.onerror = (event) => {
+        clearTimeout(timeout);
         console.error('[TokenMonitor] DB接続エラー:', event.target.error);
         reject(event.target.error);
       };
@@ -418,8 +429,12 @@ const TokenMonitor = (() => {
   }
 
   // --- 公開API ---
+  /** v1.0追加 - DB接続を外部に共有 */
+  function getDb() { return db; }
+
   return {
     init,
+    getDb,
     record,
     loadAndDisplay,
     getMonthlySummary,
