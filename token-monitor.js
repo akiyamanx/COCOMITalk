@@ -15,7 +15,7 @@ const TokenMonitor = (() => {
 
   // --- IndexedDB設定 ---
   const DB_NAME = 'cocomitalk-db';
-  const DB_VERSION = 2; // v0.3のDB_VERSION=1から上げる
+  const DB_VERSION = 3; // v1.0 Step 3.5 meetingsストア追加
   const STORE_NAME = 'token_usage';
 
   // --- モデル別料金（USD / 1Mトークン）2026年3月時点 ---
@@ -85,7 +85,12 @@ const TokenMonitor = (() => {
         if (!database.objectStoreNames.contains(STORE_NAME)) {
           database.createObjectStore(STORE_NAME, { keyPath: 'monthKey' });
         }
-        console.log('[TokenMonitor] DBスキーマ更新完了');
+        // v1.0追加 - 会議履歴ストア（MeetingHistoryと統一）
+        if (!database.objectStoreNames.contains('meetings')) {
+          const mStore = database.createObjectStore('meetings', { keyPath: 'id' });
+          mStore.createIndex('by_date', 'date', { unique: false });
+        }
+        console.log('[TokenMonitor] DBスキーマ更新完了（v3）');
       };
 
       request.onsuccess = (event) => {

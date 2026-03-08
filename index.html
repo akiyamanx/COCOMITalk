@@ -5,6 +5,7 @@
 <!-- v0.8 Step 3 - モード切替ボタン＋会議専用画面追加 -->
 <!-- v0.9 Step 3.5 - 👤⇔👥人数切替ボタン追加 -->
 <!-- v0.9.5 設定画面リニューアル - 三姉妹×モード別モデル設定 -->
+<!-- v1.1 Step 3.5 - 会議履歴IndexedDB保存＋過去会議一覧画面 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -127,6 +128,7 @@
   </div>
 
   <!-- ========== 会議専用画面（v0.8 Step 3追加） ========== -->
+  <!-- v1.0 Step 3.5 - ヘッダーに📂📝📋常時表示＋過去会議一覧画面追加 -->
   <div id="meeting-screen" class="meeting-screen hidden">
     <header class="meeting-header">
       <div class="header-left">
@@ -134,12 +136,28 @@
         <span class="header-title">COCOMITalk 会議室</span>
       </div>
       <div class="header-right">
+        <!-- v1.0追加 - 📂過去の会議一覧 -->
+        <button id="btn-meeting-archive" class="icon-btn" aria-label="過去の会議" title="過去の会議">📂</button>
+        <!-- v1.0変更 - 📝📋は常時表示（会議前はdisabled） -->
+        <button id="btn-meeting-minutes" class="icon-btn" aria-label="議事録DL" title="議事録DL" disabled>📝</button>
+        <button id="btn-meeting-doc" class="icon-btn" aria-label="指示書生成" title="指示書生成" disabled>📋</button>
         <button id="btn-meeting-end" class="icon-btn" aria-label="会議終了">✕</button>
       </div>
     </header>
 
     <!-- 会議チャットエリア -->
     <main class="meeting-chat"></main>
+
+    <!-- v1.0追加 - 過去の会議一覧（📂押下時に表示） -->
+    <div id="meeting-archive" class="meeting-archive hidden">
+      <div class="archive-header">
+        <h2>📂 過去の会議</h2>
+        <button id="btn-archive-close" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+      <div id="archive-list" class="archive-list">
+        <p class="archive-empty">まだ会議の記録がありません</p>
+      </div>
+    </div>
 
     <!-- 議題入力エリア -->
     <footer class="meeting-input-area">
@@ -154,11 +172,9 @@
           <span class="send-arrow">▶</span>
         </button>
       </div>
-      <!-- アクションボタン（ラウンド完了後に表示） -->
+      <!-- v1.0変更 - アクションボタン（🔄のみ。📝📋はヘッダーに移動） -->
       <div class="meeting-actions hidden">
         <button id="btn-meeting-continue" class="meeting-action-btn">🔄 もう1ラウンド</button>
-        <button id="btn-meeting-minutes" class="meeting-action-btn">📝 議事録DL</button>
-        <button id="btn-meeting-doc" class="meeting-action-btn">📋 指示書生成</button>
       </div>
     </footer>
   </div>
@@ -222,8 +238,10 @@
   <script src="doc-generator.js"></script>
   <script src="mode-switcher.js"></script>
   <script src="meeting-router.js"></script>
+  <script src="meeting-history.js"></script>
   <script src="meeting-relay.js"></script>
   <script src="meeting-ui.js"></script>
+  <script src="meeting-archive-ui.js"></script>
   <script src="chat-group.js"></script>
   <script src="chat-core.js"></script>
   <script src="app.js"></script>

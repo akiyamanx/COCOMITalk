@@ -2,6 +2,7 @@
 // このファイルはIndexedDBを使って会話履歴を永続保存する
 // v0.3 Session C - リロードしても会話が消えない
 // v0.4 Session D - DB_VERSION=2はTokenMonitor側で管理（ストア追加）
+// v0.5 Step 3.5 - DB_VERSION=3 meetingsストア追加（MeetingHistoryと統一）
 'use strict';
 
 /**
@@ -11,7 +12,7 @@
 const ChatHistory = (() => {
 
   const DB_NAME = 'cocomitalk-db';
-  const DB_VERSION = 2; // v0.4 - TokenMonitorと統一
+  const DB_VERSION = 3; // v0.5 - MeetingHistory追加に伴いバージョンアップ
   const STORE_NAME = 'conversations';
 
   let db = null;
@@ -21,7 +22,7 @@ const ChatHistory = (() => {
    * @returns {Promise<IDBDatabase>}
    */
   function init() {
-    // v0.4追加 - 既にTokenMonitorがDBを開いている場合はそちらを使う
+    // v0.4追加 - 既にDBを開いている場合はそちらを使う
     if (db) {
       return Promise.resolve(db);
     }
@@ -33,14 +34,18 @@ const ChatHistory = (() => {
       request.onupgradeneeded = (event) => {
         const database = event.target.result;
         if (!database.objectStoreNames.contains(STORE_NAME)) {
-          // 姉妹キーをprimaryKeyにする
           database.createObjectStore(STORE_NAME, { keyPath: 'sisterKey' });
         }
-        // v0.4追加 - TokenMonitor用ストア（こちらからも作成できるように）
+        // v0.4追加 - TokenMonitor用ストア
         if (!database.objectStoreNames.contains('token_usage')) {
           database.createObjectStore('token_usage', { keyPath: 'monthKey' });
         }
-        console.log('[ChatHistory] DBスキーマ作成完了');
+        // v0.5追加 - 会議履歴ストア（MeetingHistoryと同じスキーマ）
+        if (!database.objectStoreNames.contains('meetings')) {
+          const mStore = database.createObjectStore('meetings', { keyPath: 'id' });
+          mStore.createIndex('by_date', 'date', { unique: false });
+        }
+        console.log('[ChatHistory] DBスキーマ作成完了（v3）');
       };
 
       request.onsuccess = (event) => {

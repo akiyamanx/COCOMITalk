@@ -1,7 +1,7 @@
 // COCOMITalk - 会議リレー制御
 // このファイルは三姉妹が順番にAPIを呼び出すリレー会話のエンジン
 // v0.8 Step 3 - 新規作成
-// v0.9 2026-03-08 - 会議モードmaxTokens:4096を明示渡し（発言途切れバグ修正）
+// v1.0 Step 3.5 - MeetingHistory連携（リアルタイムIndexedDB保存）
 
 'use strict';
 
@@ -11,6 +11,7 @@
  * - 前の姉妹の発言を次に渡す（文脈の積み重ね）
  * - 最大3ラウンド（安全ガイド準拠: 無限ループ防止）
  * - 各発言ごとにMeetingUIに表示＋トークン記録
+ * - v1.0: 各発言ごとにMeetingHistoryにリアルタイム保存
  */
 const MeetingRelay = (() => {
 
@@ -44,6 +45,8 @@ const MeetingRelay = (() => {
   let currentRound = 0;
   let meetingHistory = [];
   let abortRequested = false;
+  // v1.0追加 - 現在の会議ID（MeetingHistory用）
+  let currentMeetingId = null;
 
   /**
    * 会議を開始する
@@ -65,6 +68,18 @@ const MeetingRelay = (() => {
     const order = routing.order;
     const lead = routing.lead;
 
+    // v1.0追加 - MeetingHistoryにレコード作成
+    try {
+      if (typeof MeetingHistory !== 'undefined') {
+        currentMeetingId = await MeetingHistory.createMeeting(topic, routing);
+        // アキヤの議題も保存
+        await MeetingHistory.addUserEntry(currentMeetingId, topic, 1);
+        console.log(`[MeetingRelay] 会議ID: ${currentMeetingId}`);
+      }
+    } catch (e) {
+      console.warn('[MeetingRelay] 会議履歴作成エラー（続行）:', e);
+    }
+
     // 会議UIに議題分析結果を表示
     if (typeof MeetingUI !== 'undefined') {
       MeetingUI.showRoutingResult(routing);
@@ -74,8 +89,8 @@ const MeetingRelay = (() => {
       // ラウンド1は必ず実行
       await _runRound(topic, order, lead, 1);
 
-      // ラウンド2以降はアキヤの判断 or 自動
-      // 今は1ラウンドで完了（将来: 合意確認＋追加ラウンド）
+      // v1.0追加 - 会議完了ステータスに更新
+      _updateMeetingStatus('completed');
 
       console.log(`[MeetingRelay] 会議完了: ${currentRound}ラウンド`);
       return { rounds: currentRound, history: meetingHistory, routing };
@@ -126,14 +141,18 @@ const MeetingRelay = (() => {
         }
 
         // 履歴に追加（次の姉妹が参照できるように）
-        meetingHistory.push({
+        const entry = {
           round: roundNum,
           sister: sisterKey,
           name: sister.name,
           isLead,
           content: reply,
           timestamp: new Date().toISOString(),
-        });
+        };
+        meetingHistory.push(entry);
+
+        // v1.0追加 - MeetingHistoryにリアルタイム保存
+        _saveEntryToHistory(entry);
 
       } catch (error) {
         if (typeof MeetingUI !== 'undefined') {
@@ -224,8 +243,21 @@ const MeetingRelay = (() => {
         return null;
       }
 
+      // v1.0追加 - アキヤの追加指示をMeetingHistoryに保存
+      if (currentMeetingId && typeof MeetingHistory !== 'undefined') {
+        try {
+          await MeetingHistory.addUserEntry(currentMeetingId, followUp, nextRound);
+          // ステータスをin_progressに戻す
+          await MeetingHistory.updateStatus(currentMeetingId, 'in_progress');
+        } catch (e) {
+          console.warn('[MeetingRelay] 追加指示保存エラー（続行）:', e);
+        }
+      }
+
       try {
         await _runRound(followUp, routing.order, routing.lead, nextRound);
+        // v1.0追加 - 追加ラウンド完了
+        _updateMeetingStatus('completed');
         return { rounds: currentRound, history: meetingHistory };
       } finally {
         isRunning = false;
@@ -263,6 +295,33 @@ const MeetingRelay = (() => {
     return currentRound;
   }
 
+  /**
+   * v1.0追加 - 現在の会議ID
+   */
+  function getCurrentMeetingId() {
+    return currentMeetingId;
+  }
+
+  /**
+   * v1.0追加 - MeetingHistoryに発言を非同期保存（エラーでも会議は止めない）
+   */
+  function _saveEntryToHistory(entry) {
+    if (!currentMeetingId || typeof MeetingHistory === 'undefined') return;
+    MeetingHistory.addEntry(currentMeetingId, entry).catch(e => {
+      console.warn('[MeetingRelay] 発言保存エラー（続行）:', e);
+    });
+  }
+
+  /**
+   * v1.0追加 - 会議ステータスを更新（エラーでも止めない）
+   */
+  function _updateMeetingStatus(status) {
+    if (!currentMeetingId || typeof MeetingHistory === 'undefined') return;
+    MeetingHistory.updateStatus(currentMeetingId, status).catch(e => {
+      console.warn('[MeetingRelay] ステータス更新エラー（続行）:', e);
+    });
+  }
+
   return {
     startMeeting,
     continueRound,
@@ -270,6 +329,7 @@ const MeetingRelay = (() => {
     getHistory,
     getIsRunning,
     getCurrentRound,
+    getCurrentMeetingId,
     MAX_ROUNDS,
   };
 })();

@@ -1,7 +1,6 @@
 // COCOMITalk - アプリ初期化・画面管理
 // このファイルはアプリ全体の初期化、スプラッシュ画面、タブ切替、設定を管理する
-// v1.0 - 設定画面リニューアル＋ファイル入出力ボタン追加
-
+// v1.0 - 設定画面リニューアル＋ファイル入出力ボタン / v1.1 - MeetingHistory初期化追加
 'use strict';
 
 /** アプリケーションモジュール */
@@ -28,11 +27,8 @@ const App = (() => {
     }
   };
 
-  // v0.9.5 - 旧MODEL_NAMES＋SISTER_MODEL_NAMES削除（ModeSwitcher.getAvailableModels()に統合済み）
-
   // アプリ起動
   async function init() {
-    // スプラッシュ画面の処理
     _handleSplash();
 
     // TokenMonitor初期化
@@ -45,12 +41,25 @@ const App = (() => {
       }
     }
 
+    // v1.0追加 - MeetingHistory初期化（IndexedDB会議履歴）
+    if (typeof MeetingHistory !== 'undefined') {
+      try {
+        await MeetingHistory.init();
+        // 古い会議の自動削除
+        await MeetingHistory.trimOldMeetings();
+      } catch (e) {
+        console.warn('[App] MeetingHistory初期化エラー:', e);
+      }
+    }
+
     ChatCore.init();
     _setupTabs();
     _setupModeButton();
     _setupPeopleButton();
     _setupContinueTalkButton();
     if (typeof MeetingUI !== 'undefined') MeetingUI.init();
+    // v1.0追加 - 会議アーカイブUI初期化
+    if (typeof MeetingArchiveUI !== 'undefined') MeetingArchiveUI.init();
     _setupFileButtons();
     _setupSettings();
     _loadSettings();
@@ -79,20 +88,12 @@ const App = (() => {
     tabs.forEach(tab => {
       tab.addEventListener('click', () => {
         const sisterKey = tab.dataset.sister;
-
-        // タブのアクティブ状態を更新
         tabs.forEach(t => t.classList.remove('active'));
         tab.classList.add('active');
-
-        // テーマカラー変更
         _applyTheme(sisterKey);
-
-        // v0.7追加 → v0.8変更 - ModeSwitcher経由でインジケーター更新
         if (typeof ModeSwitcher !== 'undefined') {
           ModeSwitcher.onSisterSwitch(sisterKey);
         }
-
-        // チャット切り替え
         ChatCore.switchSister(sisterKey);
       });
     });
@@ -211,7 +212,6 @@ const App = (() => {
     btnOpen.addEventListener('click', async () => {
       modal.classList.remove('hidden');
       _loadSettingsToForm();
-      // v0.4追加 - トークン詳細表示
       if (typeof TokenMonitor !== 'undefined') {
         const detailArea = document.getElementById('token-detail-area');
         if (detailArea) {

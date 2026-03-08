@@ -2,7 +2,7 @@
 // このファイルは会議モード時の専用画面のHTML生成とメッセージ表示を管理する
 // v0.8 Step 3 - 新規作成
 // v0.9 2026-03-08 - Markdownレンダリング対応（marked.js使用）
-
+// v1.0 Step 3.5 - ヘッダー📝📋常時表示＋📂アーカイブ委譲
 'use strict';
 
 /**
@@ -14,7 +14,6 @@
  */
 const MeetingUI = (() => {
 
-  // --- 姉妹表示設定 ---
   const SISTER_DISPLAY = {
     koko: { name: 'ここちゃん', emoji: '🌸', color: '#FF6B9D' },
     gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#6B5CE7' },
@@ -27,9 +26,7 @@ const MeetingUI = (() => {
   let currentRouting = null;
   let isVisible = false;
 
-  /**
-   * 会議画面を初期化（DOMを生成）
-   */
+  /** 会議画面を初期化 */
   function init() {
     meetingScreen = document.getElementById('meeting-screen');
     if (!meetingScreen) {
@@ -44,9 +41,7 @@ const MeetingUI = (() => {
     console.log('[MeetingUI] 初期化完了');
   }
 
-  /**
-   * イベントリスナー設定
-   */
+  /** イベントリスナー設定 */
   function _setupEvents() {
     // 議題送信ボタン
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
@@ -76,22 +71,32 @@ const MeetingUI = (() => {
       btnEnd.addEventListener('click', _handleEndMeeting);
     }
 
-    // v0.9追加 - 議事録ダウンロードボタン
+    // v1.0変更 - 議事録DLボタン（ヘッダー常時表示版）
     const btnMinutes = meetingScreen.querySelector('#btn-meeting-minutes');
     if (btnMinutes) {
       btnMinutes.addEventListener('click', _handleDownloadMinutes);
     }
 
-    // v0.9追加 - 指示書生成ボタン
+    // v1.0変更 - 指示書生成ボタン（ヘッダー常時表示版）
     const btnDoc = meetingScreen.querySelector('#btn-meeting-doc');
     if (btnDoc) {
       btnDoc.addEventListener('click', _handleGenerateDoc);
     }
+
+    // v1.0追加 - 📂過去の会議一覧ボタン
+    const btnArchive = meetingScreen.querySelector('#btn-meeting-archive');
+    if (btnArchive) {
+      btnArchive.addEventListener('click', _handleShowArchive);
+    }
+
+    // v1.0追加 - 一覧画面の閉じるボタン
+    const btnArchiveClose = meetingScreen.querySelector('#btn-archive-close');
+    if (btnArchiveClose) {
+      btnArchiveClose.addEventListener('click', _handleHideArchive);
+    }
   }
 
-  /**
-   * 会議開始処理
-   */
+  /** 会議開始処理 */
   async function _handleStartMeeting() {
     if (!topicInput) return;
     const topic = topicInput.value.trim();
@@ -130,9 +135,7 @@ const MeetingUI = (() => {
     }
   }
 
-  /**
-   * 追加ラウンド処理
-   */
+  /** 追加ラウンド処理 */
   async function _handleContinue() {
     if (!currentRouting) return;
 
@@ -147,9 +150,7 @@ const MeetingUI = (() => {
     _showActionButtons();
   }
 
-  /**
-   * 会議終了処理
-   */
+  /** 会議終了処理 */
   function _handleEndMeeting() {
     // v0.8修正 - 画面を閉じてnormalモードに戻す
     hide();
@@ -172,9 +173,7 @@ const MeetingUI = (() => {
     if (btnStart) btnStart.disabled = false;
   }
 
-  /**
-   * v0.9追加 - 議事録をMarkdownでダウンロード
-   */
+  /** v0.9追加 - 議事録をMarkdownでダウンロード */
   function _handleDownloadMinutes() {
     if (typeof MeetingRelay === 'undefined') return;
     const history = MeetingRelay.getHistory();
@@ -221,9 +220,7 @@ const MeetingUI = (() => {
     addSystemMessage('📝 議事録をダウンロードしたよ！');
   }
 
-  /**
-   * v0.9追加 - 会議履歴から指示書を生成（DocGeneratorに渡す）
-   */
+  /** v0.9追加 - 会議履歴から指示書を生成 */
   async function _handleGenerateDoc() {
     if (typeof MeetingRelay === 'undefined' || typeof DocGenerator === 'undefined') {
       addSystemMessage('指示書生成モジュールが読み込まれていません');
@@ -268,9 +265,7 @@ const MeetingUI = (() => {
     }
   }
 
-  /**
-   * 会議画面を表示
-   */
+  /** 会議画面を表示 */
   function show() {
     if (meetingScreen) {
       meetingScreen.classList.remove('hidden');
@@ -281,9 +276,7 @@ const MeetingUI = (() => {
     if (normalChat) normalChat.classList.add('meeting-active');
   }
 
-  /**
-   * 会議画面を非表示
-   */
+  /** 会議画面を非表示 */
   function hide() {
     if (meetingScreen) {
       meetingScreen.classList.add('hidden');
@@ -293,16 +286,10 @@ const MeetingUI = (() => {
     if (normalChat) normalChat.classList.remove('meeting-active');
   }
 
-  /**
-   * 表示中かどうか
-   */
-  function getIsVisible() {
-    return isVisible;
-  }
+  /** 表示中かどうか */
+  function getIsVisible() { return isVisible; }
 
-  /**
-   * ルーティング結果を表示
-   */
+  /** ルーティング結果を表示 */
   function showRoutingResult(routing) {
     const leadSister = SISTER_DISPLAY[routing.lead];
     const orderNames = routing.order
@@ -317,9 +304,7 @@ const MeetingUI = (() => {
     );
   }
 
-  /**
-   * 姉妹のメッセージを追加
-   */
+  /** 姉妹のメッセージを追加 */
   function addSisterMessage(sisterKey, text, isLead) {
     if (!chatArea) return;
 
@@ -344,9 +329,7 @@ const MeetingUI = (() => {
     _scrollToBottom();
   }
 
-  /**
-   * アキヤのメッセージを追加
-   */
+  /** アキヤのメッセージを追加 */
   function addUserMessage(text) {
     if (!chatArea) return;
 
@@ -369,9 +352,7 @@ const MeetingUI = (() => {
     _scrollToBottom();
   }
 
-  /**
-   * システムメッセージを追加
-   */
+  /** システムメッセージを追加 */
   function addSystemMessage(text) {
     if (!chatArea) return;
 
@@ -383,9 +364,7 @@ const MeetingUI = (() => {
     _scrollToBottom();
   }
 
-  /**
-   * タイピングインジケーター表示
-   */
+  /** タイピングインジケーター表示 */
   function showTyping(sisterKey) {
     hideTyping();
     if (!chatArea) return;
@@ -410,9 +389,7 @@ const MeetingUI = (() => {
     _scrollToBottom();
   }
 
-  /**
-   * タイピングインジケーター非表示
-   */
+  /** タイピングインジケーター非表示 */
   function hideTyping() {
     const typing = document.getElementById('meeting-typing');
     if (typing) typing.remove();
@@ -420,10 +397,16 @@ const MeetingUI = (() => {
 
   /**
    * アクションボタン表示（ラウンド完了後）
+   * v1.0変更 - 📝📋ヘッダーボタンも有効化
    */
   function _showActionButtons() {
     const actions = meetingScreen?.querySelector('.meeting-actions');
     if (actions) actions.classList.remove('hidden');
+    // ヘッダーの📝📋を有効化
+    const btnM = meetingScreen?.querySelector('#btn-meeting-minutes');
+    const btnD = meetingScreen?.querySelector('#btn-meeting-doc');
+    if (btnM) btnM.disabled = false;
+    if (btnD) btnD.disabled = false;
   }
 
   /**
@@ -434,18 +417,10 @@ const MeetingUI = (() => {
     if (actions) actions.classList.add('hidden');
   }
 
-  /**
-   * チャットエリアをクリア
-   */
-  function _clearChat() {
-    if (chatArea) chatArea.innerHTML = '';
-  }
+  /** チャットエリアをクリア */
+  function _clearChat() { if (chatArea) chatArea.innerHTML = ''; }
 
-  /**
-   * v0.9追加 - MarkdownテキストをHTMLに変換
-   * marked.jsがあればパースして返す。なければ改行→brの簡易変換。
-   * XSS対策: marked.jsはデフォルトでサニタイズ済み。
-   */
+  /** v0.9追加 - MarkdownテキストをHTMLに変換 */
   function _renderMarkdown(text) {
     if (typeof marked !== 'undefined' && marked.parse) {
       try {
@@ -462,6 +437,24 @@ const MeetingUI = (() => {
     // フォールバック: 改行をbrに変換するだけ
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+  }
+
+  /**
+   * v1.0追加 - 📂過去の会議一覧を表示（MeetingArchiveUIに委譲）
+   */
+  async function _handleShowArchive() {
+    if (typeof MeetingArchiveUI !== 'undefined') {
+      MeetingArchiveUI.show();
+    }
+  }
+
+  /**
+   * v1.0追加 - HTMLエスケープ（XSS防止）
+   */
+  function _escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   /**
