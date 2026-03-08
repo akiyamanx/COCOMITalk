@@ -14,6 +14,7 @@ const ApiOpenAI = (() => {
   const MODELS = {
     'mini': 'gpt-4o-mini',
     'gpt4o': 'gpt-4o',
+    'gpt54': 'gpt-5.4',       // v1.0追加 - 会議モード最上位
   };
 
   // デフォルトモデル（コスト安全: まず安いモデルでテスト）

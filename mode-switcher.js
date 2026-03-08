@@ -33,8 +33,8 @@ const ModeSwitcher = (() => {
   };
 
   // --- モード別モデルグレード ---
-  // v0.8追加 - 安全ガイド準拠: meetingもまず中級モデルでテスト
-  const MODE_MODELS = {
+  // v0.8 安全ガイド準拠 → v1.0 meeting最上位デフォルト化
+  const DEFAULT_MODE_MODELS = {
     normal: {
       koko: 'flash-25',       // gemini-2.5-flash
       gpt: 'mini',            // gpt-4o-mini
@@ -46,18 +46,21 @@ const ModeSwitcher = (() => {
       claude: 'sonnet',       // claude-sonnet-4
     },
     meeting: {
-      // 安全ガイド: まずdevと同じ中級モデル。Pro/Opus/5.4は動作確認後に手動切替
-      koko: 'flash-3',        // gemini-3-flash（将来: gemini-3.1-pro）
-      gpt: 'gpt4o',           // gpt-4o（将来: gpt-5.4）
-      claude: 'sonnet',       // claude-sonnet-4（将来: claude-opus-4.6）
+      // v1.0 - 会議は最上位モデルをデフォルトに
+      koko: 'pro-31',         // gemini-3.1-pro
+      gpt: 'gpt54',           // gpt-5.4
+      claude: 'opus',         // claude-opus-4.6
     },
   };
+
+  // v1.0追加 - ユーザーがカスタマイズしたモデル設定（設定画面で変更可能）
+  let customModeModels = null;
 
   // --- 姉妹別モデル表示名 ---
   const MODEL_DISPLAY = {
     normal: { koko: 'Gemini 2.5 Flash', gpt: 'GPT-4o-mini', claude: 'Haiku 4.5' },
     dev: { koko: 'Gemini 3 Flash', gpt: 'GPT-4o', claude: 'Sonnet 4' },
-    meeting: { koko: 'Gemini 3 Flash', gpt: 'GPT-4o', claude: 'Sonnet 4' },
+    meeting: { koko: 'Gemini 3.1 Pro', gpt: 'GPT-5.4', claude: 'Opus 4.6' },
   };
 
   let currentMode = 'normal';
@@ -127,15 +130,18 @@ const ModeSwitcher = (() => {
   }
 
   /**
-   * モデルインジケーターを更新
+   * モデルインジケーターを更新（v1.0変更 - カスタム設定反映）
    */
   function _updateModelIndicator(mode, sisterKey) {
     const indicator = document.getElementById('model-indicator');
-    if (indicator) {
-      const modelName = MODEL_DISPLAY[mode]?.[sisterKey] || 'Unknown';
-      const display = MODE_DISPLAY[mode];
-      indicator.textContent = `${display.short} | ${modelName}`;
-    }
+    if (!indicator) return;
+    const display = MODE_DISPLAY[mode];
+    // カスタム設定されてる場合はモデルキーから名前を逆引き
+    const currentKey = getModelKey(sisterKey);
+    const models = getAvailableModels();
+    const found = models[sisterKey]?.find(m => m.key === currentKey);
+    const modelName = found ? found.name : (MODEL_DISPLAY[mode]?.[sisterKey] || 'Unknown');
+    indicator.textContent = `${display.short} | ${modelName}`;
   }
 
   /**
@@ -147,12 +153,62 @@ const ModeSwitcher = (() => {
 
   /**
    * 現在のモードで指定姉妹のモデルキーを取得
-   * @param {string} sisterKey - 'koko' / 'gpt' / 'claude'
-   * @returns {string} モデルキー（例: 'flash-25', 'mini', 'haiku'）
+   * v1.0変更 - カスタム設定があればそちらを優先
    */
   function getModelKey(sisterKey) {
-    return MODE_MODELS[currentMode]?.[sisterKey] || MODE_MODELS.normal[sisterKey];
+    // カスタム設定 > デフォルト の優先順
+    if (customModeModels?.[currentMode]?.[sisterKey]) {
+      return customModeModels[currentMode][sisterKey];
+    }
+    return DEFAULT_MODE_MODELS[currentMode]?.[sisterKey] || DEFAULT_MODE_MODELS.normal[sisterKey];
   }
+
+  /**
+   * v1.0追加 - モデルグレードのカスタム設定を適用
+   * @param {string} mode - 対象モード
+   * @param {Object} models - { koko: 'xxx', gpt: 'xxx', claude: 'xxx' }
+   */
+  function setCustomModels(mode, models) {
+    if (!customModeModels) customModeModels = {};
+    customModeModels[mode] = { ...models };
+    // LocalStorageに保存
+    try {
+      localStorage.setItem('cocomitalk-custom-models', JSON.stringify(customModeModels));
+    } catch (e) { console.warn('[ModeSwitcher] カスタムモデル保存エラー:', e); }
+    _updateUI(currentMode);
+  }
+
+  /** v1.0追加 - 保存済みカスタムモデルを読み込み */
+  function _loadCustomModels() {
+    try {
+      const saved = localStorage.getItem('cocomitalk-custom-models');
+      if (saved) customModeModels = JSON.parse(saved);
+    } catch (e) { console.warn('[ModeSwitcher] カスタムモデル読み込みエラー:', e); }
+  }
+
+  /** v1.0追加 - 選択可能なモデル一覧 */
+  function getAvailableModels() {
+    return {
+      koko: [
+        { key: 'flash-25', name: 'Gemini 2.5 Flash', tier: '💰' },
+        { key: 'flash-3', name: 'Gemini 3 Flash', tier: '💰💰' },
+        { key: 'pro-31', name: 'Gemini 3.1 Pro', tier: '💰💰💰' },
+      ],
+      gpt: [
+        { key: 'mini', name: 'GPT-4o-mini', tier: '💰' },
+        { key: 'gpt4o', name: 'GPT-4o', tier: '💰💰' },
+        { key: 'gpt54', name: 'GPT-5.4', tier: '💰💰💰' },
+      ],
+      claude: [
+        { key: 'haiku', name: 'Haiku 4.5', tier: '💰' },
+        { key: 'sonnet', name: 'Sonnet 4', tier: '💰💰' },
+        { key: 'opus', name: 'Opus 4.6', tier: '💰💰💰' },
+      ],
+    };
+  }
+
+  // 起動時にカスタム設定を読み込み
+  _loadCustomModels();
 
   /**
    * 現在のモードを取得
@@ -225,18 +281,11 @@ const ModeSwitcher = (() => {
   }
 
   return {
-    cycleMode,
-    setMode,
-    getMode,
-    getModelKey,
-    isMeetingMode,
-    getModes,
-    getModeDisplay,
-    onSisterSwitch,
-    // v0.9追加 - 人数モード
-    togglePeopleMode,
-    getPeopleMode,
-    isGroupMode,
-    MODE_MODELS,
+    cycleMode, setMode, getMode, getModelKey,
+    isMeetingMode, getModes, getModeDisplay, onSisterSwitch,
+    togglePeopleMode, getPeopleMode, isGroupMode,
+    // v1.0追加 - モデルカスタマイズ
+    setCustomModels, getAvailableModels,
+    DEFAULT_MODE_MODELS,
   };
 })();
