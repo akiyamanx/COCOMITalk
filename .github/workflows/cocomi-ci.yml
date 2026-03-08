@@ -1,9 +1,8 @@
-# COCOMI CI - COCOMITalk品質チェック
-# 全COCOMIリポ共通のCI基盤（cocomi-ci.yml v1.1準拠）
-# v1.0 - 初期配置
-# v1.2 - 2026-03-08 LINE通知step追加
+# COCOMI CI テスト審査 v1.1
+# COCOMIファミリー共通CI + LINE通知ワークフロー
+# v1.1追加 - console.log検出、TODO/FIXME検出
 
-name: COCOMI CI
+name: COCOMI CI テスト審査
 
 on:
   push:
@@ -12,138 +11,479 @@ on:
     branches: [main]
 
 jobs:
-  quality-check:
+  ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      # ① チェックアウト
+      - name: チェックアウト
+        uses: actions/checkout@v4
 
-      # 1. 500行制限チェック（COCOMI全リポ共通ルール）
-      - name: 500行制限チェック
+      # ② 対象ファイル自動検出
+      - name: 対象ファイル検出
+        id: detect
         run: |
-          echo "=== 500行制限チェック ==="
-          OVER_LIMIT=0
-          for file in $(find . -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v node_modules | grep -v .github); do
-            LINES=$(wc -l < "$file")
-            if [ "$LINES" -gt 500 ]; then
-              echo "❌ $file: ${LINES}行（500行超過！）"
-              OVER_LIMIT=1
-            else
-              echo "✅ $file: ${LINES}行"
+          has_sh=false
+          has_js=false
+          has_css=false
+          has_html=false
+
+          if find . -name '*.sh' -not -path './.git/*' | grep -q .; then
+            has_sh=true
+          fi
+          if find . -name '*.js' -not -path './.git/*' -not -path './node_modules/*' | grep -q .; then
+            has_js=true
+          fi
+          if find . -name '*.css' -not -path './.git/*' -not -path './node_modules/*' | grep -q .; then
+            has_css=true
+          fi
+          if find . -name '*.html' -not -path './.git/*' -not -path './node_modules/*' | grep -q .; then
+            has_html=true
+          fi
+
+          echo "has_sh=$has_sh" >> "$GITHUB_OUTPUT"
+          echo "has_js=$has_js" >> "$GITHUB_OUTPUT"
+          echo "has_css=$has_css" >> "$GITHUB_OUTPUT"
+          echo "has_html=$has_html" >> "$GITHUB_OUTPUT"
+
+          echo "### 検出結果" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 拡張子 | 検出 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|--------|------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| .sh | $has_sh |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| .js | $has_js |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| .css | $has_css |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| .html | $has_html |" >> "$GITHUB_STEP_SUMMARY"
+
+      # ③ ShellCheck（.shファイルがある場合のみ）
+      - name: ShellCheck
+        id: shellcheck
+        if: steps.detect.outputs.has_sh == 'true'
+        run: |
+          sudo apt-get install -y shellcheck > /dev/null 2>&1
+          fail_detail=""
+          failed=false
+
+          while IFS= read -r f; do
+            if ! output=$(shellcheck -e SC1091,SC2034 "$f" 2>&1); then
+              failed=true
+              fail_detail="${fail_detail}${f}:\n${output}\n\n"
             fi
-          done
-          if [ "$OVER_LIMIT" -eq 1 ]; then
-            echo "::error::500行を超えるファイルがあります。分割してください。"
+          done < <(find . -name '*.sh' -not -path './.git/*')
+
+          if [ "$failed" = true ]; then
+            echo "fail_detail<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$fail_detail" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "::error::ShellCheck で問題が見つかりました"
             exit 1
           fi
-          echo "✅ 全ファイル500行以内"
+          echo "fail_detail=" >> "$GITHUB_OUTPUT"
 
-      # 2. 先頭コメントチェック（日本語で「このファイルは何をするか」）
-      - name: 先頭コメントチェック
+      # ④ 500行チェック（全拡張子、sw.js含む）
+      - name: 500行チェック
+        id: linecheck
         run: |
-          echo "=== 先頭コメントチェック ==="
-          MISSING=0
-          for file in $(find . -name "*.js" | grep -v node_modules | grep -v .github | grep -v sw.js); do
-            HEAD=$(head -5 "$file")
-            if echo "$HEAD" | grep -qE "(このファイルは|COCOMITalk)"; then
-              echo "✅ $file"
-            else
-              echo "⚠️ $file: 先頭に日本語コメントがありません"
-              MISSING=1
+          fail_detail=""
+          failed=false
+
+          while IFS= read -r f; do
+            lines=$(wc -l < "$f")
+            if [ "$lines" -gt 500 ]; then
+              failed=true
+              fail_detail="${fail_detail}${f}: ${lines}行（上限500行超過）\n"
             fi
-          done
-          if [ "$MISSING" -eq 1 ]; then
-            echo "::warning::先頭に日本語コメントが無いファイルがあります"
+          done < <(find . \( -name '*.sh' -o -name '*.js' -o -name '*.css' -o -name '*.html' \) -not -path './.git/*' -not -path './node_modules/*')
+
+          if [ "$failed" = true ]; then
+            echo "fail_detail<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$fail_detail" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "::error::500行超過ファイルがあります"
+            exit 1
+          fi
+          echo "fail_detail=" >> "$GITHUB_OUTPUT"
+
+      # ⑤ 先頭コメントチェック（.sh/.js/.css、sw.js除外）
+      - name: 先頭コメントチェック
+        id: headercheck
+        run: |
+          fail_detail=""
+          failed=false
+
+          while IFS= read -r f; do
+            basename=$(basename "$f")
+            # sw.js除外
+            if [ "$basename" = "sw.js" ]; then
+              continue
+            fi
+
+            first_line=$(head -n 1 "$f")
+            has_comment=false
+
+            case "$basename" in
+              *.sh)
+                # シェルスクリプト: #! or # で始まる
+                if echo "$first_line" | grep -qE '^#'; then
+                  has_comment=true
+                fi
+                ;;
+              *.js)
+                # JavaScript: // or /* で始まる
+                if echo "$first_line" | grep -qE '^(//|/\*)'; then
+                  has_comment=true
+                fi
+                ;;
+              *.css)
+                # CSS: /* で始まる
+                if echo "$first_line" | grep -qE '^/\*'; then
+                  has_comment=true
+                fi
+                ;;
+            esac
+
+            if [ "$has_comment" = false ]; then
+              failed=true
+              fail_detail="${fail_detail}${f}: 先頭コメントなし\n"
+            fi
+          done < <(find . \( -name '*.sh' -o -name '*.js' -o -name '*.css' \) -not -path './.git/*' -not -path './node_modules/*')
+
+          if [ "$failed" = true ]; then
+            echo "fail_detail<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$fail_detail" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "::error::先頭コメントがないファイルがあります"
+            exit 1
+          fi
+          echo "fail_detail=" >> "$GITHUB_OUTPUT"
+
+      # ⑥ バージョン番号チェック（.sh/.js/.css、sw.js除外）
+      - name: バージョン番号チェック
+        id: versioncheck
+        run: |
+          fail_detail=""
+          failed=false
+
+          while IFS= read -r f; do
+            basename=$(basename "$f")
+            # sw.js除外
+            if [ "$basename" = "sw.js" ]; then
+              continue
+            fi
+
+            # 先頭10行以内にバージョン番号パターンがあるか確認
+            # 例: v1.0, v2.1, Version 1.0, version: 2.0 等
+            if ! head -n 10 "$f" | grep -qiE '(v[0-9]+\.[0-9]+|version\s*[:=]?\s*[0-9]+\.[0-9]+)'; then
+              failed=true
+              fail_detail="${fail_detail}${f}: バージョン番号なし（先頭10行以内）\n"
+            fi
+          done < <(find . \( -name '*.sh' -o -name '*.js' -o -name '*.css' \) -not -path './.git/*' -not -path './node_modules/*')
+
+          if [ "$failed" = true ]; then
+            echo "fail_detail<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$fail_detail" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "::error::バージョン番号がないファイルがあります"
+            exit 1
+          fi
+          echo "fail_detail=" >> "$GITHUB_OUTPUT"
+
+      # ⑦ console.logチェック（.jsファイル、sw.js除外） ★v1.1追加
+      - name: console.log チェック
+        id: consolecheck
+        if: steps.detect.outputs.has_js == 'true'
+        run: |
+          fail_detail=""
+          failed=false
+
+          while IFS= read -r f; do
+            basename=$(basename "$f")
+            # sw.js除外
+            if [ "$basename" = "sw.js" ]; then
+              continue
+            fi
+
+            # console.log を検出（console.error/console.warnは許可）
+            matches=$(grep -n 'console\.log(' "$f" || true)
+            if [ -n "$matches" ]; then
+              count=$(echo "$matches" | wc -l)
+              failed=true
+              fail_detail="${fail_detail}${f}: console.log ${count}箇所\n"
+            fi
+          done < <(find . -name '*.js' -not -path './.git/*' -not -path './node_modules/*')
+
+          if [ "$failed" = true ]; then
+            echo "fail_detail<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$fail_detail" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "::error::console.log が残っています（デバッグ用コードの消し忘れ？）"
+            exit 1
+          fi
+          echo "fail_detail=" >> "$GITHUB_OUTPUT"
+
+      # ⑧ TODO/FIXMEチェック（全拡張子） ★v1.1追加
+      - name: TODO/FIXME チェック
+        id: todocheck
+        run: |
+          fail_detail=""
+          failed=false
+
+          while IFS= read -r f; do
+            matches=$(grep -inE '(TODO|FIXME|HACK|XXX):' "$f" || true)
+            if [ -n "$matches" ]; then
+              count=$(echo "$matches" | wc -l)
+              failed=true
+              # 該当行の内容も表示（最大3行まで）
+              preview=$(echo "$matches" | head -3 | sed 's/^/  /')
+              fail_detail="${fail_detail}${f}: ${count}箇所\n${preview}\n\n"
+            fi
+          done < <(find . \( -name '*.sh' -o -name '*.js' -o -name '*.css' -o -name '*.html' \) -not -path './.git/*' -not -path './node_modules/*')
+
+          if [ "$failed" = true ]; then
+            echo "fail_detail<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$fail_detail" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "::error::TODO/FIXME コメントが残っています"
+            exit 1
+          fi
+          echo "fail_detail=" >> "$GITHUB_OUTPUT"
+
+      # ⑨ セキュリティチェック
+      - name: セキュリティチェック
+        id: securitycheck
+        run: |
+          fail_detail=""
+          failed=false
+
+          # config.json / .env ファイルの漏洩チェック
+          if find . -name 'config.json' -not -path './.git/*' | grep -q .; then
+            failed=true
+            fail_detail="${fail_detail}config.json がリポジトリに含まれています\n"
+          fi
+          if find . -name '.env' -not -path './.git/*' | grep -q .; then
+            failed=true
+            fail_detail="${fail_detail}.env がリポジトリに含まれています\n"
           fi
 
-      # 3. バージョン番号チェック
-      - name: バージョン番号チェック
-        run: |
-          echo "=== バージョン番号チェック ==="
-          for file in $(find . -name "*.js" | grep -v node_modules | grep -v .github | grep -v sw.js); do
-            if grep -qE "v[0-9]+\.[0-9]+" "$file"; then
-              VER=$(grep -oE "v[0-9]+\.[0-9]+" "$file" | head -1)
-              echo "✅ $file: $VER"
-            else
-              echo "⚠️ $file: バージョン番号が見つかりません"
+          # シークレットのハードコードチェック
+          while IFS= read -r f; do
+            # GitHub Personal Access Token
+            if grep -qE 'ghp_[A-Za-z0-9]{36,}' "$f"; then
+              failed=true
+              fail_detail="${fail_detail}${f}: GitHub PAT (ghp_) がハードコードされています\n"
             fi
-          done
-
-      # 4. console.log検出（デバッグ残りチェック）
-      - name: console.log検出
-        run: |
-          echo "=== console.log検出（情報のみ） ==="
-          COUNT=0
-          for file in $(find . -name "*.js" | grep -v node_modules | grep -v .github); do
-            LOGS=$(grep -c "console\.log" "$file" 2>/dev/null || echo 0)
-            if [ "$LOGS" -gt 0 ]; then
-              echo "📝 $file: console.log ${LOGS}件"
-              COUNT=$((COUNT + LOGS))
+            # Anthropic API Key
+            if grep -qE 'sk-ant-[A-Za-z0-9_-]+' "$f"; then
+              failed=true
+              fail_detail="${fail_detail}${f}: Anthropic API Key (sk-ant-) がハードコードされています\n"
             fi
-          done
-          echo "合計: ${COUNT}件のconsole.log（本番前に要確認）"
+            # Slack Bot Token
+            if grep -qE 'xoxb-[A-Za-z0-9-]+' "$f"; then
+              failed=true
+              fail_detail="${fail_detail}${f}: Slack Token (xoxb-) がハードコードされています\n"
+            fi
+          done < <(find . \( -name '*.sh' -o -name '*.js' -o -name '*.css' -o -name '*.html' -o -name '*.json' -o -name '*.yml' -o -name '*.yaml' \) -not -path './.git/*' -not -path './node_modules/*')
 
-      # 5. TODO/FIXME検出
-      - name: TODO/FIXME検出
+          if [ "$failed" = true ]; then
+            echo "fail_detail<<EOF" >> "$GITHUB_OUTPUT"
+            echo -e "$fail_detail" >> "$GITHUB_OUTPUT"
+            echo "EOF" >> "$GITHUB_OUTPUT"
+            echo "::error::セキュリティ上の問題が見つかりました"
+            exit 1
+          fi
+          echo "fail_detail=" >> "$GITHUB_OUTPUT"
+
+      # ⑩ サマリー出力（常に実行）
+      - name: サマリー出力
+        if: always()
         run: |
-          echo "=== TODO/FIXME検出 ==="
-          grep -rn "TODO\|FIXME\|HACK\|XXX" --include="*.js" --include="*.html" --include="*.css" . --exclude-dir=node_modules --exclude-dir=.github || echo "✅ TODO/FIXMEなし"
+          echo "## COCOMI CI テスト審査 結果" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| チェック項目 | 結果 |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------------|------|" >> "$GITHUB_STEP_SUMMARY"
 
-      # 6. ファイル行数サマリー
-      - name: ファイル行数サマリー
-        run: |
-          echo "=== ファイル行数サマリー ==="
-          TOTAL=0
-          for file in $(find . -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v node_modules | grep -v .github | sort); do
-            LINES=$(wc -l < "$file")
-            printf "  %4d行  %s\n" "$LINES" "$file"
-            TOTAL=$((TOTAL + LINES))
-          done
-          echo "---"
-          echo "合計: ${TOTAL}行"
+          # ShellCheck
+          if [ "${{ steps.detect.outputs.has_sh }}" != "true" ]; then
+            echo "| ShellCheck | ⏭ スキップ |" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.shellcheck.outcome }}" = "success" ]; then
+            echo "| ShellCheck | ✅ 合格 |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| ShellCheck | ❌ 不合格 |" >> "$GITHUB_STEP_SUMMARY"
+          fi
 
-      # 7. LINE通知（成功時）
+          # 500行チェック
+          if [ "${{ steps.linecheck.outcome }}" = "success" ]; then
+            echo "| 500行チェック | ✅ 合格 |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| 500行チェック | ❌ 不合格 |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # 先頭コメント
+          if [ "${{ steps.headercheck.outcome }}" = "success" ]; then
+            echo "| 先頭コメント | ✅ 合格 |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| 先頭コメント | ❌ 不合格 |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # バージョン番号
+          if [ "${{ steps.versioncheck.outcome }}" = "success" ]; then
+            echo "| バージョン番号 | ✅ 合格 |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| バージョン番号 | ❌ 不合格 |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # v1.1追加 - console.log
+          if [ "${{ steps.detect.outputs.has_js }}" != "true" ]; then
+            echo "| console.log | ⏭ スキップ |" >> "$GITHUB_STEP_SUMMARY"
+          elif [ "${{ steps.consolecheck.outcome }}" = "success" ]; then
+            echo "| console.log | ✅ 合格 |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| console.log | ❌ 不合格 |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # v1.1追加 - TODO/FIXME
+          if [ "${{ steps.todocheck.outcome }}" = "success" ]; then
+            echo "| TODO/FIXME | ✅ 合格 |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| TODO/FIXME | ❌ 不合格 |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          # セキュリティ
+          if [ "${{ steps.securitycheck.outcome }}" = "success" ]; then
+            echo "| セキュリティ | ✅ 合格 |" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "| セキュリティ | ❌ 不合格 |" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "📋 コミット: \`${{ github.sha }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "👤 実行者: ${{ github.actor }}" >> "$GITHUB_STEP_SUMMARY"
+
+      # ⑪ LINE通知（成功時）
       - name: LINE通知（成功）
         if: success()
         env:
-          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: |
           REPO_NAME="${{ github.repository }}"
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
-          PAGES_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME#*/}/"
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s')
+
           MESSAGE="✅ CI合格！
-🏛️ ${REPO_NAME}
-📝 ${SHORT_SHA}: ${COMMIT_MSG}
-🌐 アプリ: ${PAGES_URL}"
+
+          📦 ${REPO_NAME}
+          📝 ${SHORT_SHA}: ${COMMIT_MSG}
+
+          チェック結果:
+          ✅ 500行チェック: 合格
+          ✅ 先頭コメント: 合格
+          ✅ バージョン番号: 合格
+          ✅ console.log: 合格
+          ✅ TODO/FIXME: 合格
+          ✅ セキュリティ: 合格"
+
+          # ShellCheckの結果を追加
+          if [ "${{ steps.detect.outputs.has_sh }}" = "true" ]; then
+            MESSAGE="${MESSAGE}
+          ✅ ShellCheck: 合格"
+          fi
+
+          PAGES_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME#*/}/"
+          MESSAGE="${MESSAGE}
+
+          🌐 アプリ: ${PAGES_URL}"
+
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -d "$(jq -n \
               --arg to "$LINE_USER_ID" \
               --arg text "$MESSAGE" \
-              '{to: $to, messages: [{type: "text", text: $text}]}')"
+              '{to: $to, messages: [{type: "text", text: $text}]}'
+            )"
 
-      # 8. LINE通知（失敗時）
+      # ⑫ LINE通知（失敗時）
       - name: LINE通知（失敗）
         if: failure()
         env:
-          LINE_TOKEN: ${{ secrets.LINE_TOKEN }}
+          LINE_TOKEN: ${{ secrets.LINE_CHANNEL_ACCESS_TOKEN }}
           LINE_USER_ID: ${{ secrets.LINE_USER_ID }}
         run: |
           REPO_NAME="${{ github.repository }}"
-          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
-          COMMIT_MSG="${{ github.event.head_commit.message }}"
+          SHORT_SHA="${{ github.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
+          COMMIT_MSG=$(git log -1 --pretty=format:'%s')
+          ACTIONS_URL="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+          # 失敗理由を収集
+          FAIL_REASONS=""
+
+          SHELLCHECK_DETAIL="${{ steps.shellcheck.outputs.fail_detail }}"
+          LINECHECK_DETAIL="${{ steps.linecheck.outputs.fail_detail }}"
+          HEADERCHECK_DETAIL="${{ steps.headercheck.outputs.fail_detail }}"
+          VERSIONCHECK_DETAIL="${{ steps.versioncheck.outputs.fail_detail }}"
+          CONSOLECHECK_DETAIL="${{ steps.consolecheck.outputs.fail_detail }}"
+          TODOCHECK_DETAIL="${{ steps.todocheck.outputs.fail_detail }}"
+          SECURITYCHECK_DETAIL="${{ steps.securitycheck.outputs.fail_detail }}"
+
+          if [ -n "$SHELLCHECK_DETAIL" ]; then
+            FAIL_REASONS="${FAIL_REASONS}
+          ❌ ShellCheck:
+          ${SHELLCHECK_DETAIL}"
+          fi
+
+          if [ -n "$LINECHECK_DETAIL" ]; then
+            FAIL_REASONS="${FAIL_REASONS}
+          ❌ 500行チェック:
+          ${LINECHECK_DETAIL}"
+          fi
+
+          if [ -n "$HEADERCHECK_DETAIL" ]; then
+            FAIL_REASONS="${FAIL_REASONS}
+          ❌ 先頭コメント:
+          ${HEADERCHECK_DETAIL}"
+          fi
+
+          if [ -n "$VERSIONCHECK_DETAIL" ]; then
+            FAIL_REASONS="${FAIL_REASONS}
+          ❌ バージョン番号:
+          ${VERSIONCHECK_DETAIL}"
+          fi
+
+          if [ -n "$CONSOLECHECK_DETAIL" ]; then
+            FAIL_REASONS="${FAIL_REASONS}
+          ❌ console.log:
+          ${CONSOLECHECK_DETAIL}"
+          fi
+
+          if [ -n "$TODOCHECK_DETAIL" ]; then
+            FAIL_REASONS="${FAIL_REASONS}
+          ❌ TODO/FIXME:
+          ${TODOCHECK_DETAIL}"
+          fi
+
+          if [ -n "$SECURITYCHECK_DETAIL" ]; then
+            FAIL_REASONS="${FAIL_REASONS}
+          ❌ セキュリティ:
+          ${SECURITYCHECK_DETAIL}"
+          fi
+
           PAGES_URL="https://${{ github.repository_owner }}.github.io/${REPO_NAME#*/}/"
-          MESSAGE="🔴 CI不合格！
-🏛️ ${REPO_NAME}
-📝 ${SHORT_SHA}: ${COMMIT_MSG}
-🔍 詳細: ${{ github.server_url }}/${{ github.repository }}/actions
-🌐 アプリ: ${PAGES_URL}"
+
+          MESSAGE="🚨 CI不合格！
+
+          📦 ${REPO_NAME}
+          📝 ${SHORT_SHA}: ${COMMIT_MSG}
+          ${FAIL_REASONS}
+
+          🔗 詳細: ${ACTIONS_URL}
+          🌐 アプリ: ${PAGES_URL}"
+
           curl -s -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -d "$(jq -n \
               --arg to "$LINE_USER_ID" \
               --arg text "$MESSAGE" \
-              '{to: $to, messages: [{type: "text", text: $text}]}')"
+              '{to: $to, messages: [{type: "text", text: $text}]}'
+            )"
