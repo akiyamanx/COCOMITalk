@@ -73,9 +73,7 @@ const ChatCore = (() => {
 
   let currentSister = 'koko';
 
-  /**
-   * 初期化
-   */
+  // 初期化
   async function init() {
     chatArea = document.getElementById('chat-area');
     msgInput = document.getElementById('msg-input');
@@ -122,9 +120,7 @@ const ChatCore = (() => {
     });
   }
 
-  /**
-   * 送信ボタンのイベント設定
-   */
+  // 送信ボタンのイベント設定
   function _setupSendEvents() {
     btnSend.addEventListener('click', () => {
       if (!btnSend.disabled) {
@@ -146,8 +142,12 @@ const ChatCore = (() => {
       welcomeMsg.classList.add('hidden');
     }
 
-    // ユーザーメッセージを表示
-    addMessage('user', text);
+    // v1.0追加 - 添付ファイルを取得（あれば）
+    const attachment = (typeof FileHandler !== 'undefined') ? FileHandler.consumeAttachment() : null;
+
+    // ユーザーメッセージを表示（添付ファイル名付き）
+    const displayText = attachment ? `📎 ${attachment.name}\n${text}` : text;
+    addMessage('user', displayText);
 
     // 入力欄をクリア
     msgInput.value = '';
@@ -175,7 +175,7 @@ const ChatCore = (() => {
       const apiModule = sisterAPI ? sisterAPI.module() : null;
 
       if (apiModule && apiModule.hasApiKey()) {
-        _apiReply(text, apiModule, sisterAPI.prompt());
+        _apiReply(text, apiModule, sisterAPI.prompt(), attachment);
       } else {
         _demoReply(text);
       }
@@ -187,7 +187,7 @@ const ChatCore = (() => {
    * v0.5変更 - APIモジュールを引数で受け取る（三姉妹共通）
    * v0.8変更 - ModeSwitcherからモデルキーを取得して渡す
    */
-  async function _apiReply(userText, apiModule, systemPrompt) {
+  async function _apiReply(userText, apiModule, systemPrompt, attachment) {
     try {
       const history = chatHistories[currentSister];
 
@@ -196,7 +196,11 @@ const ChatCore = (() => {
         ? ModeSwitcher.getModelKey(currentSister)
         : undefined;
 
-      const reply = await apiModule.sendMessage(userText, systemPrompt, history, { model: modelKey });
+      // v1.0追加 - 添付ファイルをoptionsに含める
+      const opts = { model: modelKey };
+      if (attachment) opts.attachment = attachment;
+
+      const reply = await apiModule.sendMessage(userText, systemPrompt, history, opts);
 
       hideTyping();
       addMessage('ai', reply);
@@ -216,9 +220,7 @@ const ChatCore = (() => {
     }
   }
 
-  /**
-   * v0.9追加 - グループモード: ChatGroupモジュールに委譲
-   */
+  // v0.9追加 - グループモード: ChatGroupモジュールに委譲
   async function _groupReply(userText) {
     if (typeof ChatGroup === 'undefined') {
       console.error('[ChatCore] ChatGroupモジュールが見つかりません');
@@ -241,9 +243,7 @@ const ChatCore = (() => {
     }
   }
 
-  /**
-   * デモ返答（API未接続時の仮実装）
-   */
+  // デモ返答（API未接続時の仮実装）
   function _demoReply(userText) {
     const replies = _getDemoReplies(currentSister, userText);
     const reply = replies[Math.floor(Math.random() * replies.length)];
@@ -259,9 +259,7 @@ const ChatCore = (() => {
     }, delay);
   }
 
-  /**
-   * デモ返答パターン（API接続前の仮データ）
-   */
+  // デモ返答パターン（API接続前の仮データ）
   function _getDemoReplies(sister, userText) {
     const isGreeting = /おはよう|おは/.test(userText);
     const greetings = {
@@ -323,17 +321,13 @@ const ChatCore = (() => {
     _scrollToBottom();
   }
 
-  /**
-   * 姉妹のテーマカラーを取得（v0.9追加）
-   */
+  // 姉妹のテーマカラーを取得（v0.9追加）
   function _getSisterColor(sisterKey) {
     const colors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
     return colors[sisterKey] || '#888';
   }
 
-  /**
-   * タイピングインジケーター表示
-   */
+  // タイピングインジケーター表示
   function showTyping() {
     hideTyping();
 
@@ -361,26 +355,20 @@ const ChatCore = (() => {
     _scrollToBottom();
   }
 
-  /**
-   * タイピングインジケーター非表示
-   */
+  // タイピングインジケーター非表示
   function hideTyping() {
     const typing = document.getElementById('typing-msg');
     if (typing) typing.remove();
   }
 
-  /**
-   * チャットエリアを最下部にスクロール
-   */
+  // チャットエリアを最下部にスクロール
   function _scrollToBottom() {
     requestAnimationFrame(() => {
       chatArea.scrollTop = chatArea.scrollHeight;
     });
   }
 
-  /**
-   * 姉妹切り替え
-   */
+  // 姉妹切り替え
   function switchSister(sisterKey) {
     if (!SISTERS[sisterKey]) return;
     currentSister = sisterKey;
@@ -408,24 +396,18 @@ const ChatCore = (() => {
     console.log(`[ChatCore] 姉妹切替: ${sister.name}`);
   }
 
-  /**
-   * チャットエリアをクリア
-   */
+  // チャットエリアをクリア
   function _clearChat() {
     const messages = chatArea.querySelectorAll('.message');
     messages.forEach(msg => msg.remove());
   }
 
-  /**
-   * 現在の姉妹キーを取得
-   */
+  // 現在の姉妹キーを取得
   function getCurrentSister() {
     return currentSister;
   }
 
-  /**
-   * IndexedDBに現在の姉妹の履歴を保存（v0.3追加）
-   */
+  // IndexedDBに現在の姉妹の履歴を保存（v0.3追加）
   function _saveHistory() {
     if (typeof ChatHistory !== 'undefined') {
       ChatHistory.save(currentSister, chatHistories[currentSister]).catch(e => {
@@ -434,9 +416,7 @@ const ChatCore = (() => {
     }
   }
 
-  /**
-   * IndexedDBから全姉妹の履歴を読み込み（v0.3追加）
-   */
+  // IndexedDBから全姉妹の履歴を読み込み（v0.3追加）
   async function _loadAllHistories() {
     if (typeof ChatHistory === 'undefined') return;
 
@@ -464,9 +444,7 @@ const ChatCore = (() => {
     }
   }
 
-  /**
-   * 会話履歴をクリア（v0.3追加）
-   */
+  // 会話履歴をクリア（v0.3追加）
   async function clearHistory(sisterKey) {
     if (sisterKey) {
       chatHistories[sisterKey] = [];
@@ -494,6 +472,8 @@ const ChatCore = (() => {
   return {
     init, addMessage, showTyping, hideTyping,
     switchSister, getCurrentSister, clearHistory, SISTERS,
+    // v1.0追加 - 会話履歴取得（💾ダウンロード用）
+    getHistory: (sister) => chatHistories[sister || currentSister] || [],
     // v0.9.3 - グループモード用コンテキスト
     getGroupContext: () => ({ currentSister, chatHistories, addMessage, hideTyping, chatArea, SISTERS, SISTER_API }),
   };

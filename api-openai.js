@@ -37,8 +37,8 @@ const ApiOpenAI = (() => {
     const modelKey = options.model || DEFAULT_MODEL;
     const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
 
-    // OpenAI形式のメッセージ配列を構築
-    const messages = _buildMessages(userMessage, systemPrompt, history);
+    // OpenAI形式のメッセージ配列を構築（v1.0変更 - 添付ファイル対応）
+    const messages = _buildMessages(userMessage, systemPrompt, history, options.attachment);
 
     // リクエストボディ
     const body = {
@@ -72,17 +72,15 @@ const ApiOpenAI = (() => {
   }
 
   /**
-   * OpenAI形式のメッセージ配列を構築
+   * OpenAI形式のメッセージ配列を構築（v1.0変更 - 添付ファイル対応）
    */
-  function _buildMessages(userMessage, systemPrompt, history) {
+  function _buildMessages(userMessage, systemPrompt, history, attachment) {
     const messages = [];
 
-    // システムプロンプト
     if (systemPrompt) {
       messages.push({ role: 'system', content: systemPrompt });
     }
 
-    // 会話履歴（直近10ターン = 20メッセージ）
     const recentHistory = history.slice(-20);
     for (const msg of recentHistory) {
       messages.push({
@@ -91,8 +89,18 @@ const ApiOpenAI = (() => {
       });
     }
 
-    // 現在のユーザーメッセージ
-    messages.push({ role: 'user', content: userMessage });
+    // v1.0追加 - 添付ファイル対応
+    if (attachment && attachment.type === 'image') {
+      // OpenAI Vision形式（content配列）
+      messages.push({ role: 'user', content: [
+        { type: 'text', text: userMessage },
+        { type: 'image_url', image_url: { url: `data:${attachment.mimeType};base64,${attachment.content}` } },
+      ]});
+    } else if (attachment && attachment.type === 'text') {
+      messages.push({ role: 'user', content: `【添付ファイル: ${attachment.name}】\n${attachment.content}\n\n${userMessage}` });
+    } else {
+      messages.push({ role: 'user', content: userMessage });
+    }
 
     return messages;
   }

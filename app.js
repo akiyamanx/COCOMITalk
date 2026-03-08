@@ -1,16 +1,10 @@
 // COCOMITalk - アプリ初期化・画面管理
 // このファイルはアプリ全体の初期化、スプラッシュ画面、タブ切替、設定を管理する
-// v0.1 Session A - 基盤構築
-// v0.4 Session D - TokenMonitor初期化＋設定画面にトークン詳細
-// v0.7 Step 2完了 - 姉妹別モデルインジケーター表示
-// v0.8 Step 3 - モード切替ボタン＋会議画面連携
-// v0.9.5 設定画面リニューアル - 三姉妹×モード別モデル設定UI
+// v1.0 - 設定画面リニューアル＋ファイル入出力ボタン追加
 
 'use strict';
 
-/**
- * アプリケーションモジュール
- */
+/** アプリケーションモジュール */
 const App = (() => {
   // --- 三姉妹のCSS変数マッピング ---
   const SISTER_THEMES = {
@@ -36,9 +30,7 @@ const App = (() => {
 
   // v0.9.5 - 旧MODEL_NAMES＋SISTER_MODEL_NAMES削除（ModeSwitcher.getAvailableModels()に統合済み）
 
-  /**
-   * アプリ起動
-   */
+  // アプリ起動
   async function init() {
     // スプラッシュ画面の処理
     _handleSplash();
@@ -73,18 +65,19 @@ const App = (() => {
       MeetingUI.init();
     }
 
+    // v1.0追加 - ファイル入出力ボタン設定
+    _setupFileButtons();
+
     // 設定モーダル設定
     _setupSettings();
 
     // 保存済み設定を読み込み
     _loadSettings();
 
-    console.log('[App] COCOMITalk v0.9 起動完了');
+    console.log('[App] COCOMITalk v1.0 起動完了');
   }
 
-  /**
-   * スプラッシュ画面の制御
-   */
+  // スプラッシュ画面の制御
   function _handleSplash() {
     const splash = document.getElementById('splash-screen');
     const app = document.getElementById('app');
@@ -101,9 +94,7 @@ const App = (() => {
     }, 1500);
   }
 
-  /**
-   * 三姉妹タブの設定
-   */
+  // 三姉妹タブの設定
   function _setupTabs() {
     const tabs = document.querySelectorAll('.tab');
 
@@ -129,9 +120,7 @@ const App = (() => {
     });
   }
 
-  /**
-   * v0.8追加 - モード切替ボタンの設定
-   */
+  // v0.8追加 - モード切替ボタンの設定
   function _setupModeButton() {
     const modeBtn = document.getElementById('btn-mode');
     if (!modeBtn) return;
@@ -157,9 +146,7 @@ const App = (() => {
     });
   }
 
-  /**
-   * v0.9追加 - 人数切替ボタンの設定（👤⇔👥）
-   */
+  // v0.9追加 - 人数切替ボタンの設定（👤⇔👥）
   function _setupPeopleButton() {
     const peopleBtn = document.getElementById('btn-people');
     if (!peopleBtn) return;
@@ -198,9 +185,7 @@ const App = (() => {
     });
   }
 
-  /**
-   * v0.9.3追加 - 🔄姉妹だけで会話を続けるボタンの設定
-   */
+  // v0.9.3追加 - 🔄姉妹だけで会話を続けるボタンの設定
   function _setupContinueTalkButton() {
     const btn = document.getElementById('btn-continue-talk');
     if (!btn) return;
@@ -218,9 +203,7 @@ const App = (() => {
     });
   }
 
-  /**
-   * テーマカラーを適用
-   */
+  // テーマカラーを適用
   function _applyTheme(sisterKey) {
     const theme = SISTER_THEMES[sisterKey];
     if (!theme) return;
@@ -238,9 +221,7 @@ const App = (() => {
     }
   }
 
-  /**
-   * 設定モーダルの制御
-   */
+  // 設定モーダルの制御
   function _setupSettings() {
     const modal = document.getElementById('settings-modal');
     const btnOpen = document.getElementById('btn-settings');
@@ -359,9 +340,7 @@ const App = (() => {
     }
   }
 
-  /**
-   * v0.9.5新規 - モデル設定UIを動的に生成
-   */
+  // v0.9.5新規 - モデル設定UIを動的に生成
   function _buildModelSettingsUI() {
     const area = document.getElementById('model-settings-area');
     if (!area || typeof ModeSwitcher === 'undefined') return;
@@ -412,9 +391,7 @@ const App = (() => {
     return ModeSwitcher.DEFAULT_MODE_MODELS[mode]?.[sister];
   }
 
-  /**
-   * v0.9.5新規 - モデル設定をドロップダウンから読み取りModeSwitcherに反映
-   */
+  // v0.9.5新規 - モデル設定をドロップダウンから読み取りModeSwitcherに反映
   function _saveModelSettings() {
     if (typeof ModeSwitcher === 'undefined') return;
 
@@ -432,9 +409,7 @@ const App = (() => {
     });
   }
 
-  /**
-   * v0.9.5新規 - デフォルトリセット処理のセットアップ
-   */
+  // v0.9.5新規 - デフォルトリセット処理のセットアップ
   function _setupResetModels() {
     const btn = document.getElementById('btn-reset-models');
     if (!btn) return;
@@ -460,6 +435,45 @@ const App = (() => {
 
       console.log('[App] モデル設定をデフォルトにリセット');
     });
+  }
+
+  // v1.0新規 - 📎ファイル添付＋💾ダウンロードボタンの設定
+  function _setupFileButtons() {
+    if (typeof FileHandler === 'undefined') return;
+
+    // 📎ボタン → hidden file inputをクリック
+    const btnAttach = document.getElementById('btn-attach');
+    const fileInput = document.getElementById('file-input');
+    if (btnAttach && fileInput) {
+      btnAttach.addEventListener('click', () => fileInput.click());
+      fileInput.addEventListener('change', async (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        try {
+          const att = await FileHandler.readFile(file);
+          FileHandler.setAttachment(att);
+        } catch (err) {
+          alert(err.message);
+        }
+        fileInput.value = ''; // 同じファイルを再選択できるようにリセット
+      });
+    }
+
+    // 💾ボタン → 会話ログをダウンロード
+    const btnDownload = document.getElementById('btn-download');
+    if (btnDownload) {
+      btnDownload.addEventListener('click', () => {
+        if (typeof ChatCore === 'undefined') return;
+        const sister = ChatCore.getCurrentSister();
+        const history = ChatCore.getHistory(sister);
+        if (!history || history.length === 0) {
+          alert('まだ会話がないよ！');
+          return;
+        }
+        const sisterName = ChatCore.SISTERS[sister]?.name || sister;
+        FileHandler.downloadChat(history, `COCOMITalk_${sisterName}`);
+      });
+    }
   }
 
   // --- 公開API ---

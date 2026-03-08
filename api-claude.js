@@ -39,8 +39,8 @@ const ApiClaude = (() => {
     const modelKey = options.model || DEFAULT_MODEL;
     const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
 
-    // Anthropic形式のメッセージ配列を構築
-    const messages = _buildMessages(userMessage, history);
+    // Anthropic形式のメッセージ配列を構築（v1.0変更 - 添付ファイル対応）
+    const messages = _buildMessages(userMessage, history, options.attachment);
 
     // リクエストボディ（Anthropic形式: systemは別パラメータ）
     const body = {
@@ -79,13 +79,11 @@ const ApiClaude = (() => {
   }
 
   /**
-   * Anthropic形式のメッセージ配列を構築
-   * ※ systemプロンプトはbody.systemで渡すのでここには含めない
+   * Anthropic形式のメッセージ配列を構築（v1.0変更 - 添付ファイル対応）
    */
-  function _buildMessages(userMessage, history) {
+  function _buildMessages(userMessage, history, attachment) {
     const messages = [];
 
-    // 会話履歴（直近10ターン = 20メッセージ）
     const recentHistory = history.slice(-20);
     for (const msg of recentHistory) {
       messages.push({
@@ -94,8 +92,18 @@ const ApiClaude = (() => {
       });
     }
 
-    // 現在のユーザーメッセージ
-    messages.push({ role: 'user', content: userMessage });
+    // v1.0追加 - 添付ファイル対応
+    if (attachment && attachment.type === 'image') {
+      // Anthropic Vision形式（content配列）
+      messages.push({ role: 'user', content: [
+        { type: 'image', source: { type: 'base64', media_type: attachment.mimeType, data: attachment.content } },
+        { type: 'text', text: userMessage },
+      ]});
+    } else if (attachment && attachment.type === 'text') {
+      messages.push({ role: 'user', content: `【添付ファイル: ${attachment.name}】\n${attachment.content}\n\n${userMessage}` });
+    } else {
+      messages.push({ role: 'user', content: userMessage });
+    }
 
     return messages;
   }

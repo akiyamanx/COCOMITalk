@@ -46,8 +46,8 @@ const ApiGemini = (() => {
     const modelKey = options.model || DEFAULT_MODEL;
     const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
 
-    // リクエストボディ構築（従来と同じ）
-    const body = _buildRequestBody(userMessage, systemPrompt, history);
+    // リクエストボディ構築（v1.0変更 - 添付ファイル対応）
+    const body = _buildRequestBody(userMessage, systemPrompt, history, options.attachment);
 
     // v0.5追加 - Worker用にmodelフィールドを追加
     body.model = modelName;
@@ -74,10 +74,9 @@ const ApiGemini = (() => {
   }
 
   /**
-   * リクエストボディを構築（従来と同じ）
+   * リクエストボディを構築（v1.0変更 - 添付ファイル対応）
    */
-  function _buildRequestBody(userMessage, systemPrompt, history) {
-    // 会話履歴をGemini形式に変換
+  function _buildRequestBody(userMessage, systemPrompt, history, attachment) {
     const contents = [];
 
     // 履歴を追加（直近10ターン）
@@ -89,11 +88,22 @@ const ApiGemini = (() => {
       });
     }
 
-    // 現在のユーザーメッセージ
-    contents.push({
-      role: 'user',
-      parts: [{ text: userMessage }],
-    });
+    // 現在のユーザーメッセージ（v1.0変更 - 添付ファイル付き）
+    const userParts = [{ text: userMessage }];
+
+    if (attachment) {
+      if (attachment.type === 'text') {
+        // テキスト添付 → メッセージに追加
+        userParts.unshift({ text: `【添付ファイル: ${attachment.name}】\n${attachment.content}` });
+      } else if (attachment.type === 'image') {
+        // 画像添付 → inlineData形式（Geminiのマルチモーダル）
+        userParts.push({
+          inlineData: { mimeType: attachment.mimeType, data: attachment.content }
+        });
+      }
+    }
+
+    contents.push({ role: 'user', parts: userParts });
 
     const body = {
       contents,
