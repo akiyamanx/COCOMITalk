@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>COCOMITalk デバッグ</title>
+<style>
+  body { font-family: sans-serif; padding: 12px; background: #1a1a2e; color: #eee; font-size: 14px; }
+  h1 { font-size: 18px; color: #FF6B9D; }
+  .ok { color: #4CAF50; }
+  .err { color: #F44336; font-weight: bold; }
+  .warn { color: #FFC107; }
+  #log { white-space: pre-wrap; line-height: 1.6; }
+  button { margin: 8px 4px; padding: 10px 16px; border: none; border-radius: 8px;
+    background: #FF6B9D; color: #fff; font-size: 14px; cursor: pointer; }
+  button:active { opacity: 0.7; }
+</style>
+</head>
+<body>
+<h1>🔍 COCOMITalk デバッグ</h1>
+<div id="log"></div>
+<hr>
+<button onclick="testSettingsModal()">⚙️ 設定モーダルテスト</button>
+<button onclick="testIndexedDB()">💾 IndexedDB テスト</button>
+<button onclick="location.reload()">🔄 リロード</button>
+
+<script>
+const logEl = document.getElementById('log');
+function log(msg, type) {
+  const prefix = type === 'ok' ? '✅' : type === 'err' ? '❌' : type === 'warn' ? '⚠️' : '📝';
+  const cls = type || '';
+  logEl.innerHTML += `<span class="${cls}">${prefix} ${msg}</span>\n`;
+}
+
+// グローバルエラーキャッチ
+window.onerror = (msg, src, line, col, err) => {
+  const file = src ? src.split('/').pop() : '不明';
+  log(`JS実行エラー: ${msg}\n   ファイル: ${file} 行:${line}`, 'err');
+  return true;
+};
+window.addEventListener('unhandledrejection', (e) => {
+  log(`Promise未処理エラー: ${e.reason}`, 'err');
+});
+
+log('デバッグ開始...', 'ok');
+
+// 1. DOM要素チェック
+log('--- DOM要素チェック ---');
+const elements = {
+  'settings-modal': '設定モーダル',
+  'btn-settings': '⚙️ボタン',
+  'btn-close-settings': '設定閉じるボタン',
+  'btn-save-settings': '保存ボタン',
+  'meeting-screen': '会議画面',
+  'btn-meeting-end': '会議終了ボタン',
+  'meeting-archive': '会議一覧画面',
+  'app': 'メインアプリ',
+  'chat-area': 'チャットエリア',
+};
+for (const [id, name] of Object.entries(elements)) {
+  const el = document.getElementById(id);
+  if (el) {
+    log(`${name} (#${id}) → 見つかった`, 'ok');
+  } else {
+    log(`${name} (#${id}) → 見つからない！`, 'err');
+  }
+}
+
+// modal-overlay チェック
+const modal = document.getElementById('settings-modal');
+if (modal) {
+  const overlay = modal.querySelector('.modal-overlay');
+  if (overlay) {
+    log('modal-overlay → 見つかった', 'ok');
+  } else {
+    log('modal-overlay → 見つからない！（設定画面が開かない原因の可能性大）', 'err');
+  }
+}
+
+// 2. スクリプト読み込みチェック
+log('\n--- スクリプト読み込みチェック ---');
+const modules = {
+  'ChatHistory': typeof ChatHistory,
+  'TokenMonitor': typeof TokenMonitor,
+  'MeetingHistory': typeof MeetingHistory,
+  'MeetingRelay': typeof MeetingRelay,
+  'MeetingUI': typeof MeetingUI,
+  'MeetingArchiveUI': typeof MeetingArchiveUI,
+  'MeetingRouter': typeof MeetingRouter,
+  'ModeSwitcher': typeof ModeSwitcher,
+  'ChatCore': typeof ChatCore,
+  'ChatGroup': typeof ChatGroup,
+  'App': typeof App,
+  'ApiGemini': typeof ApiGemini,
+  'ApiOpenAI': typeof ApiOpenAI,
+  'ApiClaude': typeof ApiClaude,
+  'DocGenerator': typeof DocGenerator,
+  'FileHandler': typeof FileHandler,
+  'marked': typeof marked,
+};
+for (const [name, status] of Object.entries(modules)) {
+  if (status !== 'undefined') {
+    log(`${name} → 読み込み済み (${status})`, 'ok');
+  } else {
+    log(`${name} → 未読み込み！`, 'err');
+  }
+}
+
+// 設定モーダルテスト
+function testSettingsModal() {
+  log('\n--- 設定モーダル開閉テスト ---');
+  const m = document.getElementById('settings-modal');
+  if (!m) { log('settings-modal が存在しない', 'err'); return; }
+  log(`現在のclass: "${m.className}"`, 'warn');
+  const hasHidden = m.classList.contains('hidden');
+  log(`hidden状態: ${hasHidden}`, hasHidden ? 'ok' : 'warn');
+  
+  // hidden を外して開いてみる
+  m.classList.remove('hidden');
+  log('hiddenを外した → 表示されてる？', 'warn');
+  
+  setTimeout(() => {
+    // 3秒後に閉じる
+    m.classList.add('hidden');
+    log('3秒後に閉じた', 'ok');
+  }, 3000);
+}
+
+// IndexedDB テスト
+async function testIndexedDB() {
+  log('\n--- IndexedDB テスト ---');
+  try {
+    const request = indexedDB.open('cocomitalk-db', 3);
+    request.onupgradeneeded = (e) => {
+      log('DB アップグレード実行中（v3）', 'warn');
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('conversations')) {
+        db.createObjectStore('conversations', { keyPath: 'sisterKey' });
+      }
+      if (!db.objectStoreNames.contains('token_usage')) {
+        db.createObjectStore('token_usage', { keyPath: 'monthKey' });
+      }
+      if (!db.objectStoreNames.contains('meetings')) {
+        const s = db.createObjectStore('meetings', { keyPath: 'id' });
+        s.createIndex('by_date', 'date', { unique: false });
+      }
+    };
+    request.onsuccess = (e) => {
+      const db = e.target.result;
+      log(`DB接続成功！ version=${db.version}`, 'ok');
+      const stores = Array.from(db.objectStoreNames);
+      log(`ストア一覧: ${stores.join(', ')}`, 'ok');
+      db.close();
+    };
+    request.onerror = (e) => {
+      log(`DB接続エラー: ${e.target.error}`, 'err');
+    };
+    request.onblocked = (e) => {
+      log('DB blocked！他のタブがDBを掴んでる可能性あり', 'err');
+    };
+  } catch (e) {
+    log(`IndexedDB例外: ${e.message}`, 'err');
+  }
+}
+
+log('\n✨ チェック完了！上の結果をスクショしてクロちゃんに見せてね');
+</script>
+</body>
+</html>
