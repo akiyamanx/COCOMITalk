@@ -111,7 +111,8 @@ const ApiGemini = (() => {
         temperature: 0.85,
         topP: 0.95,
         topK: 40,
-        maxOutputTokens: 1024,
+        // v1.0変更 - モードに応じて出力上限を調整（dev/meetingは長い応答が必要）
+        maxOutputTokens: options.maxTokens || 1024,
       },
     };
 

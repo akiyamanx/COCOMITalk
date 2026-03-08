@@ -45,7 +45,8 @@ const ApiOpenAI = (() => {
       model: modelName,
       messages: messages,
       temperature: 0.5,
-      max_tokens: 1024,
+      // v1.0変更 - モードに応じて出力上限を調整
+      max_tokens: options.maxTokens || 1024,
     };
 
     try {

@@ -45,7 +45,8 @@ const ApiClaude = (() => {
     // リクエストボディ（Anthropic形式: systemは別パラメータ）
     const body = {
       model: modelName,
-      max_tokens: 1024,
+      // v1.0変更 - モードに応じて出力上限を調整
+      max_tokens: options.maxTokens || 1024,
       temperature: 0.3,
       messages: messages,
     };

@@ -196,9 +196,12 @@ const ChatCore = (() => {
         ? ModeSwitcher.getModelKey(currentSister)
         : undefined;
 
-      // v1.0追加 - 添付ファイルをoptionsに含める
+      // v1.0追加 - 添付ファイル＋モード連動maxTokens
       const opts = { model: modelKey };
       if (attachment) opts.attachment = attachment;
+      // dev/meetingモードは長い応答が必要（normalは1024で節約）
+      const mode = (typeof ModeSwitcher !== 'undefined') ? ModeSwitcher.getMode() : 'normal';
+      if (mode !== 'normal') opts.maxTokens = 2048;
 
       const reply = await apiModule.sendMessage(userText, systemPrompt, history, opts);
 
