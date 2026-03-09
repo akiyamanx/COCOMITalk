@@ -4,6 +4,8 @@
 // v1.0 Step 3.5 - MeetingHistory連携（リアルタイムIndexedDB保存）
 // v1.1 2026-03-09 - restoreFromDB()追加（セッション復元用）
 //                  - _buildMeetingContext()全ラウンド対応（ラウンド2以降のコンテキスト引継ぎ）
+// v1.2 2026-03-09 - ラウンド2以降に元議題＋フォローアップを両方渡すように修正
+//                  - originalTopic保持でcontinueRound時のコンテキスト欠落を解消
 
 'use strict';
 
@@ -49,6 +51,8 @@ const MeetingRelay = (() => {
   let abortRequested = false;
   // v1.0追加 - 現在の会議ID（MeetingHistory用）
   let currentMeetingId = null;
+  // v1.2追加 - 元の議題を保持（ラウンド2以降で参照）
+  let originalTopic = '';
 
   /**
    * 会議を開始する
@@ -66,6 +70,7 @@ const MeetingRelay = (() => {
     abortRequested = false;
     currentRound = 0;
     meetingHistory = [];
+    originalTopic = topic; // v1.2追加
 
     const order = routing.order;
     const lead = routing.lead;
@@ -270,7 +275,9 @@ const MeetingRelay = (() => {
       }
 
       try {
-        await _runRound(followUp, routing.order, routing.lead, nextRound);
+        // v1.2修正 - 元の議題＋フォローアップを組み合わせて渡す
+        const combinedTopic = `${originalTopic}\n\n【追加指示（ラウンド${nextRound}）】${followUp}`;
+        await _runRound(combinedTopic, routing.order, routing.lead, nextRound);
         // v1.0追加 - 追加ラウンド完了
         _updateMeetingStatus('completed');
         return { rounds: currentRound, history: meetingHistory };
@@ -352,10 +359,11 @@ const MeetingRelay = (() => {
     meetingHistory = (meeting.history || []).filter(m => m.sister !== 'user');
     currentMeetingId = meeting.id;
     currentRound = _detectMaxRound(meeting.history);
+    originalTopic = meeting.topic || ''; // v1.2追加
     isRunning = false;
     abortRequested = false;
 
-    console.log(`[MeetingRelay] 会議復元: ${meeting.id}, ラウンド${currentRound}, 発言${meetingHistory.length}件`);
+    console.log(`[MeetingRelay] 会議復元: ${meeting.id}, ラウンド${currentRound}, 発言${meetingHistory.length}件, 議題: ${originalTopic.slice(0, 30)}...`);
     return meeting.routing;
   }
 

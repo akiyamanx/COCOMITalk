@@ -2,8 +2,9 @@
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v0.3 Session C - PWA強化（キャッシュ更新＋オフライン画面）
 // v0.5 Step 3.5 - 会議系ファイル追加＋キャッシュバージョンアップ
+// v0.8 2026-03-09 - meeting-relay v1.2対応
 
-const CACHE_NAME = 'cocomitalk-v0.7';
+const CACHE_NAME = 'cocomitalk-v0.8';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
