@@ -216,58 +216,44 @@ const App = (() => {
     const btnClose = document.getElementById('btn-close-settings');
     const overlay = modal.querySelector('.modal-overlay');
     const btnSave = document.getElementById('btn-save-settings');
-
-    // 開く
-    btnOpen.addEventListener('click', async () => {
+    // モーダルを開く共通処理（通常画面・会議画面どちらからも使う）
+    const openModal = async () => {
       modal.classList.remove('hidden');
       _loadSettingsToForm();
       if (typeof TokenMonitor !== 'undefined') {
         const detailArea = document.getElementById('token-detail-area');
         if (detailArea) {
-          try {
-            detailArea.innerHTML = await TokenMonitor.getDetailReportHTML();
-          } catch (e) {
-            detailArea.innerHTML = '<p>データ読み込みエラー</p>';
-          }
+          try { detailArea.innerHTML = await TokenMonitor.getDetailReportHTML(); }
+          catch (e) { detailArea.innerHTML = '<p>データ読み込みエラー</p>'; }
         }
       }
-    });
-
-    // 閉じる
+    };
+    btnOpen.addEventListener('click', openModal);
+    // 会議ヘッダーの⚙️ボタンからも開く
+    const btnMS = document.getElementById('btn-meeting-settings');
+    if (btnMS) btnMS.addEventListener('click', openModal);
     const closeModal = () => modal.classList.add('hidden');
     btnClose.addEventListener('click', closeModal);
     overlay.addEventListener('click', closeModal);
-
-    // 保存
-    btnSave.addEventListener('click', () => {
-      _saveSettings();
-      closeModal();
-    });
-
-    // v0.3追加 - 履歴クリア
+    btnSave.addEventListener('click', () => { _saveSettings(); closeModal(); });
+    // 履歴クリア
     const btnClear = document.getElementById('btn-clear-history');
     if (btnClear) {
       btnClear.addEventListener('click', async () => {
         if (confirm('全ての会話履歴を削除しますか？\nこの操作は取り消せません。')) {
-          await ChatCore.clearHistory();
-          closeModal();
+          await ChatCore.clearHistory(); closeModal();
         }
       });
     }
-
-    // v0.4追加 - トークン使用量リセット
+    // トークン使用量リセット
     const btnClearTokens = document.getElementById('btn-clear-tokens');
     if (btnClearTokens) {
       btnClearTokens.addEventListener('click', async () => {
         if (confirm('トークン使用量データをリセットしますか？\nこの操作は取り消せません。')) {
-          if (typeof TokenMonitor !== 'undefined') {
-            await TokenMonitor.clearAll();
-          }
+          if (typeof TokenMonitor !== 'undefined') await TokenMonitor.clearAll();
         }
       });
     }
-
-    // v0.9.5追加 - モデル設定デフォルトリセットボタン
     _setupResetModels();
   }
 
@@ -276,7 +262,12 @@ const App = (() => {
     try {
       const saved = localStorage.getItem('cocomitalk-settings');
       if (!saved) return;
-      // 認証トークンはapi-common.jsが直接読む
+      const settings = JSON.parse(saved);
+      // v1.3追加 - 音声設定を起動時に反映
+      if (window.voiceController) {
+        window.voiceController.setAutoListen(!!settings.handsfree);
+        window.voiceController.setDebugVisible(!!settings.sttDebug);
+      }
       console.log('[App] 設定読み込み完了');
     } catch (e) {
       console.warn('[App] 設定読み込みエラー:', e);
@@ -293,6 +284,11 @@ const App = (() => {
         if (settings.geminiKey) {
           document.getElementById('key-gemini').value = settings.geminiKey;
         }
+        // v1.3追加 - 音声設定
+        const chkHandsfree = document.getElementById('chk-handsfree');
+        if (chkHandsfree) chkHandsfree.checked = !!settings.handsfree;
+        const chkDebug = document.getElementById('chk-stt-debug');
+        if (chkDebug) chkDebug.checked = !!settings.sttDebug;
       }
       // v0.9.5追加 - モデル設定UIを動的に生成
       _buildModelSettingsUI();
@@ -301,24 +297,25 @@ const App = (() => {
     }
   }
 
-  /**
-   * 設定を保存
-   * v0.9.5変更 - 認証トークンのみ＋モデル設定はModeSwitcher経由で別保存
-   */
+  // 設定を保存（認証トークン＋モデル設定＋音声設定）
   function _saveSettings() {
     try {
+      const chkH = document.getElementById('chk-handsfree');
+      const chkD = document.getElementById('chk-stt-debug');
       const settings = {
         geminiKey: document.getElementById('key-gemini').value.trim(),
+        handsfree: chkH ? chkH.checked : false,
+        sttDebug: chkD ? chkD.checked : false,
       };
       localStorage.setItem('cocomitalk-settings', JSON.stringify(settings));
-
-      // v0.9.5追加 - モデル設定を各ドロップダウンから読み取りModeSwitcherに反映
+      // 音声設定を即時反映
+      if (window.voiceController) {
+        window.voiceController.setAutoListen(settings.handsfree);
+        window.voiceController.setDebugVisible(settings.sttDebug);
+      }
       _saveModelSettings();
-
       console.log('[App] 設定保存完了');
-    } catch (e) {
-      console.error('[App] 設定保存エラー:', e);
-    }
+    } catch (e) { console.error('[App] 設定保存エラー:', e); }
   }
 
   // v0.9.5新規 - モデル設定UIを動的に生成

@@ -218,6 +218,15 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
   display: block; font-size: 13px;
   color: var(--text-secondary); margin-bottom: 4px;
 }
+/* v1.3追加 - トグル型設定（チェックボックス＋ラベル横並び） */
+.setting-toggle {
+  display: flex; align-items: center; gap: 8px;
+  cursor: pointer; font-size: 14px; color: var(--text-primary);
+}
+.setting-toggle input[type="checkbox"] {
+  width: 18px; height: 18px; accent-color: var(--active-primary);
+  cursor: pointer; flex-shrink: 0;
+}
 .setting-item input,
 .setting-item select {
   width: 100%; padding: 10px 12px; border: 1.5px solid var(--border);

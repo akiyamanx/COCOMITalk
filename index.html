@@ -105,6 +105,7 @@
         <button id="btn-meeting-archive" class="icon-btn" aria-label="過去の会議" title="過去の会議">📂</button>
         <button id="btn-meeting-minutes" class="icon-btn" aria-label="議事録DL" title="議事録DL" disabled>📝</button>
         <button id="btn-meeting-doc" class="icon-btn" aria-label="指示書生成" title="指示書生成" disabled>📋</button>
+        <button id="btn-meeting-settings" class="icon-btn" aria-label="設定" title="設定">⚙️</button>
         <button id="btn-meeting-end" class="icon-btn" aria-label="会議終了">✕</button>
       </div>
     </header>
@@ -154,6 +155,21 @@
           <button id="btn-reset-models" class="btn-secondary" style="margin-top:12px;">デフォルトに戻す</button>
         </section>
         <button id="btn-save-settings" class="btn-primary">保存する</button>
+        <section class="settings-section" style="margin-top:24px;">
+          <h3>🎤 音声設定</h3>
+          <div class="setting-item">
+            <label class="setting-toggle">
+              <input type="checkbox" id="chk-handsfree">
+              <span>ハンズフリーモード（声の再生後に自動でマイクON）</span>
+            </label>
+          </div>
+          <div class="setting-item">
+            <label class="setting-toggle">
+              <input type="checkbox" id="chk-stt-debug">
+              <span>STTデバッグパネル表示</span>
+            </label>
+          </div>
+        </section>
         <section class="settings-section" style="margin-top:24px;">
           <h3>🗑️ 会話履歴</h3>
           <button id="btn-clear-history" class="btn-danger">全ての会話履歴をクリア</button>

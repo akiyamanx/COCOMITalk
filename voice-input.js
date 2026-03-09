@@ -235,6 +235,25 @@ class VoiceController {
   /** 音声速度を設定（0.75〜1.25） */
   setSpeed(speed) { this._speed = Math.max(0.75, Math.min(1.25, speed)); }
 
+  /**
+   * v1.2追加 - ハンズフリーモード切替（設定画面から呼ばれる）
+   * @param {boolean} enabled - true=TTS完了後に自動マイク再開
+   */
+  setAutoListen(enabled) {
+    this._autoListen = !!enabled;
+    console.log(`[Voice] ハンズフリー: ${this._autoListen ? 'ON' : 'OFF'}`);
+  }
+
+  /**
+   * v1.2追加 - STTデバッグパネル表示切替（設定画面から呼ばれる）
+   * @param {boolean} visible - true=デバッグパネル表示
+   */
+  setDebugVisible(visible) {
+    if (this._stt && typeof this._stt.setDebugVisible === 'function') {
+      this._stt.setDebugVisible(visible);
+    }
+  }
+
   /** 音声モードが有効かどうか */
   isEnabled() { return this._enabled; }
 

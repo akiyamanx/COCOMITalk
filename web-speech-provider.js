@@ -20,9 +20,10 @@ class WebSpeechProvider extends SpeechProvider {
     // v1.2追加 - デバッグ用カウンター
     this._resultCount = 0;
     this._finalReceived = false;
-    // v1.2追加 - 画面デバッグログ
+    // v1.2追加 - 画面デバッグログ（デフォルト非表示）
     this._debugEl = null;
     this._debugLogs = [];
+    this._debugVisible = false;
     this._initDebugUI();
     this._initRecognition();
   }
@@ -39,15 +40,14 @@ class WebSpeechProvider extends SpeechProvider {
     this._debugEl = el;
   }
 
-  // v1.2追加 - デバッグログを画面に追加
+  // v1.2追加 - デバッグログを画面に追加（_debugVisible=trueの時のみ表示）
   _debugLog(msg) {
     const ts = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const line = `[${ts}] ${msg}`;
     console.log(`[STT-DEBUG] ${msg}`);
     this._debugLogs.push(line);
-    // 最新20行だけ保持
     if (this._debugLogs.length > 20) this._debugLogs.shift();
-    if (this._debugEl) {
+    if (this._debugEl && this._debugVisible) {
       this._debugEl.style.display = 'block';
       this._debugEl.textContent = this._debugLogs.join('\n');
       this._debugEl.scrollTop = this._debugEl.scrollHeight;
@@ -213,6 +213,17 @@ class WebSpeechProvider extends SpeechProvider {
     if (this._debugEl) {
       const isVisible = this._debugEl.style.display !== 'none';
       this._debugEl.style.display = isVisible ? 'none' : 'block';
+    }
+  }
+
+  /** v1.2追加 - デバッグパネルの表示/非表示を設定（設定画面から呼ばれる） */
+  setDebugVisible(visible) {
+    this._debugVisible = !!visible;
+    if (this._debugEl) {
+      // 非表示設定の場合はパネルを消す、表示設定の場合はログがあれば表示
+      if (!visible) {
+        this._debugEl.style.display = 'none';
+      }
     }
   }
 }
