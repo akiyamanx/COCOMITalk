@@ -1,10 +1,11 @@
-// voice-output.js v1.1
+// voice-output.js v1.2
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
-// openai-tts-provider.jsと連携してAI応答を声で再生する
+// openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
 
 // v1.0 新規作成 - Step 5b TTS再生管理
 // v1.1 追加 - キュー再生機能（グループモード3人全員対応）
+// v1.2 追加 - プロバイダー切替対応（OpenAI / VOICEVOX）
 
 /**
  * AudioPlaybackManager
@@ -19,7 +20,12 @@
 class AudioPlaybackManager {
   constructor() {
     // TTSプロバイダー（差し替え可能）
-    this._ttsProvider = new OpenAITTSProvider();
+    this._openaiProvider = new OpenAITTSProvider();
+    // v1.2追加 - VOICEVOXプロバイダー（利用可能ならインスタンス化）
+    this._voicevoxProvider = (typeof VoicevoxTTSProvider !== 'undefined')
+      ? new VoicevoxTTSProvider() : null;
+    // 現在のプロバイダー参照
+    this._ttsProvider = this._openaiProvider;
     // 現在再生中のAudioオブジェクト
     this._currentAudio = null;
     // 再生状態
@@ -34,6 +40,24 @@ class AudioPlaybackManager {
     this.onPlayError = null;   // (error, sisterId) => {}
     // v1.1追加 - キュー全体完了コールバック
     this.onQueueEnd = null;    // () => {}
+  }
+
+  /**
+   * v1.2追加 - TTSプロバイダーを切り替える
+   * @param {string} providerName - 'openai' | 'voicevox'
+   */
+  switchProvider(providerName) {
+    if (providerName === 'voicevox' && this._voicevoxProvider) {
+      this._ttsProvider = this._voicevoxProvider;
+      console.log('[AudioPM] プロバイダー切替: VOICEVOX');
+    } else {
+      this._ttsProvider = this._openaiProvider;
+      if (providerName === 'voicevox') {
+        console.warn('[AudioPM] VOICEVOXプロバイダー未読み込み、OpenAIにフォールバック');
+      } else {
+        console.log('[AudioPM] プロバイダー切替: OpenAI');
+      }
+    }
   }
 
   /**

@@ -7,7 +7,7 @@
 // v1.0 2026-03-09 - Step 5b 音声会話モジュール7ファイル追加
 // v1.1 2026-03-09 - STTデバッグ＋キュー再生対応
 
-const CACHE_NAME = 'cocomitalk-v1.9';
+const CACHE_NAME = 'cocomitalk-v2.0';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -34,6 +34,7 @@ const CACHE_FILES = [
   './file-handler.js',
   './tts-provider.js',
   './openai-tts-provider.js',
+  './voicevox-tts-provider.js',
   './speech-provider.js',
   './web-speech-provider.js',
   './voice-output.js',

@@ -2,42 +2,21 @@
 // このファイルはアプリ全体の初期化、スプラッシュ画面、タブ切替、設定を管理する
 // v1.0～v1.2 設定画面/MeetingHistory初期化/会議自動復元
 // v1.3 2026-03-09 - 音声コントローラー初期化＋姉妹タブ連動（Step 5b）
+// v1.5 2026-03-09 - TTS プロバイダー切替（OpenAI/VOICEVOX）対応
 'use strict';
-
 /** アプリケーションモジュール */
 const App = (() => {
-  // --- 三姉妹のCSS変数マッピング ---
-  const SISTER_THEMES = {
-    koko: {
-      '--active-primary': 'var(--koko-primary)',
-      '--active-light': 'var(--koko-light)',
-      '--active-dark': 'var(--koko-dark)',
-      '--active-bg': 'var(--koko-bg)',
-    },
-    gpt: {
-      '--active-primary': 'var(--gpt-primary)',
-      '--active-light': 'var(--gpt-light)',
-      '--active-dark': 'var(--gpt-dark)',
-      '--active-bg': 'var(--gpt-bg)',
-    },
-    claude: {
-      '--active-primary': 'var(--claude-primary)',
-      '--active-light': 'var(--claude-light)',
-      '--active-dark': 'var(--claude-dark)',
-      '--active-bg': 'var(--claude-bg)',
-    }
-  };
-
+  // 三姉妹のCSS変数マッピング
+  const _theme = (k) => ({ '--active-primary': `var(--${k}-primary)`, '--active-light': `var(--${k}-light)`, '--active-dark': `var(--${k}-dark)`, '--active-bg': `var(--${k}-bg)` });
+  const SISTER_THEMES = { koko: _theme('koko'), gpt: _theme('gpt'), claude: _theme('claude') };
   // アプリ起動
   async function init() {
     _handleSplash();
-
     // TokenMonitor初期化
     if (typeof TokenMonitor !== 'undefined') {
       try { await TokenMonitor.init(); await TokenMonitor.loadAndDisplay(); }
       catch (e) { console.warn('[App] TokenMonitor初期化エラー:', e); }
     }
-
     // MeetingHistory初期化（TokenMonitorのDB接続を共有してblocked防止）
     if (typeof MeetingHistory !== 'undefined') {
       try {
@@ -47,7 +26,6 @@ const App = (() => {
         await MeetingHistory.trimOldMeetings();
       } catch (e) { console.warn('[App] MeetingHistory初期化エラー:', e); }
     }
-
     ChatCore.init();
     _setupTabs();
     _setupModeButton();
@@ -70,14 +48,12 @@ const App = (() => {
     _loadSettings();
     console.log('[App] COCOMITalk v1.0 起動完了');
   }
-
   // スプラッシュ画面の制御
   function _handleSplash() {
     const splash = document.getElementById('splash-screen');
     const app = document.getElementById('app');
     setTimeout(() => {
       splash.classList.add('fade-out');
-
       // フェードアウト完了後にアプリ表示
       setTimeout(() => {
         splash.classList.add('hidden');
@@ -85,7 +61,6 @@ const App = (() => {
       }, 400);
     }, 1500);
   }
-
   // 三姉妹タブの設定
   function _setupTabs() {
     const tabs = document.querySelectorAll('.tab');
@@ -236,6 +211,11 @@ const App = (() => {
     btnClose.addEventListener('click', closeModal);
     overlay.addEventListener('click', closeModal);
     btnSave.addEventListener('click', () => { _saveSettings(); closeModal(); });
+    // v1.5追加 - TTSプロバイダー切替時にAPIキー入力欄の表示を切替
+    const selTTS = document.getElementById('sel-tts-provider');
+    if (selTTS) {
+      selTTS.addEventListener('change', () => _toggleVVKeyUI(selTTS.value));
+    }
     // 履歴クリア
     const btnClear = document.getElementById('btn-clear-history');
     if (btnClear) {
@@ -268,6 +248,8 @@ const App = (() => {
         window.voiceController.setAutoListen(!!settings.handsfree);
         window.voiceController.setDebugVisible(!!settings.sttDebug);
       }
+      // v1.5追加 - TTSプロバイダー設定を起動時に反映
+      _applyTTSProvider(settings.ttsProvider || 'openai', settings.vvApiKey || '');
       console.log('[App] 設定読み込み完了');
     } catch (e) {
       console.warn('[App] 設定読み込みエラー:', e);
@@ -289,6 +271,14 @@ const App = (() => {
         if (chkHandsfree) chkHandsfree.checked = !!settings.handsfree;
         const chkDebug = document.getElementById('chk-stt-debug');
         if (chkDebug) chkDebug.checked = !!settings.sttDebug;
+        // v1.5追加 - TTSプロバイダー設定
+        const selTTS = document.getElementById('sel-tts-provider');
+        if (selTTS) {
+          selTTS.value = settings.ttsProvider || 'openai';
+          _toggleVVKeyUI(selTTS.value);
+        }
+        const vvKey = document.getElementById('vv-api-key-main');
+        if (vvKey && settings.vvApiKey) vvKey.value = settings.vvApiKey;
       }
       // v0.9.5追加 - モデル設定UIを動的に生成
       _buildModelSettingsUI();
@@ -297,15 +287,20 @@ const App = (() => {
     }
   }
 
-  // 設定を保存（認証トークン＋モデル設定＋音声設定）
+  // 設定を保存（認証トークン＋モデル設定＋音声設定＋TTS切替）
   function _saveSettings() {
     try {
       const chkH = document.getElementById('chk-handsfree');
       const chkD = document.getElementById('chk-stt-debug');
+      const selTTS = document.getElementById('sel-tts-provider');
+      const vvKey = document.getElementById('vv-api-key-main');
       const settings = {
         geminiKey: document.getElementById('key-gemini').value.trim(),
         handsfree: chkH ? chkH.checked : false,
         sttDebug: chkD ? chkD.checked : false,
+        // v1.5追加 - TTSプロバイダー設定
+        ttsProvider: selTTS ? selTTS.value : 'openai',
+        vvApiKey: vvKey ? vvKey.value.trim() : '',
       };
       localStorage.setItem('cocomitalk-settings', JSON.stringify(settings));
       // 音声設定を即時反映
@@ -313,9 +308,29 @@ const App = (() => {
         window.voiceController.setAutoListen(settings.handsfree);
         window.voiceController.setDebugVisible(settings.sttDebug);
       }
+      // v1.5追加 - TTSプロバイダー切替を即時反映
+      _applyTTSProvider(settings.ttsProvider, settings.vvApiKey);
       _saveModelSettings();
       console.log('[App] 設定保存完了');
     } catch (e) { console.error('[App] 設定保存エラー:', e); }
+  }
+
+  // v1.5追加 - TTSプロバイダーを実際に切り替える
+  function _applyTTSProvider(providerName, vvApiKey) {
+    if (typeof setTTSProviderName === 'function') setTTSProviderName(providerName);
+    const pm = window.voiceController && window.voiceController._playbackManager;
+    if (pm) {
+      pm.switchProvider(providerName);
+      if (providerName === 'voicevox' && vvApiKey && pm._voicevoxProvider) {
+        pm._voicevoxProvider.setApiKey(vvApiKey);
+      }
+    }
+  }
+
+  // v1.5追加 - VOICEVOX APIキー入力欄の表示切替
+  function _toggleVVKeyUI(providerName) {
+    const el = document.getElementById('vv-key-setting');
+    if (el) el.style.display = (providerName === 'voicevox') ? 'block' : 'none';
   }
 
   // v0.9.5新規 - モデル設定UIを動的に生成
@@ -353,11 +368,7 @@ const App = (() => {
     area.innerHTML = html;
   }
 
-  /**
-   * v0.9.5新規 - 指定モード×姉妹のモデルキーを取得（設定画面用）
-   * ModeSwitcher.getModelKey()は現在のモードしか見れないので、
-   * LocalStorageのカスタム設定 or デフォルトから直接取得
-   */
+  // v0.9.5新規 - 指定モード×姉妹のモデルキーを取得（LS or デフォルト）
   function _getModelKeyForMode(mode, sister) {
     try {
       const saved = localStorage.getItem('cocomitalk-custom-models');
@@ -372,7 +383,6 @@ const App = (() => {
   // v0.9.5新規 - モデル設定をドロップダウンから読み取りModeSwitcherに反映
   function _saveModelSettings() {
     if (typeof ModeSwitcher === 'undefined') return;
-
     const modes = ModeSwitcher.getModes();
     modes.forEach(mode => {
       const models = {};
@@ -380,7 +390,6 @@ const App = (() => {
         const select = document.getElementById(`model-${mode}-${sister}`);
         if (select) models[sister] = select.value;
       });
-      // 3つとも取得できた場合のみ保存
       if (models.koko && models.gpt && models.claude) {
         ModeSwitcher.setCustomModels(mode, models);
       }
@@ -403,17 +412,13 @@ const App = (() => {
     });
   }
 
-  /**
-   * v1.2追加 - 進行中の会議をIndexedDBから復元
-   */
+  // v1.2追加 - 進行中の会議をIndexedDBから復元
   async function _restoreActiveMeeting() {
     if (typeof MeetingHistory === 'undefined' || typeof MeetingRelay === 'undefined' || typeof MeetingUI === 'undefined') return;
     try {
       const meetings = await MeetingHistory.getAllMeetings();
-      // 最新の「in_progress」会議を探す
       const active = meetings.find(m => m.status === 'in_progress');
       if (!active) {
-        // in_progressがなければ、直近1時間以内のcompleted会議を復元候補にする
         const oneHourAgo = Date.now() - (60 * 60 * 1000);
         const recent = meetings.find(m => m.status === 'completed' && new Date(m.date).getTime() > oneHourAgo);
         if (!recent) return;
@@ -426,7 +431,7 @@ const App = (() => {
     }
   }
 
-  /** v1.2追加 - 会議復元の実行 */
+  // v1.2追加 - 会議復元の実行
   function _doRestore(meeting) {
     const routing = MeetingRelay.restoreFromDB(meeting);
     if (!routing) return;
@@ -485,7 +490,6 @@ const App = (() => {
 
 // DOMContentLoaded で起動
 document.addEventListener('DOMContentLoaded', () => App.init());
-
 // Service Worker登録
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {

@@ -1,7 +1,8 @@
 <!DOCTYPE html>
 <!-- COCOMITalk - TTS声聴き比べテストツール -->
-<!-- このファイルはOpenAI TTSの6声を日本語で聞き比べて、三姉妹への声割り当てを確定する -->
+<!-- このファイルはOpenAI TTSとVOICEVOX(tts.quest)の声を聞き比べて、三姉妹への声割り当てを確定する -->
 <!-- v1.0 2026-03-09 Step 5a -->
+<!-- v1.1 2026-03-09 VOICEVOX試聴セクション追加 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
@@ -107,6 +108,38 @@
   .status-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px; font-size: 0.8em; color: var(--dim); text-align: center; }
   .status-bar.error { color: #ff6b6b; }
   .status-bar.success { color: var(--accent); }
+
+  /* v1.1追加 - VOICEVOX試聴セクション */
+  .vv-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .vv-section h3 { font-size: 0.9em; color: var(--dim); margin-bottom: 8px; }
+  .vv-section .vv-note { font-size: 0.75em; color: var(--dim); margin-bottom: 12px; line-height: 1.5; }
+  .vv-api-key-row { display: flex; gap: 8px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }
+  .vv-api-key-row label { font-size: 0.85em; min-width: 60px; color: var(--dim); }
+  .vv-api-key-row input { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px; font-size: 0.85em; }
+  .vv-candidates { margin-bottom: 16px; }
+  .vv-candidates h4 { font-size: 0.85em; color: var(--accent); margin-bottom: 8px; }
+  .vv-char-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .vv-char-btn { padding: 10px; border-radius: 8px; border: 2px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.8em; cursor: pointer; transition: all 0.2s; text-align: left; display: flex; flex-direction: column; gap: 2px; }
+  .vv-char-btn:hover { border-color: var(--accent); }
+  .vv-char-btn.playing { border-color: var(--accent); background: rgba(0, 212, 170, 0.1); }
+  .vv-char-btn .vv-name { font-weight: bold; font-size: 0.85em; }
+  .vv-char-btn .vv-style { font-size: 0.7em; color: var(--dim); }
+  .vv-char-btn .vv-lat { font-size: 0.7em; color: var(--accent); margin-top: 2px; }
+  .vv-assign-card { background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px; margin-bottom: 8px; }
+  .vv-assign-header { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .vv-assign-avatar { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1em; }
+  .vv-assign-name { font-size: 0.85em; font-weight: bold; }
+  .vv-assign-select { width: 100%; background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px; font-size: 0.8em; }
+  .vv-btn-row { display: flex; gap: 8px; margin-top: 8px; }
+  .vv-play-btn { flex: 1; padding: 8px; border-radius: 8px; border: none; font-size: 0.8em; cursor: pointer; color: #fff; transition: all 0.2s; }
+  .vv-play-btn:disabled { opacity: 0.5; }
+  .vv-all-btn { margin-top: 12px; width: 100%; padding: 10px; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); font-size: 0.85em; cursor: pointer; transition: all 0.2s; }
+  .vv-all-btn:hover { background: rgba(0, 212, 170, 0.1); }
+  .vv-speaker-list { margin-top: 12px; }
+  .vv-speaker-list h4 { font-size: 0.85em; color: var(--dim); margin-bottom: 8px; }
+  .vv-load-btn { padding: 8px 16px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.8em; cursor: pointer; margin-bottom: 10px; }
+  .vv-load-btn:hover { border-color: var(--accent); }
+  .vv-full-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 6px; max-height: 300px; overflow-y: auto; }
 </style>
 </head>
 <body>
@@ -229,177 +262,165 @@
   </div>
 </div>
 
+<!-- v1.1追加 - VOICEVOX試聴セクション -->
+<div class="vv-section">
+  <h3>🎀 VOICEVOX 声テスト（tts.quest API）</h3>
+  <p class="vv-note">
+    VOICEVOXの可愛い日本語ボイスを試聴できるよ！<br>
+    APIキーなしでも使える（低速モード）。高速にしたい場合はAPIキーを入力してね。<br>
+    ※Worker不要（フロントから直接アクセス）
+  </p>
+  <div class="vv-api-key-row">
+    <label>APIキー</label>
+    <input type="text" id="vv-api-key" placeholder="(なしでもOK・低速モード)">
+  </div>
+
+  <!-- 三姉妹候補キャラ（厳選） -->
+  <div class="vv-candidates">
+    <h4>🌸 ここちゃん候補（可愛い・元気系）</h4>
+    <div class="vv-char-grid">
+      <button class="vv-char-btn" onclick="playVV(3, this)">
+        <span class="vv-name">ずんだもん（ノーマル）</span>
+        <span class="vv-style">ID:3 — 定番の可愛い声</span>
+        <span class="vv-lat" id="vvlat-3"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(1, this)">
+        <span class="vv-name">ずんだもん（あまあま）</span>
+        <span class="vv-style">ID:1 — 甘え上手な声</span>
+        <span class="vv-lat" id="vvlat-1"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(22, this)">
+        <span class="vv-name">春日部つむぎ</span>
+        <span class="vv-style">ID:22 — 明るく元気</span>
+        <span class="vv-lat" id="vvlat-22"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(10, this)">
+        <span class="vv-name">ナースロボ＿タイプＴ（ノーマル）</span>
+        <span class="vv-style">ID:10 — 優しく穏やか</span>
+        <span class="vv-lat" id="vvlat-10"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="vv-candidates">
+    <h4>🌙 お姉ちゃん候補（知的・落ち着き系）</h4>
+    <div class="vv-char-grid">
+      <button class="vv-char-btn" onclick="playVV(2, this)">
+        <span class="vv-name">四国めたん（ノーマル）</span>
+        <span class="vv-style">ID:2 — 落ち着いた大人声</span>
+        <span class="vv-lat" id="vvlat-2"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(4, this)">
+        <span class="vv-name">四国めたん（セクシー）</span>
+        <span class="vv-style">ID:4 — 大人っぽい声</span>
+        <span class="vv-lat" id="vvlat-4"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(16, this)">
+        <span class="vv-name">九州そら（ノーマル）</span>
+        <span class="vv-style">ID:16 — 知的で清楚</span>
+        <span class="vv-lat" id="vvlat-16"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(14, this)">
+        <span class="vv-name">冥鳴ひまり</span>
+        <span class="vv-style">ID:14 — 落ち着いた優しい声</span>
+        <span class="vv-lat" id="vvlat-14"></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="vv-candidates">
+    <h4>🔮 クロちゃん候補（クール・個性的系）</h4>
+    <div class="vv-char-grid">
+      <button class="vv-char-btn" onclick="playVV(0, this)">
+        <span class="vv-name">四国めたん（あまあま）</span>
+        <span class="vv-style">ID:0 — 甘めのお姉さん声</span>
+        <span class="vv-lat" id="vvlat-0"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(6, this)">
+        <span class="vv-name">ずんだもん（ツンツン）</span>
+        <span class="vv-style">ID:6 — ツンデレ系</span>
+        <span class="vv-lat" id="vvlat-6"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(23, this)">
+        <span class="vv-name">猫使アル（ノーマル）</span>
+        <span class="vv-style">ID:23 — ミステリアス系</span>
+        <span class="vv-lat" id="vvlat-23"></span>
+      </button>
+      <button class="vv-char-btn" onclick="playVV(46, this)">
+        <span class="vv-name">WhiteCUL（ノーマル）</span>
+        <span class="vv-style">ID:46 — クールで知的</span>
+        <span class="vv-lat" id="vvlat-46"></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- 三姉妹割り当てテスト -->
+  <div style="margin-top:16px;">
+    <h4 style="font-size:0.85em; color:var(--accent); margin-bottom:8px;">✨ 三姉妹割り当てテスト</h4>
+    <p class="vv-note">好みのキャラを選んで割り当て、三姉妹まとめて聴いてみよう！</p>
+
+    <div class="vv-assign-card">
+      <div class="vv-assign-header">
+        <div class="vv-assign-avatar" style="background:var(--koko)">🌸</div>
+        <span class="vv-assign-name">ここちゃん</span>
+      </div>
+      <select class="vv-assign-select" id="vv-assign-koko">
+        <option value="3">ずんだもん（ノーマル）ID:3</option>
+        <option value="1">ずんだもん（あまあま）ID:1</option>
+        <option value="22">春日部つむぎ ID:22</option>
+        <option value="10">ナースロボ＿タイプＴ ID:10</option>
+      </select>
+      <div class="vv-btn-row">
+        <button class="vv-play-btn" style="background:var(--koko)" onclick="playVVAssign('koko')">▶ テスト</button>
+      </div>
+    </div>
+
+    <div class="vv-assign-card">
+      <div class="vv-assign-header">
+        <div class="vv-assign-avatar" style="background:var(--gpt)">🌙</div>
+        <span class="vv-assign-name">お姉ちゃん</span>
+      </div>
+      <select class="vv-assign-select" id="vv-assign-gpt">
+        <option value="2">四国めたん（ノーマル）ID:2</option>
+        <option value="4">四国めたん（セクシー）ID:4</option>
+        <option value="16">九州そら（ノーマル）ID:16</option>
+        <option value="14">冥鳴ひまり ID:14</option>
+      </select>
+      <div class="vv-btn-row">
+        <button class="vv-play-btn" style="background:var(--gpt)" onclick="playVVAssign('gpt')">▶ テスト</button>
+      </div>
+    </div>
+
+    <div class="vv-assign-card">
+      <div class="vv-assign-header">
+        <div class="vv-assign-avatar" style="background:var(--claude)">🔮</div>
+        <span class="vv-assign-name">クロちゃん</span>
+      </div>
+      <select class="vv-assign-select" id="vv-assign-claude">
+        <option value="0">四国めたん（あまあま）ID:0</option>
+        <option value="6">ずんだもん（ツンツン）ID:6</option>
+        <option value="23">猫使アル（ノーマル）ID:23</option>
+        <option value="46">WhiteCUL（ノーマル）ID:46</option>
+      </select>
+      <div class="vv-btn-row">
+        <button class="vv-play-btn" style="background:var(--claude)" onclick="playVVAssign('claude')">▶ テスト</button>
+      </div>
+    </div>
+
+    <button class="vv-all-btn" onclick="playVVAllSisters()">🎵 三姉妹まとめて聴く（順番に再生）</button>
+  </div>
+
+  <!-- 全話者リスト（APIから取得） -->
+  <div class="vv-speaker-list">
+    <h4>📋 全話者リスト</h4>
+    <button class="vv-load-btn" onclick="loadVVSpeakers()">話者一覧を取得</button>
+    <div class="vv-full-list" id="vv-full-list"></div>
+  </div>
+</div>
+
 <!-- ステータスバー -->
 <div class="status-bar" id="status">設定を入力して声をテストしてね</div>
 
-<script>
-// v1.0 - TTS声テストツール スクリプト
-'use strict';
-
-// 状態管理
-let currentAudio = null;
-let isPlaying = false;
-
-// 設定の保存・復元（LocalStorage）
-const LS_KEY = 'cocomi-tts-test';
-
-// 初期化
-document.addEventListener('DOMContentLoaded', () => {
-  // 保存済み設定を復元
-  try {
-    const saved = localStorage.getItem(LS_KEY);
-    if (saved) {
-      const cfg = JSON.parse(saved);
-      if (cfg.workerUrl) document.getElementById('worker-url').value = cfg.workerUrl;
-      if (cfg.authToken) document.getElementById('auth-token').value = cfg.authToken;
-      if (cfg.speed) {
-        document.getElementById('speed').value = cfg.speed;
-        document.getElementById('speed-val').textContent = cfg.speed;
-      }
-    }
-  } catch (e) { /* 初回は無視 */ }
-
-  // スピードスライダー
-  document.getElementById('speed').addEventListener('input', (e) => {
-    document.getElementById('speed-val').textContent = e.target.value;
-  });
-
-  // プリセットボタン
-  document.querySelectorAll('.preset-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-      document.getElementById('tts-text').value = btn.dataset.text;
-    });
-  });
-
-  // 設定変更時に自動保存
-  ['worker-url', 'auth-token', 'speed'].forEach(id => {
-    document.getElementById(id).addEventListener('change', saveConfig);
-  });
-});
-
-// 設定をLocalStorageに保存
-function saveConfig() {
-  try {
-    const cfg = {
-      workerUrl: document.getElementById('worker-url').value.trim(),
-      authToken: document.getElementById('auth-token').value.trim(),
-      speed: document.getElementById('speed').value,
-    };
-    localStorage.setItem(LS_KEY, JSON.stringify(cfg));
-  } catch (e) { /* 無視 */ }
-}
-
-// 音声を再生
-async function playVoice(voice, btnEl) {
-  const workerUrl = document.getElementById('worker-url').value.trim();
-  const authToken = document.getElementById('auth-token').value.trim();
-  const text = document.getElementById('tts-text').value.trim();
-  const speed = parseFloat(document.getElementById('speed').value);
-
-  // バリデーション
-  if (!workerUrl) { setStatus('Worker URLを入力してね', 'error'); return; }
-  if (!authToken) { setStatus('認証トークンを入力してね', 'error'); return; }
-  if (!text) { setStatus('テキストを入力してね', 'error'); return; }
-  if (text.length > 500) { setStatus('テキストは500文字以内にしてね', 'error'); return; }
-
-  // 再生中なら停止
-  stopAll();
-
-  // UI更新
-  setStatus(`${voice} を生成中...`, '');
-  if (btnEl) btnEl.disabled = true;
-
-  const startTime = performance.now();
-
-  try {
-    // Worker経由でTTS API呼び出し
-    const endpoint = `${workerUrl.replace(/\/+$/, '')}/tts-test`;
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-COCOMI-AUTH': authToken,
-      },
-      body: JSON.stringify({ text, voice, speed, model: 'tts-1' }),
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      let errMsg;
-      try { errMsg = JSON.parse(errText).error; } catch { errMsg = errText; }
-      throw new Error(errMsg || `HTTP ${res.status}`);
-    }
-
-    // 音声バイナリを取得
-    const audioBlob = await res.blob();
-    const audioUrl = URL.createObjectURL(audioBlob);
-
-    // レイテンシ計算
-    const latency = Math.round(performance.now() - startTime);
-    updateLatency(voice, latency);
-
-    // 再生
-    currentAudio = new Audio(audioUrl);
-    isPlaying = true;
-
-    // カードのハイライト
-    const card = document.getElementById(`card-${voice}`);
-    if (card) card.classList.add('playing');
-
-    // ボタンのハイライト（全voice比較用）
-    document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('playing'));
-    if (btnEl && btnEl.classList.contains('voice-btn')) btnEl.classList.add('playing');
-
-    currentAudio.addEventListener('ended', () => {
-      isPlaying = false;
-      if (card) card.classList.remove('playing');
-      document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('playing'));
-      setStatus(`${voice} 再生完了 (${latency}ms)`, 'success');
-      URL.revokeObjectURL(audioUrl);
-    });
-
-    currentAudio.addEventListener('error', () => {
-      setStatus('音声の再生に失敗しました', 'error');
-    });
-
-    await currentAudio.play();
-    setStatus(`${voice} 再生中... (${latency}ms)`, 'success');
-
-  } catch (err) {
-    setStatus(`エラー: ${err.message}`, 'error');
-  } finally {
-    if (btnEl) btnEl.disabled = false;
-  }
-}
-
-// 全停止
-function stopAll() {
-  if (currentAudio) {
-    currentAudio.pause();
-    currentAudio.currentTime = 0;
-    currentAudio = null;
-  }
-  isPlaying = false;
-  document.querySelectorAll('.sister-card').forEach(c => c.classList.remove('playing'));
-  document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('playing'));
-}
-
-// レイテンシ表示更新
-function updateLatency(voice, ms) {
-  const el1 = document.getElementById(`lat-${voice}`);
-  const el2 = document.getElementById(`lat2-${voice}`);
-  const text = `${ms}ms`;
-  if (el1) el1.textContent = text;
-  if (el2) el2.textContent = text;
-}
-
-// ステータスバー更新
-function setStatus(msg, type) {
-  const el = document.getElementById('status');
-  el.textContent = msg;
-  el.className = 'status-bar';
-  if (type) el.classList.add(type);
-}
-</script>
+<script src="tts-test.js"></script>
 </body>
 </html>
