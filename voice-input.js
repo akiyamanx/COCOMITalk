@@ -210,28 +210,33 @@ class VoiceController {
     console.log('[Voice] 音声モード初期化完了（会議マイク対応）');
   }
 
-  /** マイクボタン押下時の処理 */
+  /** マイクボタン押下時の処理 v1.3改修 - silenceTimer稼働中も停止対象 */
   toggleListening() {
-    if (this._stt.isListening()) {
-      // 認識中 → 停止して今あるテキストを即送信
+    // STT認識中 or 無音タイマー稼働中（＝送信待ち）→ 停止処理
+    if (this._stt.isListening() || this._silenceTimer !== null) {
       this._clearSilenceTimer();
       const text = (this._lastText || '').trim();
       this._stt.stop();
+      this._lastText = '';
       if (text) {
         this._sendVoiceMessage(text);
       } else {
-        this._ui.updateMicState('idle');
-        this._updateMeetingMicState('idle'); // v1.3修正
-        this._ui.hideInterim();
+        this._forceIdleState();
       }
     } else if (this._playback.isPlaying() || this._playback.isQueuePlaying()) {
       // 再生中（キュー含む）→ 割り込み停止
       this._playback.stop();
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle'); // v1.3修正
+      this._forceIdleState();
     } else {
       this.startListening();
     }
+  }
+
+  /** v1.3追加 - 全マイクUIを確実にidle状態に戻す */
+  _forceIdleState() {
+    this._ui.updateMicState('idle');
+    this._updateMeetingMicState('idle');
+    this._ui.hideInterim();
   }
 
   /** 音声認識を開始 */
