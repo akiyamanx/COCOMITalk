@@ -128,9 +128,20 @@ class VoicevoxTTSProvider extends TTSProvider {
       throw new Error('音声URLが取得できませんでした');
     }
 
-    // mp3StreamingUrlを優先（低遅延）
-    const audioUrl = data.mp3StreamingUrl || data.mp3DownloadUrl;
-    const audio = new Audio(audioUrl);
+    // mp3DownloadUrlを優先（全生成後に再生→途切れ防止）
+    // APIキーありなら生成も速いので待ち時間も短い
+    const audioUrl = data.mp3DownloadUrl || data.mp3StreamingUrl;
+
+    // 音声を全てダウンロードしてからAudioオブジェクトを生成（途切れ完全防止）
+    const audioRes = await fetch(audioUrl);
+    if (!audioRes.ok) throw new Error(`音声ダウンロード失敗: HTTP ${audioRes.status}`);
+    const audioBlob = await audioRes.blob();
+    const blobUrl = URL.createObjectURL(audioBlob);
+    const audio = new Audio(blobUrl);
+
+    // メモリリーク防止: 再生完了時にBlobURLを解放
+    audio.addEventListener('ended', () => URL.revokeObjectURL(blobUrl));
+    audio.addEventListener('error', () => URL.revokeObjectURL(blobUrl));
 
     const latency = Math.round(performance.now() - startTime);
     console.log(`[VOICEVOX] 生成完了: ${latency}ms, speaker=${speakerId}`);

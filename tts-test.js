@@ -250,8 +250,8 @@ async function _fetchVVAudio(speakerId, text) {
     throw new Error('音声URLが取得できませんでした');
   }
 
-  // mp3StreamingUrlを優先（低遅延）
-  const audioUrl = data.mp3StreamingUrl || data.mp3DownloadUrl;
+  // mp3DownloadUrlを優先（全生成後に再生→途切れ防止）
+  const audioUrl = data.mp3DownloadUrl || data.mp3StreamingUrl;
   return new Audio(audioUrl);
 }
 
