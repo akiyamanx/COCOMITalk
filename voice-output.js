@@ -40,6 +40,8 @@ class AudioPlaybackManager {
     this.onPlayError = null;   // (error, sisterId) => {}
     // v1.1追加 - キュー全体完了コールバック
     this.onQueueEnd = null;    // () => {}
+    // v1.3追加 - 再生速度（playbackRateで制御）
+    this._speed = 1.0;
   }
 
   /**
@@ -101,6 +103,9 @@ class AudioPlaybackManager {
       // 再生開始
       this._currentAudio = audio;
       this._playing = true;
+      // v1.3追加 - 再生速度をplaybackRateで反映（全エンジン共通）
+      this._speed = options.speed || 1.0;
+      audio.playbackRate = this._speed;
 
       // 再生開始通知（アイコン発光用）
       if (this.onPlayStart) this.onPlayStart(sisterId);
@@ -244,6 +249,9 @@ class AudioPlaybackManager {
 
         this._currentAudio = audio;
         this._playing = true;
+        // v1.3追加 - 再生速度
+        this._speed = options.speed || 1.0;
+        audio.playbackRate = this._speed;
         if (this.onPlayStart) this.onPlayStart(sisterId);
 
         // v1.2追加 - VOICEVOX長文分割: 残りチャンク
@@ -294,6 +302,7 @@ class AudioPlaybackManager {
         console.log(`[AudioPM] VVチャンク${i + 2}再生: "${chunks[i].substring(0, 20)}..."`);
         const audio = await provider.synthesizeChunk(chunks[i], speakerId, apiKey);
         this._currentAudio = audio;
+        audio.playbackRate = this._speed; // v1.3追加
         await new Promise((resolve) => {
           audio.addEventListener('ended', resolve);
           audio.addEventListener('error', resolve);
