@@ -195,12 +195,12 @@ const MeetingRelay = (() => {
       : undefined;
 
     // API呼び出し
-    // v0.9修正 - maxTokens:4096を明示的に渡す（会議は長文発言が必要）
+    // v1.1修正 - maxTokens:6144に増加（会議は長文発言＋コード例が必要）
     const reply = await apiModule.sendMessage(
       `【会議議題】${topic}`,
       systemPrompt + leadInstruction,
       history,
-      { model: modelKey, maxTokens: 4096 }
+      { model: modelKey, maxTokens: 6144 }
     );
 
     return reply;

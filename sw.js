@@ -3,7 +3,7 @@
 // v0.3 Session C - PWA強化（キャッシュ更新＋オフライン画面）
 // v0.5 Step 3.5 - 会議系ファイル追加＋キャッシュバージョンアップ
 
-const CACHE_NAME = 'cocomitalk-v0.6';
+const CACHE_NAME = 'cocomitalk-v0.7';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
