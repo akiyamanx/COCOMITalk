@@ -33,7 +33,7 @@ class WebSpeechProvider extends SpeechProvider {
 
     // 設定
     recognition.lang = 'ja-JP';          // 日本語
-    recognition.continuous = true;        // 連続認識（息継ぎ対策はVoiceController側で管理）
+    recognition.continuous = false;       // 1発話で停止（重複防止の根本対策）
     recognition.interimResults = true;    // 途中経過を返す
     recognition.maxAlternatives = 1;      // 候補は1つでOK
 
@@ -41,7 +41,6 @@ class WebSpeechProvider extends SpeechProvider {
     recognition.onstart = () => {
       this._listening = true;
       this._finalTranscript = '';
-      this._processedUpTo = 0;
       console.log('[STT] 認識開始');
       if (this.onStart) this.onStart();
     };
@@ -70,36 +69,24 @@ class WebSpeechProvider extends SpeechProvider {
       if (this.onError) this.onError(message);
     };
 
-    // 処理済みのresultインデックスを追跡（重複防止）
-    this._processedUpTo = 0;
-
     recognition.onresult = (event) => {
       let interimTranscript = '';
-      let newFinal = '';
 
-      // event.resultIndexから処理（ただし既に処理済みならスキップ）
-      const startIdx = Math.max(event.resultIndex, this._processedUpTo);
-
-      for (let i = startIdx; i < event.results.length; i++) {
+      for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
-          newFinal += result[0].transcript;
-          this._processedUpTo = i + 1; // この結果は処理済みとしてマーク
+          // continuous:falseではfinalは1回だけ来る
+          this._finalTranscript = result[0].transcript;
+          console.log(`[STT] 確定: "${this._finalTranscript}"`);
+          if (this.onFinal) this.onFinal(this._finalTranscript);
         } else {
           interimTranscript += result[0].transcript;
         }
       }
 
-      // 新しい確定テキストがあれば追加
-      if (newFinal) {
-        this._finalTranscript += newFinal;
-        console.log(`[STT] 確定: "${newFinal}" → 全体: "${this._finalTranscript}"`);
-        if (this.onFinal) this.onFinal(this._finalTranscript);
-      }
-
       // 途中経過コールバック（話してる最中に文字が出る）
       if (this.onInterim) {
-        const displayText = this._finalTranscript + interimTranscript;
+        const displayText = interimTranscript || this._finalTranscript;
         if (displayText) this.onInterim(displayText);
       }
     };

@@ -55,28 +55,23 @@ class VoiceController {
       // 話してる途中の文字をリアルタイム表示
       this._ui.showInterim(text);
       this._lastText = text;
-      // 途中経過が来るたびにタイマーリセット（息継ぎ対策）
-      this._resetSilenceTimer();
     };
 
     this._stt.onFinal = (text) => {
       console.log(`[Voice] 確定テキスト: "${text}"`);
       this._lastText = text;
       this._ui.showInterim(text);
-      // 確定したら1.5秒後に自動送信（息継ぎで切れない）
-      this._resetSilenceTimer();
     };
 
     this._stt.onEnd = () => {
-      // continuous:falseなのでブラウザが発話終了を検知して呼ばれる
+      // continuous:falseなので発話終了で呼ばれる
       const text = this._stt.stopAndGetText() || this._lastText;
       if (text && text.trim().length > 0) {
         this._lastText = text;
-        this._ui.showInterim(text + ' ⏳');
-        // タイマーが既に走ってなければ開始
-        if (!this._silenceTimer) {
-          this._resetSilenceTimer();
-        }
+        this._ui.showInterim(text + ' ⏳ 送信中...');
+        // 1.5秒後に自動送信（この間にマイクボタン押せばキャンセル可能）
+        this._clearSilenceTimer();
+        this._resetSilenceTimer();
       } else {
         this._ui.updateMicState('idle');
         this._ui.hideInterim();
