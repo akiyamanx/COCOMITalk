@@ -318,7 +318,7 @@ const App = (() => {
   // v1.5追加 - TTSプロバイダーを実際に切り替える
   function _applyTTSProvider(providerName, vvApiKey) {
     if (typeof setTTSProviderName === 'function') setTTSProviderName(providerName);
-    const pm = window.voiceController && window.voiceController._playbackManager;
+    const pm = window.voiceController && window.voiceController._playback;
     if (pm) {
       pm.switchProvider(providerName);
       if (providerName === 'voicevox' && vvApiKey && pm._voicevoxProvider) {
