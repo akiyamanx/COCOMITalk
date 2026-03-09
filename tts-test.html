@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<!-- COCOMITalk - TTS声聴き比べテストツール -->
+<!-- このファイルはOpenAI TTSの6声を日本語で聞き比べて、三姉妹への声割り当てを確定する -->
+<!-- v1.0 2026-03-09 Step 5a -->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎤 COCOMI Voice Test</title>
+<style>
+  /* v1.0 - ベーススタイル */
+  :root {
+    --bg: #0e0e12;
+    --card: #1a1a24;
+    --border: #2a2a3a;
+    --text: #e8e8f0;
+    --dim: #888899;
+    --koko: #FF6B9D; --gpt: #6B5CE7; --claude: #E6783E;
+    --accent: #00d4aa;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Segoe UI', 'Hiragino Kaku Gothic ProN', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 16px;
+    padding-bottom: 80px;
+  }
+
+  .header { text-align: center; padding: 20px 0 16px; }
+  .header h1 { font-size: 1.4em; letter-spacing: 0.05em; }
+  .header p { color: var(--dim); font-size: 0.85em; margin-top: 4px; }
+
+  .config-section { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .config-section h3 { font-size: 0.9em; color: var(--dim); margin-bottom: 10px; }
+  .config-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; flex-wrap: wrap; }
+  .config-row label { font-size: 0.85em; min-width: 50px; color: var(--dim); }
+  .config-row input[type="text"], .config-row input[type="range"] { flex: 1; background: var(--bg); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 8px; font-size: 0.85em; }
+  .config-row input[type="range"] { padding: 4px; }
+  .speed-val { font-size: 0.85em; min-width: 36px; text-align: center; color: var(--accent); }
+
+  /* テキスト入力 */
+  .text-input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.9em;
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+  }
+
+  /* プリセットボタン */
+  .presets {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 10px;
+  }
+  .preset-btn {
+    background: var(--border);
+    color: var(--text);
+    border: none;
+    border-radius: 16px;
+    padding: 6px 12px;
+    font-size: 0.75em;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .preset-btn:hover { background: var(--accent); color: var(--bg); }
+
+  /* 三姉妹候補カード */
+  .sister-cards {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+  .sister-card { background: var(--card); border: 2px solid var(--border); border-radius: 12px; padding: 16px; transition: border-color 0.3s; }
+  .sister-card.playing { animation: pulse-border 1s infinite; }
+  @keyframes pulse-border { 0%, 100% { border-color: var(--border); } 50% { border-color: var(--accent); } }
+  .sister-card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+  .sister-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 1.2em; }
+  .sister-info h4 { font-size: 0.95em; }
+  .sister-info .voice-name { font-size: 0.8em; color: var(--dim); }
+  .sister-controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .play-btn { padding: 8px 16px; border-radius: 8px; border: none; font-size: 0.85em; cursor: pointer; transition: all 0.2s; color: #fff; }
+  .play-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .stop-btn { background: #444; color: #fff; border: none; padding: 8px 12px; border-radius: 8px; font-size: 0.85em; cursor: pointer; }
+  .latency { font-size: 0.75em; color: var(--accent); margin-left: auto; }
+
+  .all-voices { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  .all-voices h3 { font-size: 0.9em; color: var(--dim); margin-bottom: 12px; }
+  .voice-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .voice-btn { padding: 10px 8px; border-radius: 8px; border: 2px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.8em; cursor: pointer; transition: all 0.2s; text-align: center; }
+  .voice-btn:hover { border-color: var(--accent); }
+  .voice-btn.playing { border-color: var(--accent); background: rgba(0, 212, 170, 0.1); }
+  .voice-btn .voice-label { font-weight: bold; }
+  .voice-btn .voice-latency { font-size: 0.7em; color: var(--dim); margin-top: 2px; }
+
+  .status-bar { position: fixed; bottom: 0; left: 0; right: 0; background: var(--card); border-top: 1px solid var(--border); padding: 10px 16px; font-size: 0.8em; color: var(--dim); text-align: center; }
+  .status-bar.error { color: #ff6b6b; }
+  .status-bar.success { color: var(--accent); }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>🎤 COCOMI Voice Test</h1>
+  <p>三姉妹の声を聴き比べよう</p>
+</div>
+
+<!-- 設定セクション -->
+<div class="config-section">
+  <h3>⚙️ 接続設定</h3>
+  <div class="config-row">
+    <label>Worker</label>
+    <input type="text" id="worker-url" placeholder="https://your-worker.workers.dev">
+  </div>
+  <div class="config-row">
+    <label>認証</label>
+    <input type="text" id="auth-token" placeholder="X-COCOMI-AUTH トークン">
+  </div>
+  <div class="config-row">
+    <label>速度</label>
+    <input type="range" id="speed" min="0.75" max="1.25" step="0.05" value="1.0">
+    <span class="speed-val" id="speed-val">1.0</span>
+  </div>
+</div>
+
+<!-- テキスト入力 -->
+<div class="config-section">
+  <h3>💬 読み上げテキスト</h3>
+  <textarea class="text-input" id="tts-text">こんにちは、アキちゃん。今日はどんなことを話そうか？</textarea>
+  <div class="presets">
+    <button class="preset-btn" data-text="こんにちは、アキちゃん。今日はどんなことを話そうか？">①挨拶</button>
+    <button class="preset-btn" data-text="この問題の構造は二層に分かれていて、ボトルネックは待ち時間と操作性だよ。">②論理</button>
+    <button class="preset-btn" data-text="それ、ちょっと不安だったよね。でも大丈夫、一緒に整理していこう。">③共感</button>
+    <button class="preset-btn" data-text="えっ、本当に？ それは嬉しいね。じゃあ次はもう少し丁寧に見ていこうか。">④感情</button>
+    <button class="preset-btn" data-text="みんなの意見をまとめると、論点は三つに集約できるね。">⑤会議</button>
+  </div>
+</div>
+
+<!-- 三姉妹候補カード -->
+<div class="sister-cards">
+  <!-- お姉ちゃん - nova -->
+  <div class="sister-card" id="card-nova">
+    <div class="sister-card-header">
+      <div class="sister-avatar" style="background:var(--gpt)">🌙</div>
+      <div class="sister-info">
+        <h4>お姉ちゃん候補</h4>
+        <div class="voice-name">nova — 落ち着いた温かみ</div>
+      </div>
+    </div>
+    <div class="sister-controls">
+      <button class="play-btn" style="background:var(--gpt)" onclick="playVoice('nova', this)">▶ nova</button>
+      <button class="stop-btn" onclick="stopAll()">⏹</button>
+      <span class="latency" id="lat-nova"></span>
+    </div>
+  </div>
+
+  <!-- クロちゃん - alloy -->
+  <div class="sister-card" id="card-alloy">
+    <div class="sister-card-header">
+      <div class="sister-avatar" style="background:var(--claude)">🔮</div>
+      <div class="sister-info">
+        <h4>クロちゃん候補</h4>
+        <div class="voice-name">alloy — ニュートラルでクリア</div>
+      </div>
+    </div>
+    <div class="sister-controls">
+      <button class="play-btn" style="background:var(--claude)" onclick="playVoice('alloy', this)">▶ alloy</button>
+      <button class="stop-btn" onclick="stopAll()">⏹</button>
+      <span class="latency" id="lat-alloy"></span>
+    </div>
+  </div>
+
+  <!-- ここちゃん - shimmer -->
+  <div class="sister-card" id="card-shimmer">
+    <div class="sister-card-header">
+      <div class="sister-avatar" style="background:var(--koko)">🌸</div>
+      <div class="sister-info">
+        <h4>ここちゃん候補</h4>
+        <div class="voice-name">shimmer — 柔らかく明るい</div>
+      </div>
+    </div>
+    <div class="sister-controls">
+      <button class="play-btn" style="background:var(--koko)" onclick="playVoice('shimmer', this)">▶ shimmer</button>
+      <button class="stop-btn" onclick="stopAll()">⏹</button>
+      <span class="latency" id="lat-shimmer"></span>
+    </div>
+  </div>
+</div>
+
+<!-- 全6voice比較 -->
+<div class="all-voices">
+  <h3>🔊 全6voice比較</h3>
+  <div class="voice-grid">
+    <button class="voice-btn" onclick="playVoice('alloy', this)">
+      <div class="voice-label">alloy</div>
+      <div class="voice-latency" id="lat2-alloy"></div>
+    </button>
+    <button class="voice-btn" onclick="playVoice('echo', this)">
+      <div class="voice-label">echo</div>
+      <div class="voice-latency" id="lat2-echo"></div>
+    </button>
+    <button class="voice-btn" onclick="playVoice('fable', this)">
+      <div class="voice-label">fable</div>
+      <div class="voice-latency" id="lat2-fable"></div>
+    </button>
+    <button class="voice-btn" onclick="playVoice('onyx', this)">
+      <div class="voice-label">onyx</div>
+      <div class="voice-latency" id="lat2-onyx"></div>
+    </button>
+    <button class="voice-btn" onclick="playVoice('nova', this)">
+      <div class="voice-label">nova</div>
+      <div class="voice-latency" id="lat2-nova"></div>
+    </button>
+    <button class="voice-btn" onclick="playVoice('shimmer', this)">
+      <div class="voice-label">shimmer</div>
+      <div class="voice-latency" id="lat2-shimmer"></div>
+    </button>
+  </div>
+</div>
+
+<!-- ステータスバー -->
+<div class="status-bar" id="status">設定を入力して声をテストしてね</div>
+
+<script>
+// v1.0 - TTS声テストツール スクリプト
+'use strict';
+
+// 状態管理
+let currentAudio = null;
+let isPlaying = false;
+
+// 設定の保存・復元（LocalStorage）
+const LS_KEY = 'cocomi-tts-test';
+
+// 初期化
+document.addEventListener('DOMContentLoaded', () => {
+  // 保存済み設定を復元
+  try {
+    const saved = localStorage.getItem(LS_KEY);
+    if (saved) {
+      const cfg = JSON.parse(saved);
+      if (cfg.workerUrl) document.getElementById('worker-url').value = cfg.workerUrl;
+      if (cfg.authToken) document.getElementById('auth-token').value = cfg.authToken;
+      if (cfg.speed) {
+        document.getElementById('speed').value = cfg.speed;
+        document.getElementById('speed-val').textContent = cfg.speed;
+      }
+    }
+  } catch (e) { /* 初回は無視 */ }
+
+  // スピードスライダー
+  document.getElementById('speed').addEventListener('input', (e) => {
+    document.getElementById('speed-val').textContent = e.target.value;
+  });
+
+  // プリセットボタン
+  document.querySelectorAll('.preset-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.getElementById('tts-text').value = btn.dataset.text;
+    });
+  });
+
+  // 設定変更時に自動保存
+  ['worker-url', 'auth-token', 'speed'].forEach(id => {
+    document.getElementById(id).addEventListener('change', saveConfig);
+  });
+});
+
+// 設定をLocalStorageに保存
+function saveConfig() {
+  try {
+    const cfg = {
+      workerUrl: document.getElementById('worker-url').value.trim(),
+      authToken: document.getElementById('auth-token').value.trim(),
+      speed: document.getElementById('speed').value,
+    };
+    localStorage.setItem(LS_KEY, JSON.stringify(cfg));
+  } catch (e) { /* 無視 */ }
+}
+
+// 音声を再生
+async function playVoice(voice, btnEl) {
+  const workerUrl = document.getElementById('worker-url').value.trim();
+  const authToken = document.getElementById('auth-token').value.trim();
+  const text = document.getElementById('tts-text').value.trim();
+  const speed = parseFloat(document.getElementById('speed').value);
+
+  // バリデーション
+  if (!workerUrl) { setStatus('Worker URLを入力してね', 'error'); return; }
+  if (!authToken) { setStatus('認証トークンを入力してね', 'error'); return; }
+  if (!text) { setStatus('テキストを入力してね', 'error'); return; }
+  if (text.length > 500) { setStatus('テキストは500文字以内にしてね', 'error'); return; }
+
+  // 再生中なら停止
+  stopAll();
+
+  // UI更新
+  setStatus(`${voice} を生成中...`, '');
+  if (btnEl) btnEl.disabled = true;
+
+  const startTime = performance.now();
+
+  try {
+    // Worker経由でTTS API呼び出し
+    const endpoint = `${workerUrl.replace(/\/+$/, '')}/tts-test`;
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-COCOMI-AUTH': authToken,
+      },
+      body: JSON.stringify({ text, voice, speed, model: 'tts-1' }),
+    });
+
+    if (!res.ok) {
+      const errText = await res.text();
+      let errMsg;
+      try { errMsg = JSON.parse(errText).error; } catch { errMsg = errText; }
+      throw new Error(errMsg || `HTTP ${res.status}`);
+    }
+
+    // 音声バイナリを取得
+    const audioBlob = await res.blob();
+    const audioUrl = URL.createObjectURL(audioBlob);
+
+    // レイテンシ計算
+    const latency = Math.round(performance.now() - startTime);
+    updateLatency(voice, latency);
+
+    // 再生
+    currentAudio = new Audio(audioUrl);
+    isPlaying = true;
+
+    // カードのハイライト
+    const card = document.getElementById(`card-${voice}`);
+    if (card) card.classList.add('playing');
+
+    // ボタンのハイライト（全voice比較用）
+    document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('playing'));
+    if (btnEl && btnEl.classList.contains('voice-btn')) btnEl.classList.add('playing');
+
+    currentAudio.addEventListener('ended', () => {
+      isPlaying = false;
+      if (card) card.classList.remove('playing');
+      document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('playing'));
+      setStatus(`${voice} 再生完了 (${latency}ms)`, 'success');
+      URL.revokeObjectURL(audioUrl);
+    });
+
+    currentAudio.addEventListener('error', () => {
+      setStatus('音声の再生に失敗しました', 'error');
+    });
+
+    await currentAudio.play();
+    setStatus(`${voice} 再生中... (${latency}ms)`, 'success');
+
+  } catch (err) {
+    setStatus(`エラー: ${err.message}`, 'error');
+  } finally {
+    if (btnEl) btnEl.disabled = false;
+  }
+}
+
+// 全停止
+function stopAll() {
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+    currentAudio = null;
+  }
+  isPlaying = false;
+  document.querySelectorAll('.sister-card').forEach(c => c.classList.remove('playing'));
+  document.querySelectorAll('.voice-btn').forEach(b => b.classList.remove('playing'));
+}
+
+// レイテンシ表示更新
+function updateLatency(voice, ms) {
+  const el1 = document.getElementById(`lat-${voice}`);
+  const el2 = document.getElementById(`lat2-${voice}`);
+  const text = `${ms}ms`;
+  if (el1) el1.textContent = text;
+  if (el2) el2.textContent = text;
+}
+
+// ステータスバー更新
+function setStatus(msg, type) {
+  const el = document.getElementById('status');
+  el.textContent = msg;
+  el.className = 'status-bar';
+  if (type) el.classList.add(type);
+}
+</script>
+</body>
+</html>
