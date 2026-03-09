@@ -106,23 +106,31 @@ class VoiceController {
     this._playback.onPlayStart = (sisterId) => {
       this._ui.highlightSister(sisterId, true);
       this._ui.updateMicState('speaking');
+      // v1.3追加: ハウリング防止 — TTS再生開始時にSTTを強制停止
+      if (this._stt.isListening()) {
+        this._clearSilenceTimer();
+        this._stt.stop();
+        this._lastText = '';
+        console.log('[Voice] ハウリング防止: TTS再生中にSTT停止');
+      }
     };
 
     this._playback.onPlayEnd = (sisterId) => {
       this._ui.highlightSister(sisterId, false);
-      // v1.2修正: キュー再生中は自動マイク再開しない（次の姉妹の番）
+      // キュー再生中は自動マイク再開しない（次の姉妹の番）
       if (this._playback.isQueuePlaying()) return;
       this._ui.updateMicState('idle');
       if (this._autoListen && this._enabled) {
-        setTimeout(() => this.startListening(), 500);
+        // v1.3修正: 1.2秒待つ（スピーカー残響がマイクに入るのを防止）
+        setTimeout(() => this.startListening(), 1200);
       }
     };
 
-    // v1.2追加: キュー全体が完了した時のコールバック
+    // キュー全体が完了した時のコールバック
     this._playback.onQueueEnd = () => {
       this._ui.updateMicState('idle');
       if (this._autoListen && this._enabled) {
-        setTimeout(() => this.startListening(), 500);
+        setTimeout(() => this.startListening(), 1200);
       }
     };
 
