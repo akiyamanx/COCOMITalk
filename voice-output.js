@@ -120,21 +120,29 @@ class AudioPlaybackManager {
         // 残りチャンクがあれば次を再生
         if (remainingChunks.length > 0 && !this._queueCancelled) {
           await this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId);
+        }
+        // 全チャンク完了（または残りなし）→ 再生終了通知
+        this._playing = false;
+        this._currentAudio = null;
+        console.log(`[AudioPM] 再生完了: ${voiceConfig.label}`);
+        if (this.onPlayEnd) this.onPlayEnd(sisterId);
+      });
+
+      // 再生エラー時 — 全チャンク再生を試みてからエラー通知
+      audio.addEventListener('error', (e) => {
+        console.warn(`[AudioPM] 1stチャンクエラー、残りを試行:`, e);
+        // 最初のチャンクがエラーでも残りチャンクがあれば試す
+        if (remainingChunks.length > 0 && !this._queueCancelled) {
+          this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId).then(() => {
+            this._playing = false;
+            this._currentAudio = null;
+            if (this.onPlayEnd) this.onPlayEnd(sisterId);
+          });
         } else {
           this._playing = false;
           this._currentAudio = null;
-          console.log(`[AudioPM] 再生完了: ${voiceConfig.label}`);
-          if (this.onPlayEnd) this.onPlayEnd(sisterId);
+          if (this.onPlayError) this.onPlayError(`再生エラー: ${voiceConfig.label}`, sisterId);
         }
-      });
-
-      // 再生エラー時の処理
-      audio.addEventListener('error', (e) => {
-        this._playing = false;
-        this._currentAudio = null;
-        const msg = `音声の再生に失敗しました: ${voiceConfig.label}`;
-        console.warn(`[AudioPM] ${msg}`, e);
-        if (this.onPlayError) this.onPlayError(msg, sisterId);
       });
 
       await audio.play();
@@ -269,11 +277,15 @@ class AudioPlaybackManager {
           resolve();
         });
 
-        audio.addEventListener('error', (e) => {
+        audio.addEventListener('error', async (e) => {
+          console.warn(`[AudioPM] キューチャンクエラー、残りを試行:`, e);
+          if (remainingChunks.length > 0 && !this._queueCancelled) {
+            await this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId);
+          }
           this._playing = false;
           this._currentAudio = null;
-          if (this.onPlayError) this.onPlayError(`再生エラー: ${voiceConfig.label}`, sisterId);
-          resolve(); // エラーでもresolveして次に進む
+          if (this.onPlayEnd) this.onPlayEnd(sisterId);
+          resolve();
         });
 
         await audio.play();
@@ -299,17 +311,25 @@ class AudioPlaybackManager {
     for (let i = 0; i < chunks.length; i++) {
       if (this._queueCancelled) break;
       try {
-        console.log(`[AudioPM] VVチャンク${i + 2}再生: "${chunks[i].substring(0, 20)}..."`);
+        console.log(`[AudioPM] VVチャンク${i + 2}/${chunks.length + 1}: "${chunks[i].substring(0, 20)}..."`);
         const audio = await provider.synthesizeChunk(chunks[i], speakerId, apiKey);
         this._currentAudio = audio;
-        audio.playbackRate = this._speed; // v1.3追加
+        audio.playbackRate = this._speed;
+        // 読み込み完了を待ってから再生（途中切れ防止）
+        await new Promise((resolve, reject) => {
+          const timeout = setTimeout(() => { reject(new Error('チャンク読み込みタイムアウト')); }, 15000);
+          audio.addEventListener('canplaythrough', () => { clearTimeout(timeout); resolve(); }, { once: true });
+          audio.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('チャンク読み込みエラー')); }, { once: true });
+          audio.load();
+        });
+        // 再生完了を待つ
         await new Promise((resolve) => {
-          audio.addEventListener('ended', resolve);
-          audio.addEventListener('error', resolve);
+          audio.addEventListener('ended', resolve, { once: true });
+          audio.addEventListener('error', resolve, { once: true });
           audio.play().catch(resolve);
         });
       } catch (e) {
-        console.warn(`[AudioPM] VVチャンクエラー:`, e.message);
+        console.warn(`[AudioPM] VVチャンク${i + 2}エラー（スキップ）:`, e.message);
       }
     }
   }
