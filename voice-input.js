@@ -32,9 +32,9 @@ class VoiceController {
     // 音声設定
     this._speed = 1.0;
     this._autoListen = false;
-    // 息継ぎ対策: 無音タイマー（1.5秒待ってから送信）
+    // 息継ぎ対策: 無音タイマー（2.5秒待ってから送信）
     this._silenceTimer = null;
-    this._SILENCE_DELAY = 1500; // ミリ秒
+    this._SILENCE_DELAY = 2500; // ミリ秒 v1.3修正: 1500→2500（早すぎる送信防止）
     // 最後に受け取ったテキスト（タイマー用）
     this._lastText = '';
 
@@ -93,6 +93,7 @@ class VoiceController {
         this._resetSilenceTimer();
       } else {
         this._ui.updateMicState('idle');
+        this._updateMeetingMicState('idle'); // v1.3修正
         this._ui.hideInterim();
       }
     };
@@ -100,8 +101,12 @@ class VoiceController {
     this._stt.onError = (error) => {
       this._clearSilenceTimer();
       this._ui.updateMicState('error');
+      this._updateMeetingMicState('error'); // v1.3修正
       this._ui.showStatus(error, 'error');
-      setTimeout(() => this._ui.updateMicState('idle'), 2000);
+      setTimeout(() => {
+        this._ui.updateMicState('idle');
+        this._updateMeetingMicState('idle'); // v1.3修正
+      }, 2000);
     };
 
     // --- TTS再生コールバック ---
@@ -216,12 +221,14 @@ class VoiceController {
         this._sendVoiceMessage(text);
       } else {
         this._ui.updateMicState('idle');
+        this._updateMeetingMicState('idle'); // v1.3修正
         this._ui.hideInterim();
       }
     } else if (this._playback.isPlaying() || this._playback.isQueuePlaying()) {
       // 再生中（キュー含む）→ 割り込み停止
       this._playback.stop();
       this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle'); // v1.3修正
     } else {
       this.startListening();
     }
@@ -326,6 +333,7 @@ class VoiceController {
     if (!input) {
       console.error('[Voice] #msg-input が見つかりません');
       this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle');
       return;
     }
     input.value = text;
@@ -343,6 +351,7 @@ class VoiceController {
         input.dispatchEvent(event);
       }
       this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle');
     }, 50);
   }
 
@@ -352,6 +361,7 @@ class VoiceController {
     if (!topicInput) {
       console.error('[Voice] .meeting-topic-input が見つかりません');
       this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle');
       return;
     }
     topicInput.value = text;
@@ -360,14 +370,12 @@ class VoiceController {
       // 会議進行中かどうかで送信先を判定
       const isRunning = typeof MeetingRelay !== 'undefined' && MeetingRelay.getCurrentRound() > 0;
       if (isRunning) {
-        // 追加ラウンド: continueボタンをクリック
         const btnContinue = document.getElementById('btn-meeting-continue');
         if (btnContinue) {
           btnContinue.click();
           console.log('[Voice] 会議追加ラウンド音声送信完了');
         }
       } else {
-        // 新規会議開始: startボタンをクリック
         const btnStart = document.getElementById('btn-meeting-start');
         if (btnStart) {
           btnStart.click();
@@ -375,6 +383,7 @@ class VoiceController {
         }
       }
       this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle');
     }, 50);
   }
 
