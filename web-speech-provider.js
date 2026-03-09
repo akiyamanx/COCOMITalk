@@ -41,6 +41,7 @@ class WebSpeechProvider extends SpeechProvider {
     recognition.onstart = () => {
       this._listening = true;
       this._finalTranscript = '';
+      this._processedUpTo = 0;
       console.log('[STT] 認識開始');
       if (this.onStart) this.onStart();
     };
@@ -69,15 +70,21 @@ class WebSpeechProvider extends SpeechProvider {
       if (this.onError) this.onError(message);
     };
 
+    // 処理済みのresultインデックスを追跡（重複防止）
+    this._processedUpTo = 0;
+
     recognition.onresult = (event) => {
       let interimTranscript = '';
-      // continuous:trueでは複数のfinal結果が来るため正しく蓄積する
       let newFinal = '';
 
-      for (let i = event.resultIndex; i < event.results.length; i++) {
+      // event.resultIndexから処理（ただし既に処理済みならスキップ）
+      const startIdx = Math.max(event.resultIndex, this._processedUpTo);
+
+      for (let i = startIdx; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
           newFinal += result[0].transcript;
+          this._processedUpTo = i + 1; // この結果は処理済みとしてマーク
         } else {
           interimTranscript += result[0].transcript;
         }
@@ -86,7 +93,7 @@ class WebSpeechProvider extends SpeechProvider {
       // 新しい確定テキストがあれば追加
       if (newFinal) {
         this._finalTranscript += newFinal;
-        console.log(`[STT] 確定追加: "${newFinal}" → 全体: "${this._finalTranscript}"`);
+        console.log(`[STT] 確定: "${newFinal}" → 全体: "${this._finalTranscript}"`);
         if (this.onFinal) this.onFinal(this._finalTranscript);
       }
 

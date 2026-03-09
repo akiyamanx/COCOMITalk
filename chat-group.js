@@ -91,6 +91,12 @@ const ChatGroup = (() => {
     }));
 
     _saveGroupHistory(currentSister, chatHistories, relayContext, SISTERS);
+
+    // v1.0追加 - 音声モード時、最後の姉妹の応答を声で再生（Step 5c前の暫定）
+    if (window.voiceController && window.voiceController.isEnabled() && relayContext.length > 0) {
+      const last = relayContext[relayContext.length - 1];
+      window.voiceController.speakResponse(last.content, last.sisterKey);
+    }
   }
 
   /**
