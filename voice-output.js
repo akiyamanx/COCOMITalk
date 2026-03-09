@@ -5,7 +5,7 @@
 
 // v1.0 新規作成 - Step 5b TTS再生管理
 // v1.1 追加 - キュー再生機能（グループモード3人全員対応）
-// v1.2 追加 - プロバイダー切替対応（OpenAI / VOICEVOX）
+// v1.2 追加 - プロバイダー切替＋VOICEVOX長文分割連続再生
 
 /**
  * AudioPlaybackManager
@@ -105,12 +105,22 @@ class AudioPlaybackManager {
       // 再生開始通知（アイコン発光用）
       if (this.onPlayStart) this.onPlayStart(sisterId);
 
+      // v1.2追加 - VOICEVOX長文分割: 残りチャンクがあれば連続再生
+      const remainingChunks = audio._vvRemainingChunks || [];
+      const vvSpeakerId = audio._vvSpeakerId;
+      const vvApiKey = audio._vvApiKey;
+
       // 再生完了時の処理
-      audio.addEventListener('ended', () => {
-        this._playing = false;
-        this._currentAudio = null;
-        console.log(`[AudioPM] 再生完了: ${voiceConfig.label}`);
-        if (this.onPlayEnd) this.onPlayEnd(sisterId);
+      audio.addEventListener('ended', async () => {
+        // 残りチャンクがあれば次を再生
+        if (remainingChunks.length > 0 && !this._queueCancelled) {
+          await this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId);
+        } else {
+          this._playing = false;
+          this._currentAudio = null;
+          console.log(`[AudioPM] 再生完了: ${voiceConfig.label}`);
+          if (this.onPlayEnd) this.onPlayEnd(sisterId);
+        }
       });
 
       // 再生エラー時の処理
@@ -236,7 +246,15 @@ class AudioPlaybackManager {
         this._playing = true;
         if (this.onPlayStart) this.onPlayStart(sisterId);
 
-        audio.addEventListener('ended', () => {
+        // v1.2追加 - VOICEVOX長文分割: 残りチャンク
+        const remainingChunks = audio._vvRemainingChunks || [];
+        const vvSpeakerId = audio._vvSpeakerId;
+        const vvApiKey = audio._vvApiKey;
+
+        audio.addEventListener('ended', async () => {
+          if (remainingChunks.length > 0 && !this._queueCancelled) {
+            await this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId);
+          }
           this._playing = false;
           this._currentAudio = null;
           if (this.onPlayEnd) this.onPlayEnd(sisterId);
@@ -258,6 +276,33 @@ class AudioPlaybackManager {
         resolve(); // エラーでも次に進む
       }
     });
+  }
+
+  /**
+   * v1.2追加 - VOICEVOXの残りチャンクを順番に再生する
+   * @param {string[]} chunks - 残りチャンクの配列
+   * @param {number} speakerId - 話者ID
+   * @param {string} apiKey - APIキー
+   * @param {string} sisterId - 姉妹ID（ログ用）
+   */
+  async _playVVChunks(chunks, speakerId, apiKey, sisterId) {
+    const provider = this._voicevoxProvider;
+    if (!provider) return;
+    for (let i = 0; i < chunks.length; i++) {
+      if (this._queueCancelled) break;
+      try {
+        console.log(`[AudioPM] VVチャンク${i + 2}再生: "${chunks[i].substring(0, 20)}..."`);
+        const audio = await provider.synthesizeChunk(chunks[i], speakerId, apiKey);
+        this._currentAudio = audio;
+        await new Promise((resolve) => {
+          audio.addEventListener('ended', resolve);
+          audio.addEventListener('error', resolve);
+          audio.play().catch(resolve);
+        });
+      } catch (e) {
+        console.warn(`[AudioPM] VVチャンクエラー:`, e.message);
+      }
+    }
   }
 
   /**
