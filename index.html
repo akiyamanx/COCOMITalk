@@ -198,6 +198,14 @@
             <label style="font-size:0.85em; color:#888;">VOICEVOX APIキー（なしでもOK）</label>
             <input type="text" id="vv-api-key-main" placeholder="tts.quest APIキー（低速モードはなしでOK）" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
           </div>
+          <!-- v1.6追加 - 話すスピード調整 -->
+          <div class="setting-item" style="margin-top:12px;">
+            <label style="font-size:0.85em; color:#888;">話すスピード: <span id="tts-speed-label">1.0x</span></label>
+            <input type="range" id="range-tts-speed" min="0.75" max="1.5" step="0.05" value="1.0" style="width:100%; margin-top:4px; accent-color:var(--active-primary,#6c5ce7);">
+            <div style="display:flex; justify-content:space-between; font-size:0.75em; color:#666;">
+              <span>ゆっくり 0.75x</span><span>普通 1.0x</span><span>はやい 1.5x</span>
+            </div>
+          </div>
         </section>
         <section class="settings-section" style="margin-top:24px;">
           <h3>🗑️ 会話履歴</h3>
@@ -243,6 +251,7 @@
   <script src="voice-output.js"></script>
   <script src="voice-ui.js"></script>
   <script src="voice-input.js"></script>
+  <script src="app-settings.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

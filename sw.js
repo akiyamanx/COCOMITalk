@@ -42,6 +42,7 @@ const CACHE_FILES = [
   './voice-output.js',
   './voice-ui.js',
   './voice-input.js',
+  './app-settings.js',
   './prompts/koko-system.js',
   './prompts/gpt-system.js',
   './prompts/claude-system.js',
