@@ -48,15 +48,15 @@ class TTSProvider {
 const SISTER_VOICE_MAP = {
   koko: {
     openai:   { voice: 'nova',  label: '🌸 ここちゃん' },
-    voicevox: { voice: '3',     label: '🌸 ここちゃん' }  // ずんだもん（ノーマル）
+    voicevox: { voice: '1',     label: '🌸 ここちゃん' }  // ずんだもん（あまあま）
   },
   gpt: {
     openai:   { voice: 'shimmer', label: '🌙 お姉ちゃん' },
-    voicevox: { voice: '2',       label: '🌙 お姉ちゃん' }  // 四国めたん（ノーマル）
+    voicevox: { voice: '4',       label: '🌙 お姉ちゃん' }  // 四国めたん（セクシー）
   },
   claude: {
     openai:   { voice: 'alloy',  label: '🔮 クロちゃん' },
-    voicevox: { voice: '0',      label: '🔮 クロちゃん' }  // 四国めたん（あまあま）
+    voicevox: { voice: '46',     label: '🔮 クロちゃん' }  // WhiteCUL（ノーマル）
   }
 };
 
