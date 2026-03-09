@@ -29,11 +29,12 @@ class VoiceUI {
 
   /**
    * 入力エリアの親要素を取得（配置先）
+   * input-wrapperの中（テキストエリア＋送信ボタンと同じ行）に配置する
    */
   _getInputArea() {
-    return document.querySelector('.input-area')
-      || document.querySelector('.chat-input-area')
-      || document.querySelector('#chat-input')?.parentElement;
+    return document.querySelector('.input-wrapper')
+      || document.querySelector('.input-area')
+      || document.querySelector('#msg-input')?.parentElement;
   }
 
   /**
@@ -54,14 +55,15 @@ class VoiceUI {
     btn.addEventListener('click', onMicClick);
 
     btn.style.cssText = `
-      width: 44px; height: 44px;
+      width: 36px; height: 36px;
       border-radius: 50%;
-      border: 2px solid var(--cocomi-accent, #6c5ce7);
-      background: var(--cocomi-bg-card, #2d2d3d);
-      color: white; font-size: 20px;
+      border: 2px solid var(--active-primary, #6c5ce7);
+      background: white;
+      font-size: 18px;
       cursor: pointer; transition: all 0.2s ease;
       flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
+      padding: 0;
     `;
 
     const inputArea = this._getInputArea();
@@ -87,13 +89,13 @@ class VoiceUI {
     el.id = 'cocomi-voice-interim';
     el.style.cssText = `
       display: none;
-      padding: 8px 12px; margin: 4px 0;
-      background: rgba(108, 92, 231, 0.15);
-      border-left: 3px solid var(--cocomi-accent, #6c5ce7);
+      padding: 8px 12px; margin: 4px 8px;
+      background: rgba(108, 92, 231, 0.1);
+      border-left: 3px solid var(--active-primary, #6c5ce7);
       border-radius: 4px;
       font-size: 14px;
-      color: var(--cocomi-text, #e0e0e0);
-      opacity: 0.8; font-style: italic;
+      color: #555;
+      font-style: italic;
     `;
 
     const inputArea = this._getInputArea();
@@ -111,10 +113,11 @@ class VoiceUI {
     el.id = 'cocomi-voice-confirm';
     el.style.cssText = `
       display: none;
-      padding: 8px 12px; margin: 4px 0;
-      background: rgba(108, 92, 231, 0.2);
-      border: 1px solid var(--cocomi-accent, #6c5ce7);
+      padding: 8px 12px; margin: 4px 8px;
+      background: rgba(108, 92, 231, 0.08);
+      border: 1px solid var(--active-primary, #6c5ce7);
       border-radius: 8px; font-size: 14px;
+      color: #333;
     `;
 
     const inputArea = this._getInputArea();
@@ -159,9 +162,9 @@ class VoiceUI {
     if (!btn) return;
 
     const styles = {
-      idle:      { bg: 'var(--cocomi-bg-card, #2d2d3d)', border: 'var(--cocomi-accent, #6c5ce7)', anim: 'none', icon: '🎤' },
+      idle:      { bg: 'white', border: 'var(--active-primary, #6c5ce7)', anim: 'none', icon: '🎤' },
       listening: { bg: '#e74c3c', border: '#e74c3c', anim: 'cocomi-mic-pulse 1s ease-in-out infinite', icon: '🎤' },
-      speaking:  { bg: 'var(--cocomi-accent, #6c5ce7)', border: 'var(--cocomi-accent, #6c5ce7)', anim: 'none', icon: '🔊' },
+      speaking:  { bg: 'var(--active-primary, #6c5ce7)', border: 'var(--active-primary, #6c5ce7)', anim: 'none', icon: '🔊' },
       error:     { bg: '#e74c3c', border: '#e74c3c', anim: 'none', icon: '⚠️' }
     };
 
