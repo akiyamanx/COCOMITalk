@@ -33,7 +33,7 @@ class WebSpeechProvider extends SpeechProvider {
 
     // 設定
     recognition.lang = 'ja-JP';          // 日本語
-    recognition.continuous = false;       // 1回の発話で自動停止（ハウリング防止）
+    recognition.continuous = true;        // 連続認識（息継ぎ対策はVoiceController側で管理）
     recognition.interimResults = true;    // 途中経過を返す
     recognition.maxAlternatives = 1;      // 候補は1つでOK
 
@@ -71,29 +71,29 @@ class WebSpeechProvider extends SpeechProvider {
 
     recognition.onresult = (event) => {
       let interimTranscript = '';
+      // continuous:trueでは複数のfinal結果が来るため正しく蓄積する
+      let newFinal = '';
 
-      // 結果の処理
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
-          // 確定テキスト
-          this._finalTranscript = result[0].transcript;
-          console.log(`[STT] 確定: "${this._finalTranscript}"`);
+          newFinal += result[0].transcript;
         } else {
-          // 途中経過
           interimTranscript += result[0].transcript;
         }
       }
 
-      // 途中経過コールバック（リアルタイム表示用 — 話してる最中に文字が出る）
+      // 新しい確定テキストがあれば追加
+      if (newFinal) {
+        this._finalTranscript += newFinal;
+        console.log(`[STT] 確定追加: "${newFinal}" → 全体: "${this._finalTranscript}"`);
+        if (this.onFinal) this.onFinal(this._finalTranscript);
+      }
+
+      // 途中経過コールバック（話してる最中に文字が出る）
       if (this.onInterim) {
         const displayText = this._finalTranscript + interimTranscript;
         if (displayText) this.onInterim(displayText);
-      }
-
-      // 確定テキストコールバック
-      if (this._finalTranscript && this.onFinal) {
-        this.onFinal(this._finalTranscript);
       }
     };
 
