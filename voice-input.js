@@ -110,6 +110,16 @@ class VoiceController {
 
     this._playback.onPlayEnd = (sisterId) => {
       this._ui.highlightSister(sisterId, false);
+      // v1.2修正: キュー再生中は自動マイク再開しない（次の姉妹の番）
+      if (this._playback.isQueuePlaying()) return;
+      this._ui.updateMicState('idle');
+      if (this._autoListen && this._enabled) {
+        setTimeout(() => this.startListening(), 500);
+      }
+    };
+
+    // v1.2追加: キュー全体が完了した時のコールバック
+    this._playback.onQueueEnd = () => {
       this._ui.updateMicState('idle');
       if (this._autoListen && this._enabled) {
         setTimeout(() => this.startListening(), 500);
@@ -187,8 +197,8 @@ class VoiceController {
         this._ui.updateMicState('idle');
         this._ui.hideInterim();
       }
-    } else if (this._playback.isPlaying()) {
-      // 再生中 → 割り込み停止
+    } else if (this._playback.isPlaying() || this._playback.isQueuePlaying()) {
+      // 再生中（キュー含む）→ 割り込み停止
       this._playback.stop();
       this._ui.updateMicState('idle');
     } else {
