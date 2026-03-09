@@ -6,6 +6,7 @@
 // v0.8 Step 3 - モード連動モデルキー対応
 // v0.9 Step 3.5 - グループモード（👥三姉妹リレー応答）対応
 // v0.9.6 2026-03-08 - AI返答にMarkdownレンダリング追加
+// v1.0 2026-03-09 - 音声モード対応: AI応答後にTTS再生フック追加（Step 5b）
 
 'use strict';
 
@@ -210,6 +211,11 @@ const ChatCore = (() => {
       addMessage('ai', reply);
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
       _saveHistory();
+
+      // v1.0追加 - 音声モードなら応答を声で再生（Step 5b）
+      if (window.voiceController && window.voiceController.isEnabled()) {
+        window.voiceController.speakResponse(reply, currentSister);
+      }
 
     } catch (error) {
       console.error('[ChatCore] API返答エラー:', error);

@@ -4,8 +4,9 @@
 // v0.5 Step 3.5 - 会議系ファイル追加＋キャッシュバージョンアップ
 // v0.8 2026-03-09 - meeting-relay v1.2対応
 // v0.9 2026-03-09 - meeting-archive-ui v1.1対応
+// v1.0 2026-03-09 - Step 5b 音声会話モジュール7ファイル追加
 
-const CACHE_NAME = 'cocomitalk-v0.9';
+const CACHE_NAME = 'cocomitalk-v1.0';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -30,6 +31,13 @@ const CACHE_FILES = [
   './meeting-archive-ui.js',
   './doc-generator.js',
   './file-handler.js',
+  './tts-provider.js',
+  './openai-tts-provider.js',
+  './speech-provider.js',
+  './web-speech-provider.js',
+  './voice-output.js',
+  './voice-ui.js',
+  './voice-input.js',
   './prompts/koko-system.js',
   './prompts/gpt-system.js',
   './prompts/claude-system.js',

@@ -1,7 +1,7 @@
 // COCOMITalk - アプリ初期化・画面管理
 // このファイルはアプリ全体の初期化、スプラッシュ画面、タブ切替、設定を管理する
-// v1.0 - 設定画面リニューアル＋ファイル入出力ボタン / v1.1 - MeetingHistory初期化追加
-// v1.2 2026-03-09 - 進行中の会議の自動復元機能追加（_restoreActiveMeeting）
+// v1.0～v1.2 設定画面/MeetingHistory初期化/会議自動復元
+// v1.3 2026-03-09 - 音声コントローラー初期化＋姉妹タブ連動（Step 5b）
 'use strict';
 
 /** アプリケーションモジュール */
@@ -56,6 +56,13 @@ const App = (() => {
     if (typeof MeetingUI !== 'undefined') MeetingUI.init();
     // v1.0追加 - 会議アーカイブUI初期化
     if (typeof MeetingArchiveUI !== 'undefined') MeetingArchiveUI.init();
+    // v1.3追加 - 音声コントローラー初期化（Step 5b）
+    try {
+      if (typeof VoiceController !== 'undefined') {
+        window.voiceController = new VoiceController();
+        window.voiceController.init();
+      }
+    } catch (e) { console.warn('[App] VoiceController初期化スキップ:', e.message); }
     // v1.2追加 - 進行中の会議があれば復元
     await _restoreActiveMeeting();
     _setupFileButtons();
@@ -91,6 +98,10 @@ const App = (() => {
         _applyTheme(sisterKey);
         if (typeof ModeSwitcher !== 'undefined') {
           ModeSwitcher.onSisterSwitch(sisterKey);
+        }
+        // v1.3追加 - 音声コントローラーの姉妹IDも切替
+        if (window.voiceController) {
+          window.voiceController.setCurrentSister(sisterKey);
         }
         ChatCore.switchSister(sisterKey);
       });
@@ -260,10 +271,7 @@ const App = (() => {
     _setupResetModels();
   }
 
-  /**
-   * 設定をLocalStorageから読み込み
-   * v0.9.5変更 - 旧routingMode削除、ModeSwitcher連携のみ
-   */
+  // 設定をLocalStorageから読み込み
   function _loadSettings() {
     try {
       const saved = localStorage.getItem('cocomitalk-settings');
@@ -275,10 +283,7 @@ const App = (() => {
     }
   }
 
-  /**
-   * 設定をフォームに反映
-   * v0.9.5変更 - 認証トークンのみ＋モデル設定UI動的生成
-   */
+  // 設定をフォームに反映
   function _loadSettingsToForm() {
     try {
       const saved = localStorage.getItem('cocomitalk-settings');
@@ -481,16 +486,14 @@ const App = (() => {
   return { init };
 })();
 
-// --- DOMContentLoaded で起動 ---
-document.addEventListener('DOMContentLoaded', () => {
-  App.init();
-});
+// DOMContentLoaded で起動
+document.addEventListener('DOMContentLoaded', () => App.init());
 
-// v0.3追加 - Service Worker登録
+// Service Worker登録
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('./sw.js')
-      .then((reg) => console.log('[App] SW登録完了:', reg.scope))
-      .catch((err) => console.warn('[App] SW登録失敗:', err));
+      .then(reg => console.log('[App] SW登録完了:', reg.scope))
+      .catch(err => console.warn('[App] SW登録失敗:', err));
   });
 }
