@@ -156,20 +156,22 @@ class VoiceController {
   // ═══════════════════════════════════════════
 
   /**
-   * 無音タイマーをリセット（新しい音声入力があるたびに呼ぶ）
-   * 最後の入力から1.5秒経ったら自動送信
+   * 無音タイマーをリセット v1.3改修 - 短いテキストはさらに長く待つ
    */
   _resetSilenceTimer() {
     this._clearSilenceTimer();
+    const text = (this._lastText || '').trim();
+    // 短いテキスト（5文字未満）はまだ話し始めたばかりなので長めに待つ
+    const delay = (text.length < 5) ? this._SILENCE_DELAY + 1500 : this._SILENCE_DELAY;
     this._silenceTimer = setTimeout(() => {
       this._silenceTimer = null;
-      const text = this._lastText.trim();
-      if (text) {
-        console.log(`[Voice] ${this._SILENCE_DELAY}ms無音 → 自動送信: "${text}"`);
+      const finalText = this._lastText.trim();
+      if (finalText) {
+        console.log(`[Voice] ${delay}ms無音 → 自動送信: "${finalText}"`);
         this._stt.stop();
-        this._sendVoiceMessage(text);
+        this._sendVoiceMessage(finalText);
       }
-    }, this._SILENCE_DELAY);
+    }, delay);
   }
 
   /**

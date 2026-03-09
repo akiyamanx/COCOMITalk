@@ -1,31 +1,18 @@
-// COCOMITalk - チャットコア
-// このファイルはチャットUIのメッセージ送受信を管理する
-// v0.3 Session C - IndexedDB会話履歴保存対応
-// v0.4 Session D - メッセージにトークン数表示
-// v0.5 Step 2 - 三姉妹API分岐対応（Worker経由）
-// v0.8 Step 3 - モード連動モデルキー対応
-// v0.9 Step 3.5 - グループモード（👥三姉妹リレー応答）対応
-// v0.9.6 2026-03-08 - AI返答にMarkdownレンダリング追加
-// v1.0 2026-03-09 - 音声モード対応: AI応答後にTTS再生フック追加（Step 5b）
-
+// COCOMITalk - チャットコア（メッセージ送受信＋UI管理）
+// v0.3-v1.0: 履歴保存/トークン表示/三姉妹API/グループモード/Markdown/音声対応
+// v1.1 2026-03-10 - 送信キャンセル（⏹停止ボタン）＋AbortController対応
 'use strict';
 
-/**
- * チャットコアモジュール
- * メッセージの表示・送信・タイピングインジケーターを管理
- */
+/** チャットコアモジュール */
 const ChatCore = (() => {
-  // --- DOM要素 ---
   let chatArea = null;
   let msgInput = null;
   let btnSend = null;
   let welcomeMsg = null;
   let charCount = null;
 
-  // --- 状態 ---
   let isProcessing = false;
 
-  // --- 三姉妹の設定 ---
   const SISTERS = {
     koko: {
       name: 'ここちゃん',
@@ -50,7 +37,7 @@ const ChatCore = (() => {
     }
   };
 
-  // v0.5追加 - 三姉妹のAPIモジュール＋プロンプトマッピング
+  // 三姉妹のAPIモジュール＋プロンプトマッピング
   const SISTER_API = {
     koko: {
       module: () => (typeof ApiGemini !== 'undefined') ? ApiGemini : null,
@@ -66,7 +53,6 @@ const ChatCore = (() => {
     },
   };
 
-  // --- 会話履歴（姉妹ごと） ---
   const chatHistories = {
     koko: [],
     gpt: [],
@@ -87,7 +73,6 @@ const ChatCore = (() => {
     _setupInputEvents();
     _setupSendEvents();
 
-    // v0.3追加 - IndexedDBから履歴読み込み
     await _loadAllHistories();
 
     console.log('[ChatCore] 初期化完了');
@@ -122,19 +107,47 @@ const ChatCore = (() => {
     });
   }
 
-  // 送信ボタンのイベント設定
+  // 送信ボタンのイベント設定 v1.1改修 - 停止ボタン機能追加
   function _setupSendEvents() {
     btnSend.addEventListener('click', () => {
-      if (!btnSend.disabled) {
+      if (isProcessing) {
+        _handleCancel(); // v1.1追加: 処理中なら停止
+      } else if (!btnSend.disabled) {
         _handleSend();
       }
     });
   }
 
-  /**
-   * メッセージ送信処理
-   * v0.5変更 - 三姉妹それぞれのAPIに振り分け
-   */
+  /** v1.1追加 - 送信ボタンを⏹停止表示に切替 */
+  function _showStopButton() {
+    btnSend.disabled = false;
+    btnSend.querySelector('.send-arrow').textContent = '⏹';
+    btnSend.classList.add('btn-stop');
+    btnSend.title = '停止';
+  }
+
+  /** v1.1追加 - 送信ボタンを通常表示に戻す */
+  function _restoreSendButton() {
+    btnSend.querySelector('.send-arrow').textContent = '↑';
+    btnSend.classList.remove('btn-stop');
+    btnSend.title = '送信';
+    btnSend.disabled = msgInput.value.trim().length === 0;
+  }
+
+  /** v1.1追加 - 送信キャンセル処理 */
+  function _handleCancel() {
+    console.log('[ChatCore] 送信キャンセル実行');
+    // 全APIリクエストを中断
+    const aborted = (typeof ApiCommon !== 'undefined') ? ApiCommon.abortAll() : 0;
+    // 会議リレーも中断
+    if (typeof MeetingRelay !== 'undefined') MeetingRelay.abort();
+    hideTyping();
+    if (aborted > 0) addMessage('ai', '⏹ 送信をキャンセルしました');
+    isProcessing = false;
+    _restoreSendButton();
+  }
+
+  /** メッセージ送信処理 */
   function _handleSend() {
     const text = msgInput.value.trim();
     if (!text || isProcessing) return;
@@ -144,7 +157,6 @@ const ChatCore = (() => {
       welcomeMsg.classList.add('hidden');
     }
 
-    // v1.0追加 - 添付ファイルを取得（あれば）
     const attachment = (typeof FileHandler !== 'undefined') ? FileHandler.consumeAttachment() : null;
 
     // ユーザーメッセージを表示（添付ファイル名付き）
@@ -163,9 +175,9 @@ const ChatCore = (() => {
 
     // タイピングインジケーター表示
     isProcessing = true;
+    _showStopButton(); // v1.1追加
     showTyping();
 
-    // v0.5変更 → v0.9変更 - グループモード対応
     const isGroup = (typeof ModeSwitcher !== 'undefined') && ModeSwitcher.isGroupMode();
 
     if (isGroup) {
@@ -184,11 +196,7 @@ const ChatCore = (() => {
     }
   }
 
-  /**
-   * API経由で返答を取得
-   * v0.5変更 - APIモジュールを引数で受け取る（三姉妹共通）
-   * v0.8変更 - ModeSwitcherからモデルキーを取得して渡す
-   */
+  /** API経由で返答を取得 */
   async function _apiReply(userText, apiModule, systemPrompt, attachment) {
     try {
       const history = chatHistories[currentSister];
@@ -218,19 +226,25 @@ const ChatCore = (() => {
       }
 
     } catch (error) {
-      console.error('[ChatCore] API返答エラー:', error);
-      hideTyping();
-      const errorMsg = error.message.includes('認証トークン')
-        ? '認証トークンが設定されてないみたい…⚙️設定からトークンを入れてね！'
-        : `ごめんね、通信エラーだった…💦（${error.message}）`;
-      addMessage('ai', errorMsg);
+      // v1.1追加 - AbortErrorはキャンセルなのでエラー表示しない
+      if (error.name === 'AbortError') {
+        console.log('[ChatCore] API呼び出しがキャンセルされました');
+        hideTyping();
+      } else {
+        console.error('[ChatCore] API返答エラー:', error);
+        hideTyping();
+        const errorMsg = error.message.includes('認証トークン')
+          ? '認証トークンが設定されてないみたい…⚙️設定からトークンを入れてね！'
+          : `ごめんね、通信エラーだった…💦（${error.message}）`;
+        addMessage('ai', errorMsg);
+      }
     } finally {
       isProcessing = false;
-      btnSend.disabled = msgInput.value.trim().length === 0;
+      _restoreSendButton(); // v1.1追加
     }
   }
 
-  // v0.9追加 - グループモード: ChatGroupモジュールに委譲
+  // グループモード
   async function _groupReply(userText) {
     if (typeof ChatGroup === 'undefined') {
       console.error('[ChatCore] ChatGroupモジュールが見つかりません');
@@ -249,7 +263,7 @@ const ChatCore = (() => {
       });
     } finally {
       isProcessing = false;
-      btnSend.disabled = msgInput.value.trim().length === 0;
+      _restoreSendButton();
     }
   }
 
@@ -265,11 +279,11 @@ const ChatCore = (() => {
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
       _saveHistory();
       isProcessing = false;
-      btnSend.disabled = msgInput.value.trim().length === 0;
+      _restoreSendButton();
     }, delay);
   }
 
-  // デモ返答パターン（API接続前の仮データ）
+  // デモ返答パターン
   function _getDemoReplies(sister, userText) {
     const isGreeting = /おはよう|おは/.test(userText);
     const greetings = {
@@ -286,10 +300,7 @@ const ChatCore = (() => {
     return defaults[sister] || ['（※デモモードです）'];
   }
 
-  /**
-   * メッセージをチャットエリアに追加
-   * v0.9変更 - options.sisterKeyで姉妹アイコン＋名前表示（グループモード用）
-   */
+  /** メッセージをチャットエリアに追加 */
   function addMessage(role, text, options = {}) {
     const sisterKey = options.sisterKey || currentSister;
     const sister = SISTERS[sisterKey];
@@ -305,7 +316,6 @@ const ChatCore = (() => {
     const bubble = document.createElement('div');
     bubble.className = 'msg-bubble';
 
-    // v0.9追加 - グループモードの姉妹名表示
     if (isGroupReply) {
       const nameTag = document.createElement('div');
       nameTag.className = 'msg-sister-name';
@@ -316,7 +326,6 @@ const ChatCore = (() => {
 
     const textNode = document.createElement('div');
     textNode.className = 'msg-text';
-    // v0.9.6修正 - AI返答はMarkdownレンダリング、ユーザーメッセージはテキストのまま
     if (role === 'ai' && typeof marked !== 'undefined' && marked.parse) {
       try {
         textNode.innerHTML = marked.parse(text, { breaks: true, gfm: true });
@@ -328,7 +337,6 @@ const ChatCore = (() => {
     }
     bubble.appendChild(textNode);
 
-    // v0.9.4 - エラー表示のみ（履歴に入れない）の場合は薄く表示
     if (options.noHistory) {
       msgDiv.classList.add('msg-no-history');
     }
@@ -340,7 +348,7 @@ const ChatCore = (() => {
     _scrollToBottom();
   }
 
-  // 姉妹のテーマカラーを取得（v0.9追加）
+  // 姉妹テーマカラー
   function _getSisterColor(sisterKey) {
     const colors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
     return colors[sisterKey] || '#888';
@@ -349,16 +357,13 @@ const ChatCore = (() => {
   // タイピングインジケーター表示
   function showTyping() {
     hideTyping();
-
     const sister = SISTERS[currentSister];
     const msgDiv = document.createElement('div');
     msgDiv.className = 'message ai';
     msgDiv.id = 'typing-msg';
-
     const avatar = document.createElement('div');
     avatar.className = 'msg-avatar';
     avatar.textContent = sister.icon;
-
     const indicator = document.createElement('div');
     indicator.className = 'msg-bubble typing-indicator';
     indicator.innerHTML = `
@@ -366,11 +371,9 @@ const ChatCore = (() => {
       <span class="typing-dot"></span>
       <span class="typing-dot"></span>
     `;
-
     msgDiv.appendChild(avatar);
     msgDiv.appendChild(indicator);
     chatArea.appendChild(msgDiv);
-
     _scrollToBottom();
   }
 
@@ -426,7 +429,7 @@ const ChatCore = (() => {
     return currentSister;
   }
 
-  // IndexedDBに現在の姉妹の履歴を保存（v0.3追加）
+  // 履歴をIndexedDBに保存
   function _saveHistory() {
     if (typeof ChatHistory !== 'undefined') {
       ChatHistory.save(currentSister, chatHistories[currentSister]).catch(e => {
@@ -435,7 +438,7 @@ const ChatCore = (() => {
     }
   }
 
-  // IndexedDBから全姉妹の履歴を読み込み（v0.3追加）
+  // IndexedDBから履歴読み込み
   async function _loadAllHistories() {
     if (typeof ChatHistory === 'undefined') return;
 
@@ -487,13 +490,10 @@ const ChatCore = (() => {
     }
   }
 
-  // --- 公開API ---
   return {
     init, addMessage, showTyping, hideTyping,
     switchSister, getCurrentSister, clearHistory, SISTERS,
-    // v1.0追加 - 会話履歴取得（💾ダウンロード用）
     getHistory: (sister) => chatHistories[sister || currentSister] || [],
-    // v0.9.3 - グループモード用コンテキスト
     getGroupContext: () => ({ currentSister, chatHistories, addMessage, hideTyping, chatArea, SISTERS, SISTER_API }),
   };
 })();
