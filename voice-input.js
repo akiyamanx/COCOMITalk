@@ -1,10 +1,11 @@
-// voice-input.js v1.1
+// voice-input.js v1.2
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
 
 // v1.0 新規作成 - Step 5b 音声会話フロー制御
 // v1.1 修正 - 自動送信＋息継ぎ1.5秒待機＋セレクタバグ修正
+// v1.2 修正 - STT繰り返し問題対策: finalText優先＋interim蓄積防止
 
 /**
  * VoiceController
@@ -44,32 +45,48 @@ class VoiceController {
    */
   _setupCallbacks() {
     // --- STTコールバック ---
+    // v1.2追加 - finalテキストを確定済みフラグで管理
+    this._hasFinalText = false;
+    this._finalText = '';
+
     this._stt.onStart = () => {
       this._ui.updateMicState('listening');
       this._ui.showInterim('🎤 聞いてるよ...');
       this._lastText = '';
+      this._finalText = '';
+      this._hasFinalText = false;
       this._clearSilenceTimer();
     };
 
     this._stt.onInterim = (text) => {
-      // 話してる途中の文字をリアルタイム表示
+      // v1.2: finalが来た後のinterimは無視（モバイル二重発火対策）
+      if (this._hasFinalText) return;
       this._ui.showInterim(text);
       this._lastText = text;
     };
 
     this._stt.onFinal = (text) => {
+      // v1.2: finalは1回だけ採用。2回目以降は無視
+      if (this._hasFinalText) {
+        console.log(`[Voice] final重複無視: "${text}"`);
+        return;
+      }
       console.log(`[Voice] 確定テキスト: "${text}"`);
+      this._finalText = text;
+      this._hasFinalText = true;
       this._lastText = text;
       this._ui.showInterim(text);
     };
 
     this._stt.onEnd = () => {
-      // continuous:falseなので発話終了で呼ばれる
-      const text = this._stt.stopAndGetText() || this._lastText;
+      // v1.2: finalTextを最優先、なければlastText（interim）をフォールバック
+      const text = this._hasFinalText
+        ? this._finalText
+        : (this._stt.stopAndGetText() || this._lastText);
+      console.log(`[Voice] onEnd: hasFinal=${this._hasFinalText} text="${text}"`);
       if (text && text.trim().length > 0) {
         this._lastText = text;
         this._ui.showInterim(text + ' ⏳ 送信中...');
-        // 1.5秒後に自動送信（この間にマイクボタン押せばキャンセル可能）
         this._clearSilenceTimer();
         this._resetSilenceTimer();
       } else {
@@ -201,6 +218,15 @@ class VoiceController {
   async speakResponse(responseText, sisterId) {
     if (!this._enabled) return;
     await this._playback.speak(responseText, sisterId, { speed: this._speed });
+  }
+
+  /**
+   * v1.2追加 - 複数の姉妹の応答を順番に再生（chat-group.jsから呼ばれる）
+   * @param {Array<{text: string, sisterId: string}>} items - 再生キュー
+   */
+  async speakQueue(items) {
+    if (!this._enabled) return;
+    await this._playback.speakQueue(items, { speed: this._speed });
   }
 
   /** 現在の姉妹IDを設定 */

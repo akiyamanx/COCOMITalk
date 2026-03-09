@@ -5,8 +5,9 @@
 // v0.8 2026-03-09 - meeting-relay v1.2対応
 // v0.9 2026-03-09 - meeting-archive-ui v1.1対応
 // v1.0 2026-03-09 - Step 5b 音声会話モジュール7ファイル追加
+// v1.1 2026-03-09 - STTデバッグ＋キュー再生対応
 
-const CACHE_NAME = 'cocomitalk-v1.5';
+const CACHE_NAME = 'cocomitalk-v1.6';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

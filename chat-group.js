@@ -92,10 +92,13 @@ const ChatGroup = (() => {
 
     _saveGroupHistory(currentSister, chatHistories, relayContext, SISTERS);
 
-    // v1.0追加 - 音声モード時、最後の姉妹の応答を声で再生（Step 5c前の暫定）
+    // v1.1修正 - 音声モード時、3人全員の応答を順番に再生（キュー方式）
     if (window.voiceController && window.voiceController.isEnabled() && relayContext.length > 0) {
-      const last = relayContext[relayContext.length - 1];
-      window.voiceController.speakResponse(last.content, last.sisterKey);
+      const queueItems = relayContext.map(r => ({
+        text: r.content,
+        sisterId: r.sisterKey
+      }));
+      window.voiceController.speakQueue(queueItems);
     }
   }
 

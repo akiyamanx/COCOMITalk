@@ -1,9 +1,10 @@
-// voice-output.js v1.0
+// voice-output.js v1.1
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.jsと連携してAI応答を声で再生する
 
 // v1.0 新規作成 - Step 5b TTS再生管理
+// v1.1 追加 - キュー再生機能（グループモード3人全員対応）
 
 /**
  * AudioPlaybackManager
@@ -23,10 +24,16 @@ class AudioPlaybackManager {
     this._currentAudio = null;
     // 再生状態
     this._playing = false;
+    // v1.1追加 - キュー再生用
+    this._queue = [];
+    this._queuePlaying = false;
+    this._queueCancelled = false;
     // イベントコールバック
     this.onPlayStart = null;   // (sisterId) => {}
     this.onPlayEnd = null;     // (sisterId) => {}
     this.onPlayError = null;   // (error, sisterId) => {}
+    // v1.1追加 - キュー全体完了コールバック
+    this.onQueueEnd = null;    // () => {}
   }
 
   /**
@@ -120,7 +127,121 @@ class AudioPlaybackManager {
       this._currentAudio = null;
     }
     this._playing = false;
+    // v1.1追加 - キュー再生中なら全キャンセル
+    this._queueCancelled = true;
+    this._queue = [];
+    this._queuePlaying = false;
     console.log('[AudioPM] 再生停止');
+  }
+
+  // ═══════════════════════════════════════════
+  // v1.1追加 - キュー再生（グループモード用）
+  // ═══════════════════════════════════════════
+
+  /**
+   * 複数の姉妹の応答を順番に再生する（グループモード用）
+   * @param {Array<{text: string, sisterId: string}>} items - 再生キュー
+   * @param {object} options - { speed: number }
+   */
+  async speakQueue(items, options = {}) {
+    if (!items || items.length === 0) return;
+
+    // 既存の再生・キューをクリア
+    this.stop();
+
+    this._queue = [...items];
+    this._queuePlaying = true;
+    this._queueCancelled = false;
+    console.log(`[AudioPM] キュー再生開始: ${items.length}人分`);
+
+    for (let i = 0; i < this._queue.length; i++) {
+      // キャンセルチェック
+      if (this._queueCancelled) {
+        console.log('[AudioPM] キュー再生キャンセル');
+        break;
+      }
+
+      const item = this._queue[i];
+      try {
+        // 各姉妹の音声を順番に再生（awaitで完了を待つ）
+        await this._speakAndWait(item.text, item.sisterId, options);
+      } catch (e) {
+        console.warn(`[AudioPM] キュー[${i}] エラー:`, e.message);
+        // エラーが起きても次の姉妹に進む
+      }
+
+      // 姉妹間に300msの間を空ける（自然な会話感）
+      if (i < this._queue.length - 1 && !this._queueCancelled) {
+        await new Promise(r => setTimeout(r, 300));
+      }
+    }
+
+    this._queuePlaying = false;
+    this._queue = [];
+    if (!this._queueCancelled && this.onQueueEnd) {
+      this.onQueueEnd();
+    }
+  }
+
+  /**
+   * 1人分の再生を完了まで待つ（キュー再生の内部用）
+   * @returns {Promise<void>}
+   */
+  _speakAndWait(text, sisterId, options = {}) {
+    return new Promise(async (resolve, reject) => {
+      if (!text || text.trim().length === 0) {
+        resolve();
+        return;
+      }
+
+      const cleanText = this._cleanTextForTTS(text);
+      if (cleanText.length === 0) {
+        resolve();
+        return;
+      }
+
+      const voiceConfig = getSisterVoice(sisterId);
+      console.log(`[AudioPM] キュー再生: ${voiceConfig.label}`);
+
+      try {
+        const audio = await this._ttsProvider.synthesize(
+          cleanText, voiceConfig.voice, { speed: options.speed || 1.0 }
+        );
+
+        this._currentAudio = audio;
+        this._playing = true;
+        if (this.onPlayStart) this.onPlayStart(sisterId);
+
+        audio.addEventListener('ended', () => {
+          this._playing = false;
+          this._currentAudio = null;
+          if (this.onPlayEnd) this.onPlayEnd(sisterId);
+          resolve();
+        });
+
+        audio.addEventListener('error', (e) => {
+          this._playing = false;
+          this._currentAudio = null;
+          if (this.onPlayError) this.onPlayError(`再生エラー: ${voiceConfig.label}`, sisterId);
+          resolve(); // エラーでもresolveして次に進む
+        });
+
+        await audio.play();
+      } catch (error) {
+        this._playing = false;
+        this._currentAudio = null;
+        console.warn(`[AudioPM] TTS生成エラー: ${error.message}`);
+        resolve(); // エラーでも次に進む
+      }
+    });
+  }
+
+  /**
+   * キュー再生中かどうか
+   * @returns {boolean}
+   */
+  isQueuePlaying() {
+    return this._queuePlaying;
   }
 
   /**
