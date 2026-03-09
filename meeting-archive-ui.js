@@ -2,6 +2,7 @@
 // このファイルは📂ボタンで表示される過去会議の一覧・閲覧・削除を管理する
 // meeting-ui.jsから分割（500行制限対応）
 // v1.0 Step 3.5 - 新規作成（2026-03-08）
+// v1.1 2026-03-09 - 「見る」ボタンでMeetingRelay状態復元（過去会議の再開・追加質問対応）
 'use strict';
 
 /**
@@ -113,7 +114,8 @@ const MeetingArchiveUI = (() => {
   }
 
   /**
-   * 過去の会議を閲覧（読み取り専用でMeetingUIに再描画）
+   * 過去の会議を閲覧＋再開（MeetingRelayの状態も復元し、追加ラウンド可能にする）
+   * v1.1修正 - restoreFromDBで会議状態を復元（追加質問対応）
    * @param {string} meetingId - 会議ID
    */
   async function _viewMeeting(meetingId) {
@@ -129,22 +131,15 @@ const MeetingArchiveUI = (() => {
       // 一覧を閉じる
       hide();
 
-      // MeetingUIのチャットエリアに過去会議を描画
-      if (typeof MeetingUI === 'undefined') return;
-      MeetingUI.addSystemMessage(`📂 過去の会議: ${meeting.topic}`);
-      if (meeting.routing) {
-        MeetingUI.showRoutingResult(meeting.routing);
+      // v1.1追加 - MeetingRelayの状態を復元（追加ラウンドできるようにする）
+      let routing = null;
+      if (typeof MeetingRelay !== 'undefined') {
+        routing = MeetingRelay.restoreFromDB(meeting);
       }
 
-      // 各発言を描画
-      for (const msg of meeting.history) {
-        if (msg.sister === 'user') {
-          MeetingUI.addUserMessage(msg.content);
-        } else {
-          MeetingUI.addSisterMessage(msg.sister, msg.content, msg.isLead);
-        }
-      }
-      MeetingUI.addSystemMessage('--- 過去の会議ここまで ---');
+      // MeetingUIに会議内容を再描画＋操作可能にする
+      if (typeof MeetingUI === 'undefined') return;
+      MeetingUI.restoreDisplay(meeting, routing);
 
     } catch (e) {
       console.error('[MeetingArchiveUI] 閲覧エラー:', e);
