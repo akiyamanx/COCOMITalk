@@ -211,21 +211,21 @@ class VoiceUI {
     const escaped = this._escapeHTML(text);
 
     el.innerHTML = `
-      <div style="margin-bottom:6px; color:var(--cocomi-text, #e0e0e0);">
+      <div style="margin-bottom:6px; color:#333;">
         「${escaped}」
       </div>
-      <div style="display:flex; gap:8px;">
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button id="cocomi-voice-send" style="
           padding:6px 16px; border-radius:6px; border:none;
-          background:var(--cocomi-accent, #6c5ce7); color:white;
+          background:var(--active-primary, #6c5ce7); color:white;
           cursor:pointer; font-size:14px;">送る！</button>
         <button id="cocomi-voice-cancel" style="
-          padding:6px 16px; border-radius:6px; border:1px solid #666;
-          background:transparent; color:#ccc;
+          padding:6px 16px; border-radius:6px; border:1px solid #ccc;
+          background:white; color:#666;
           cursor:pointer; font-size:14px;">やめる</button>
         <button id="cocomi-voice-retry" style="
-          padding:6px 16px; border-radius:6px; border:1px solid #666;
-          background:transparent; color:#ccc;
+          padding:6px 16px; border-radius:6px; border:1px solid #ccc;
+          background:white; color:#666;
           cursor:pointer; font-size:14px;">🎤 もう一回</button>
       </div>
     `;

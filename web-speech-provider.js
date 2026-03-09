@@ -33,7 +33,7 @@ class WebSpeechProvider extends SpeechProvider {
 
     // 設定
     recognition.lang = 'ja-JP';          // 日本語
-    recognition.continuous = true;        // 連続認識（途中で止まらない）
+    recognition.continuous = false;       // 1回の発話で自動停止（ハウリング防止）
     recognition.interimResults = true;    // 途中経過を返す
     recognition.maxAlternatives = 1;      // 候補は1つでOK
 
@@ -77,17 +77,18 @@ class WebSpeechProvider extends SpeechProvider {
         const result = event.results[i];
         if (result.isFinal) {
           // 確定テキスト
-          this._finalTranscript += result[0].transcript;
-          console.log(`[STT] 確定: "${result[0].transcript}"`);
+          this._finalTranscript = result[0].transcript;
+          console.log(`[STT] 確定: "${this._finalTranscript}"`);
         } else {
           // 途中経過
           interimTranscript += result[0].transcript;
         }
       }
 
-      // 途中経過コールバック（リアルタイム表示用）
-      if (interimTranscript && this.onInterim) {
-        this.onInterim(this._finalTranscript + interimTranscript);
+      // 途中経過コールバック（リアルタイム表示用 — 話してる最中に文字が出る）
+      if (this.onInterim) {
+        const displayText = this._finalTranscript + interimTranscript;
+        if (displayText) this.onInterim(displayText);
       }
 
       // 確定テキストコールバック
