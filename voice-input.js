@@ -1,4 +1,4 @@
-// voice-input.js v1.2
+// voice-input.js v1.3
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
@@ -6,6 +6,7 @@
 // v1.0 新規作成 - Step 5b 音声会話フロー制御
 // v1.1 修正 - 自動送信＋息継ぎ1.5秒待機＋セレクタバグ修正
 // v1.2 修正 - STT繰り返し問題対策: finalText優先＋interim蓄積防止
+// v1.3 追加 - Step 5c: 会議モード音声入力対応（マイクボタン＋会議入力欄送信）
 
 /**
  * VoiceController
@@ -51,6 +52,7 @@ class VoiceController {
 
     this._stt.onStart = () => {
       this._ui.updateMicState('listening');
+      this._updateMeetingMicState('listening'); // v1.3追加
       this._ui.showInterim('🎤 聞いてるよ...');
       this._lastText = '';
       this._finalText = '';
@@ -106,6 +108,7 @@ class VoiceController {
     this._playback.onPlayStart = (sisterId) => {
       this._ui.highlightSister(sisterId, true);
       this._ui.updateMicState('speaking');
+      this._updateMeetingMicState('speaking'); // v1.3追加
       // v1.3追加: ハウリング防止 — TTS再生開始時にSTTを強制停止
       if (this._stt.isListening()) {
         this._clearSilenceTimer();
@@ -120,6 +123,7 @@ class VoiceController {
       // キュー再生中は自動マイク再開しない（次の姉妹の番）
       if (this._playback.isQueuePlaying()) return;
       this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle'); // v1.3追加
       if (this._autoListen && this._enabled) {
         // v1.3修正: 1.2秒待つ（スピーカー残響がマイクに入るのを防止）
         setTimeout(() => this.startListening(), 1200);
@@ -129,6 +133,7 @@ class VoiceController {
     // キュー全体が完了した時のコールバック
     this._playback.onQueueEnd = () => {
       this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle'); // v1.3追加
       if (this._autoListen && this._enabled) {
         setTimeout(() => this.startListening(), 1200);
       }
@@ -180,16 +185,24 @@ class VoiceController {
   init() {
     this._ui.init(() => this.toggleListening());
 
+    // v1.3追加 - 会議用マイクボタンのイベント接続
+    const meetingMic = document.getElementById('btn-meeting-mic');
+    if (meetingMic) {
+      meetingMic.addEventListener('click', () => this.toggleListening());
+    }
+
     if (!this._stt.isAvailable()) {
       this._ui.showStatus('このブラウザは音声入力に対応していません', 'error');
       this._ui.disableMic();
+      // v1.3追加 - 会議マイクも無効化
+      if (meetingMic) { meetingMic.disabled = true; meetingMic.style.opacity = '0.4'; }
       return;
     }
 
     if (!this._playback._ttsProvider.isAvailable()) {
       console.warn('[Voice] TTS未設定（Worker URL/認証トークンが必要）');
     }
-    console.log('[Voice] 音声モード初期化完了');
+    console.log('[Voice] 音声モード初期化完了（会議マイク対応）');
   }
 
   /** マイクボタン押下時の処理 */
@@ -291,40 +304,100 @@ class VoiceController {
   /**
    * 音声メッセージを自動送信（既存のチャット送信フローに合流）
    * v1.1修正: セレクタをCOCOMITalkの実際のID（#msg-input, #btn-send）に修正
+   * v1.3追加: 会議モード時はmeeting-topic-inputに送信
    */
   _sendVoiceMessage(text) {
     this._ui.hideInterim();
     this._lastText = '';
 
-    // COCOMITalkのチャット入力欄にテキストをセット
+    // v1.3追加 - 会議画面が表示中かチェック
+    const inMeeting = typeof MeetingUI !== 'undefined' && MeetingUI.getIsVisible();
+
+    if (inMeeting) {
+      this._sendToMeeting(text);
+    } else {
+      this._sendToNormalChat(text);
+    }
+  }
+
+  /** v1.3追加 - 通常チャットへの音声送信 */
+  _sendToNormalChat(text) {
     const input = document.getElementById('msg-input');
     if (!input) {
       console.error('[Voice] #msg-input が見つかりません');
       this._ui.updateMicState('idle');
       return;
     }
-
     input.value = text;
-    // textareaのinputイベントを発火（送信ボタンのdisabled解除のため）
     input.dispatchEvent(new Event('input', { bubbles: true }));
-
-    // 少し待ってから送信（inputイベント処理を完了させる）
     setTimeout(() => {
       const sendBtn = document.getElementById('btn-send');
       if (sendBtn && !sendBtn.disabled) {
         sendBtn.click();
-        console.log('[Voice] 音声メッセージ送信完了');
+        console.log('[Voice] 通常チャット音声送信完了');
       } else {
-        // ボタンがまだdisabledなら直接Enterキーで送信
         const event = new KeyboardEvent('keydown', {
           key: 'Enter', code: 'Enter',
           keyCode: 13, which: 13, bubbles: true
         });
         input.dispatchEvent(event);
-        console.log('[Voice] Enterキーで送信');
       }
       this._ui.updateMicState('idle');
     }, 50);
+  }
+
+  /** v1.3追加 - 会議モードへの音声送信 */
+  _sendToMeeting(text) {
+    const topicInput = document.querySelector('.meeting-topic-input');
+    if (!topicInput) {
+      console.error('[Voice] .meeting-topic-input が見つかりません');
+      this._ui.updateMicState('idle');
+      return;
+    }
+    topicInput.value = text;
+    topicInput.dispatchEvent(new Event('input', { bubbles: true }));
+    setTimeout(() => {
+      // 会議進行中かどうかで送信先を判定
+      const isRunning = typeof MeetingRelay !== 'undefined' && MeetingRelay.getCurrentRound() > 0;
+      if (isRunning) {
+        // 追加ラウンド: continueボタンをクリック
+        const btnContinue = document.getElementById('btn-meeting-continue');
+        if (btnContinue) {
+          btnContinue.click();
+          console.log('[Voice] 会議追加ラウンド音声送信完了');
+        }
+      } else {
+        // 新規会議開始: startボタンをクリック
+        const btnStart = document.getElementById('btn-meeting-start');
+        if (btnStart) {
+          btnStart.click();
+          console.log('[Voice] 会議開始音声送信完了');
+        }
+      }
+      this._ui.updateMicState('idle');
+    }, 50);
+  }
+
+  /**
+   * v1.3追加 - 会議マイクボタンのUI状態を同期更新
+   * @param {string} state - 'idle'|'listening'|'speaking'|'error'
+   */
+  _updateMeetingMicState(state) {
+    const btn = document.getElementById('btn-meeting-mic');
+    if (!btn) return;
+    const styles = {
+      idle:      { bg: 'white', border: 'var(--active-primary,#6c5ce7)', icon: '🎤' },
+      listening: { bg: '#e74c3c', border: '#e74c3c', icon: '🎤' },
+      speaking:  { bg: 'var(--active-primary,#6c5ce7)', border: 'var(--active-primary,#6c5ce7)', icon: '🔊' },
+      error:     { bg: '#e74c3c', border: '#e74c3c', icon: '⚠️' },
+    };
+    const s = styles[state] || styles.idle;
+    btn.style.background = s.bg;
+    btn.style.borderColor = s.border;
+    btn.innerHTML = s.icon;
+    // 聞き取り中はパルスアニメーション
+    btn.style.animation = state === 'listening'
+      ? 'cocomi-mic-pulse 1s ease-in-out infinite' : 'none';
   }
 }
 

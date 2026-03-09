@@ -6,6 +6,7 @@
 //                  - _buildMeetingContext()全ラウンド対応（ラウンド2以降のコンテキスト引継ぎ）
 // v1.2 2026-03-09 - ラウンド2以降に元議題＋フォローアップを両方渡すように修正
 //                  - originalTopic保持でcontinueRound時のコンテキスト欠落を解消
+// v1.3 2026-03-10 - Step 5c: ラウンド完了後にTTSキュー再生（パターンB方式）
 
 'use strict';
 
@@ -170,6 +171,9 @@ const MeetingRelay = (() => {
         console.error(`[MeetingRelay] ${sister.name}のAPI呼び出しエラー:`, error);
       }
     }
+
+    // v1.3追加 - ラウンド完了後にTTSキュー再生（パターンB: まとめて再生）
+    _speakRoundEntries(roundNum);
   }
 
   /**
@@ -322,6 +326,24 @@ const MeetingRelay = (() => {
    */
   function getCurrentMeetingId() {
     return currentMeetingId;
+  }
+
+  /**
+   * v1.3追加 - ラウンドの全発言をTTSキュー再生（パターンB方式）
+   * 音声モードが有効な場合のみ再生。chat-group.jsと同じspeakQueue()を使用
+   * @param {number} roundNum - 対象ラウンド番号
+   */
+  function _speakRoundEntries(roundNum) {
+    if (!window.voiceController || !window.voiceController.isEnabled()) return;
+    // 今ラウンドの発言を抽出
+    const roundEntries = meetingHistory.filter(m => m.round === roundNum && m.sister !== 'user');
+    if (roundEntries.length === 0) return;
+    const queueItems = roundEntries.map(entry => ({
+      text: entry.content,
+      sisterId: entry.sister,
+    }));
+    console.log(`[MeetingRelay] ラウンド${roundNum} TTS再生: ${queueItems.length}人分`);
+    window.voiceController.speakQueue(queueItems);
   }
 
   /**

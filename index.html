@@ -1,5 +1,5 @@
 <!-- COCOMITalk - COCOMI Family AI会話アプリ -->
-<!-- v1.5 Step 5c準備 - VOICEVOX TTSプロバイダー追加＋TTS切替UI -->
+<!-- v1.6 Step 5c準備 - VOICEVOX TTSプロバイダー追加＋TTS切替UI＋会議マイクボタン -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -106,7 +106,7 @@
         <button id="btn-meeting-minutes" class="icon-btn" aria-label="議事録DL" title="議事録DL" disabled>📝</button>
         <button id="btn-meeting-doc" class="icon-btn" aria-label="指示書生成" title="指示書生成" disabled>📋</button>
         <button id="btn-meeting-settings" class="icon-btn" aria-label="設定" title="設定">⚙️</button>
-        <button id="btn-meeting-end" class="icon-btn" aria-label="会議終了">✕</button>
+        <button id="btn-meeting-close" class="icon-btn" aria-label="会議画面を閉じる" title="会議画面を閉じる">✕</button>
       </div>
     </header>
     <main class="meeting-chat"></main>
@@ -125,11 +125,29 @@
         <button id="btn-meeting-start" class="btn-send" aria-label="会議開始">
           <span class="send-arrow">▶</span>
         </button>
+        <!-- v1.6追加 Step 5c: 会議用マイクボタン -->
+        <button id="btn-meeting-mic" class="cocomi-mic-btn" aria-label="音声入力" style="width:36px;height:36px;border-radius:50%;border:2px solid var(--active-primary,#6c5ce7);background:white;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;transition:all 0.2s ease;">🎤</button>
       </div>
+      <!-- v1.6改善 - ラウンド完了後のアクション（わかりやすいガイド付き） -->
       <div class="meeting-actions hidden">
-        <button id="btn-meeting-continue" class="meeting-action-btn">🔄 もう1ラウンド</button>
+        <p id="meeting-action-guide" class="meeting-action-guide">✅ ラウンド完了！次はどうする？</p>
+        <div class="meeting-action-row">
+          <button id="btn-meeting-continue" class="meeting-action-btn meeting-btn-continue">🔄 追加指示して続ける</button>
+          <button id="btn-meeting-end" class="meeting-action-btn meeting-btn-end">✕ 会議終了</button>
+        </div>
       </div>
     </footer>
+    <!-- v1.6追加 - 会議確認ダイアログ -->
+    <div id="meeting-confirm-dialog" class="meeting-confirm-dialog hidden">
+      <div class="meeting-confirm-overlay"></div>
+      <div class="meeting-confirm-box">
+        <p id="meeting-confirm-msg" class="meeting-confirm-msg"></p>
+        <div class="meeting-confirm-btns">
+          <button id="btn-confirm-yes" class="meeting-action-btn meeting-btn-continue"></button>
+          <button id="btn-confirm-no" class="meeting-action-btn meeting-btn-end"></button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- ========== 設定モーダル ========== -->
@@ -213,6 +231,7 @@
   <script src="meeting-relay.js"></script>
   <script src="meeting-ui.js"></script>
   <script src="meeting-archive-ui.js"></script>
+  <script src="meeting-voice.js"></script>
   <script src="chat-group.js"></script>
   <script src="chat-core.js"></script>
   <!-- Step 5b: 音声会話モジュール v1.1 -->

@@ -1,19 +1,9 @@
-// COCOMITalk - 会議専用画面UI
-// このファイルは会議モード時の専用画面のHTML生成とメッセージ表示を管理する
-// v0.8 Step 3 - 新規作成
-// v0.9 2026-03-08 - Markdownレンダリング対応（marked.js使用）
-// v1.0 Step 3.5 - ヘッダー📝📋常時表示＋📂アーカイブ委譲
-// v1.1 2026-03-09 - restoreDisplay()追加（セッション復元用）
-//                  - _handleContinue()をtopicInput使用に変更（prompt()廃止）
+// COCOMITalk - 会議専用画面UI（メッセージ表示・ラウンド管理・アクションボタン）
+// v0.8 新規作成 / v0.9 Markdown対応 / v1.0 ヘッダー常時表示＋アーカイブ
+// v1.1 restoreDisplay＋topicInput方式 / v1.2 確認ダイアログ＋UX改善
 'use strict';
 
-/**
- * 会議UIモジュール
- * - 会議専用画面の生成と表示/非表示
- * - 三姉妹のリレーメッセージを色分けで表示
- * - 議題入力＋ルーティング結果表示
- * - ラウンド管理UIとアクションボタン
- */
+/** 会議UIモジュール */
 const MeetingUI = (() => {
 
   const SISTER_DISPLAY = {
@@ -40,6 +30,8 @@ const MeetingUI = (() => {
 
     // イベント設定
     _setupEvents();
+    // v1.2追加 - MeetingVoice初期化（確認ダイアログ）
+    if (typeof MeetingVoice !== 'undefined') MeetingVoice.init();
     console.log('[MeetingUI] 初期化完了');
   }
 
@@ -48,7 +40,7 @@ const MeetingUI = (() => {
     // 議題送信ボタン
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
     if (btnStart) {
-      btnStart.addEventListener('click', _handleStartMeeting);
+      btnStart.addEventListener('click', _handleStartOrContinue);
     }
 
     // 議題入力欄のEnterキー
@@ -56,18 +48,24 @@ const MeetingUI = (() => {
       topicInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter' && !e.shiftKey) {
           e.preventDefault();
-          _handleStartMeeting();
+          _handleStartOrContinue();
         }
       });
     }
 
-    // 追加ラウンドボタン
+    // 追加ラウンドボタン v1.2変更 - continueは追加指示付き続行
     const btnContinue = meetingScreen.querySelector('#btn-meeting-continue');
     if (btnContinue) {
       btnContinue.addEventListener('click', _handleContinue);
     }
 
-    // 会議終了ボタン
+    // v1.2変更 - ヘッダーの✕はclose（確認ダイアログ付き画面閉じ）
+    const btnClose = meetingScreen.querySelector('#btn-meeting-close');
+    if (btnClose) {
+      btnClose.addEventListener('click', _handleEndMeeting);
+    }
+
+    // v1.2追加 - footerの✕会議終了ボタン
     const btnEnd = meetingScreen.querySelector('#btn-meeting-end');
     if (btnEnd) {
       btnEnd.addEventListener('click', _handleEndMeeting);
@@ -92,14 +90,34 @@ const MeetingUI = (() => {
     }
   }
 
-  /** 会議開始処理 */
-  async function _handleStartMeeting() {
+  /** v1.2改修 - 送信ボタン/Enter押下時の処理（会議進行中なら確認ダイアログ） */
+  async function _handleStartOrContinue() {
     if (!topicInput) return;
     const topic = topicInput.value.trim();
     if (!topic) return;
+    // 会議進行中か判定
+    const hasRound = currentRouting && (typeof MeetingRelay !== 'undefined') && MeetingRelay.getCurrentRound() > 0;
+    if (hasRound) {
+      // 進行中 → 確認ダイアログで分岐
+      if (typeof MeetingVoice !== 'undefined') {
+        MeetingVoice.showConfirm(topic);
+      } else {
+        // フォールバック: そのまま追加ラウンドとして処理
+        _handleContinue();
+      }
+      return;
+    }
+    // 未開始 → 新規会議開始
+    await _startNewMeeting(topic);
+  }
 
-    topicInput.value = '';
-    topicInput.disabled = true;
+  /** 新規会議開始（内部用・外部からも呼ばれる） */
+  async function _startNewMeeting(topic) {
+    if (!topic && topicInput) topic = topicInput.value.trim();
+    if (!topic) return;
+
+    if (topicInput) topicInput.value = '';
+    if (topicInput) topicInput.disabled = true;
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
     if (btnStart) btnStart.disabled = true;
     _clearChat();
@@ -124,7 +142,7 @@ const MeetingUI = (() => {
     }
   }
 
-  /** 追加ラウンド処理 v1.1改善 - topicInput欄を使う（prompt()廃止） */
+  /** 追加ラウンド処理 v1.2改善 - ガイドメッセージ強化 */
   async function _handleContinue() {
     if (!currentRouting) return;
 
@@ -132,7 +150,7 @@ const MeetingUI = (() => {
     const followUp = topicInput ? topicInput.value.trim() : '';
     if (!followUp) {
       if (topicInput) {
-        topicInput.placeholder = '↑ 追加の質問や指示を入力してからボタンを押してね';
+        topicInput.placeholder = '💬 追加の質問や指示を入力してから「🔄 続ける」を押してね';
         topicInput.focus();
       }
       return;
@@ -148,9 +166,8 @@ const MeetingUI = (() => {
     _showActionButtons();
   }
 
-  /** 会議終了処理 */
+  /** 会議終了処理 — 画面を閉じてnormalモードに戻す */
   function _handleEndMeeting() {
-    // v0.8修正 - 画面を閉じてnormalモードに戻す
     hide();
 
     // モードをnormalに戻す
@@ -308,7 +325,6 @@ const MeetingUI = (() => {
 
     const body = document.createElement('div');
     body.className = 'meeting-msg-body';
-    // v0.9修正 - Markdownレンダリング（**太字**や### 見出しをHTMLに変換）
     body.innerHTML = _renderMarkdown(text);
 
     msgDiv.appendChild(header);
@@ -331,7 +347,6 @@ const MeetingUI = (() => {
 
     const body = document.createElement('div');
     body.className = 'meeting-msg-body';
-    // v0.9 - ユーザーメッセージはテキストそのまま（Markdown不要）
     body.textContent = text;
 
     msgDiv.appendChild(header);
@@ -346,7 +361,6 @@ const MeetingUI = (() => {
 
     const msgDiv = document.createElement('div');
     msgDiv.className = 'meeting-msg system-msg';
-    // 改行をbrに変換
     msgDiv.innerHTML = text.replace(/\n/g, '<br>');
     chatArea.appendChild(msgDiv);
     _scrollToBottom();
@@ -395,11 +409,17 @@ const MeetingUI = (() => {
     const btnD = meetingScreen?.querySelector('#btn-meeting-doc');
     if (btnM) btnM.disabled = false;
     if (btnD) btnD.disabled = false;
+    // v1.2追加 - 入力欄のplaceholderをわかりやすく変更
+    if (topicInput) {
+      topicInput.placeholder = '💬 追加の質問や指示を入力...';
+    }
+    // v1.2追加 - ラウンド番号をガイドに反映
+    const guide = meetingScreen?.querySelector('#meeting-action-guide');
+    const round = (typeof MeetingRelay !== 'undefined') ? MeetingRelay.getCurrentRound() : 0;
+    if (guide) guide.textContent = `✅ ラウンド${round}完了！次はどうする？`;
   }
 
-  /**
-   * アクションボタン非表示
-   */
+  /** アクションボタン非表示 */
   function _hideActionButtons() {
     const actions = meetingScreen?.querySelector('.meeting-actions');
     if (actions) actions.classList.add('hidden');
@@ -408,16 +428,11 @@ const MeetingUI = (() => {
   /** チャットエリアをクリア */
   function _clearChat() { if (chatArea) chatArea.innerHTML = ''; }
 
-  /** v0.9追加 - MarkdownテキストをHTMLに変換 */
+  /** MarkdownテキストをHTMLに変換 */
   function _renderMarkdown(text) {
     if (typeof marked !== 'undefined' && marked.parse) {
       try {
-        // marked.jsの設定（安全寄り）
-        const html = marked.parse(text, {
-          breaks: true,   // 改行をbrに変換
-          gfm: true,      // GitHub Flavored Markdown
-        });
-        return html;
+        return marked.parse(text, { breaks: true, gfm: true });
       } catch (e) {
         console.warn('[MeetingUI] Markdownパースエラー:', e);
       }
@@ -436,22 +451,14 @@ const MeetingUI = (() => {
     }
   }
 
-  /**
-   * スクロールを最下部に
-   */
+  /** スクロールを最下部に */
   function _scrollToBottom() {
     if (chatArea) {
-      requestAnimationFrame(() => {
-        chatArea.scrollTop = chatArea.scrollHeight;
-      });
+      requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
     }
   }
 
-  /**
-   * v1.1追加 - IndexedDBから復元した会議内容を画面に再描画
-   * @param {Object} meeting - 会議データ
-   * @param {Object} routing - ルーティング情報
-   */
+  /** IndexedDBから復元した会議内容を画面に再描画 */
   function restoreDisplay(meeting, routing) {
     if (!meeting) return;
 
@@ -483,5 +490,7 @@ const MeetingUI = (() => {
     showTyping,
     hideTyping,
     restoreDisplay,
+    startNewMeeting: _startNewMeeting,  // v1.2追加 - 外部から新規会議開始
+    handleContinue: _handleContinue,    // v1.2追加 - 外部から追加ラウンド
   };
 })();
