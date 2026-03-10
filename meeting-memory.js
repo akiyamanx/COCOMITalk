@@ -142,9 +142,9 @@ const MeetingMemory = (() => {
     const decisionKeywords = /決定|結論|まとめ|確定|採用|方針|するべき|することに/;
     // v1.3修正 - マークダウン見出し・記法を除去してからキーワード抽出
     const stripMarkdown = (s) => s
-      .replace(/^#{1,6}\s+\d*\.?\s*/g, '')  // ### 5. 見出し → 除去
-      .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')  // **太字** → 中身だけ
-      .replace(/^[-*]\s+/g, '')  // - リスト → 除去
+      .replace(/^\s*#{1,6}\s+\d*\.?\s*/g, '')  // ## 見出し → 除去
+      .replace(/^\s*[-*]+\s+/g, '')  // - リスト / * リスト → 除去
+      .replace(/\*{1,3}/g, '')  // 残った*を全除去（太字等）
       .replace(/\|[^|]*\|/g, '')  // |テーブル| → 除去
       .trim();
     const fallbackDecisions = history
