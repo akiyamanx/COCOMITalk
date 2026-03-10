@@ -1,6 +1,7 @@
 // COCOMITalk - 会議メモリーKV管理（Cloudflare KV経由で記憶を永続化）
 // このファイルはWorkerの /memory エンドポイント経由で会議記憶を保存・取得する
 // v1.0 2026-03-10 - Step 4 新規作成
+// v1.1 2026-03-10 - Step 4強化: AI要約対応（rawHistoryをWorkerに送信）
 'use strict';
 
 /** 会議メモリーモジュール */
@@ -122,6 +123,9 @@ const MeetingMemory = (() => {
   /**
    * 会議履歴から要約と決定事項を自動抽出してKVに保存
    * meeting-relay.jsのラウンド完了時に呼ばれる
+   * v1.1改修: rawHistoryをWorkerに送信してAI要約を依頼
+   *           Worker側でGemini Flashが要約＋決定事項を抽出してくれる
+   *           AI要約失敗時はフォールバック用のsummary/decisionsも同時送信
    * @param {string} topic - 議題
    * @param {Array} history - MeetingRelayの会議履歴
    * @param {object} routing - ルーティング結果（lead等）
@@ -129,25 +133,31 @@ const MeetingMemory = (() => {
   async function autoSaveFromMeeting(topic, history, routing) {
     if (!history || history.length === 0) return;
 
-    // 全発言を結合して要約を作成（最初の200文字）
+    // フォールバック用: 従来のキーワードマッチ要約（AI要約失敗時に使われる）
     const allText = history.map(h => h.content).join('\n');
-    const summary = allText.substring(0, 200) + (allText.length > 200 ? '...' : '');
-
-    // 「決定」「結論」「まとめ」等を含む発言を決定事項として抽出
+    const fallbackSummary = allText.substring(0, 200) + (allText.length > 200 ? '...' : '');
     const decisionKeywords = /決定|結論|まとめ|確定|採用|方針|するべき|することに/;
-    const decisions = history
+    const fallbackDecisions = history
       .filter(h => decisionKeywords.test(h.content))
       .map(h => h.content.substring(0, 100))
-      .slice(0, 5); // 最大5件
+      .slice(0, 5);
 
     const lastRound = history.length > 0
       ? Math.max(...history.map(h => h.round || 1))
       : 1;
 
+    // v1.1追加: rawHistoryを含めてWorkerに送信（AI要約用）
+    const rawHistory = history.map(h => ({
+      sister: h.sister || 'unknown',
+      content: h.content,
+      round: h.round || 1,
+    }));
+
     await saveMemory({
       topic,
-      summary,
-      decisions,
+      summary: fallbackSummary,
+      decisions: fallbackDecisions,
+      rawHistory,
       round: lastRound,
       lead: routing ? routing.lead : null,
       mood: 'neutral',
