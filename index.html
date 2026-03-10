@@ -19,6 +19,7 @@
   <link rel="stylesheet" href="meeting-styles.css">
   <link rel="stylesheet" href="meeting-archive-styles.css">
   <link rel="stylesheet" href="memory-ui-styles.css">
+  <link rel="stylesheet" href="search-ui-styles.css">
 </head>
 <body>
 
@@ -85,6 +86,8 @@
         <button id="btn-continue-talk" class="btn-continue-talk hidden" aria-label="みんなで話して" title="姉妹たちだけで会話を続ける">
           <span>🔄</span>
         </button>
+        <!-- v1.8追加 Phase 2a: 検索ボタン -->
+        <button id="btn-search" class="btn-search" aria-label="検索" title="🔍 ウェブ検索">🔍</button>
       </div>
       <div class="input-footer">
         <span id="model-indicator" class="model-indicator">Gemini 2.5 Flash</span>
@@ -227,6 +230,21 @@
     </div>
   </div>
 
+  <!-- ========== 検索モーダル（Phase 2a） ========== -->
+  <div id="search-modal" class="search-modal hidden">
+    <div class="search-modal-content">
+      <div class="search-modal-header">
+        <h3>🔍 ウェブ検索</h3>
+        <button id="btn-search-close" class="search-close-btn" aria-label="閉じる">✕</button>
+      </div>
+      <div class="search-input-area">
+        <input type="text" id="search-query-input" class="search-query-input" placeholder="検索キーワードを入力..." maxlength="200">
+        <button id="btn-search-exec" class="btn-search-exec">検索</button>
+      </div>
+      <div id="search-results" class="search-results"></div>
+    </div>
+  </div>
+
   <!-- ========== メモリー管理オーバーレイ ========== -->
   <div id="memory-manager" class="memory-manager hidden">
     <div class="memory-header">
@@ -265,6 +283,7 @@
   <script src="meeting-ui.js"></script>
   <script src="meeting-archive-ui.js"></script>
   <script src="memory-ui.js"></script>
+  <script src="search-ui.js"></script>
   <script src="meeting-voice.js"></script>
   <script src="chat-group.js"></script>
   <script src="chat-ui.js"></script>

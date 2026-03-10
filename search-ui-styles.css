@@ -1,0 +1,195 @@
+/* COCOMITalk - 検索UIスタイル（Phase 2a）
+ * このファイルは🔍検索ボタン・検索モーダル・検索結果のスタイル
+ * v1.0 2026-03-12 - Phase 2a 新規作成
+ */
+
+/* ========== 検索ボタン（チャット入力欄の横） ========== */
+.btn-search {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 2px solid #FF9800;
+  background: white;
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: all 0.2s ease;
+}
+.btn-search:active {
+  background: #FFF3E0;
+  transform: scale(0.95);
+}
+/* 検索結果保持中は光る */
+.btn-search.has-results {
+  border-color: #FF9800;
+  background: #FFF3E0;
+  box-shadow: 0 0 8px rgba(255, 152, 0, 0.4);
+}
+
+/* ========== 検索モーダル ========== */
+.search-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.5);
+  z-index: 800;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 12px 12px;
+}
+.search-modal.hidden {
+  display: none;
+}
+
+.search-modal-content {
+  background: #fff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+
+/* モーダルヘッダー */
+.search-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #FF9800, #FFB74D);
+  color: #fff;
+}
+.search-modal-header h3 {
+  margin: 0;
+  font-size: 1rem;
+  font-weight: 700;
+}
+.search-close-btn {
+  background: none;
+  border: none;
+  color: #fff;
+  font-size: 1.2rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+/* 検索入力エリア */
+.search-input-area {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #eee;
+}
+.search-query-input {
+  flex: 1;
+  padding: 10px 14px;
+  border: 2px solid #eee;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.search-query-input:focus {
+  border-color: #FF9800;
+}
+.btn-search-exec {
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #FF9800, #FFB74D);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  white-space: nowrap;
+}
+.btn-search-exec:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn-search-exec:active:not(:disabled) {
+  opacity: 0.8;
+}
+
+/* 検索結果エリア */
+.search-results {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 16px;
+  -webkit-overflow-scrolling: touch;
+}
+
+.search-loading,
+.search-empty {
+  text-align: center;
+  color: #999;
+  padding: 24px;
+  font-size: 0.9rem;
+}
+
+/* 結果ヘッダー */
+.search-result-header {
+  font-size: 0.82rem;
+  color: #666;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #eee;
+}
+
+/* 結果アイテム */
+.search-result-item {
+  padding: 10px 0;
+  border-bottom: 1px solid #f5f5f5;
+}
+.search-result-title {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1a0dab;
+  line-height: 1.4;
+  margin-bottom: 4px;
+}
+.search-result-desc {
+  font-size: 0.8rem;
+  color: #555;
+  line-height: 1.5;
+  margin-bottom: 4px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.search-result-url {
+  font-size: 0.72rem;
+  color: #006621;
+  word-break: break-all;
+}
+
+/* 「この結果を使って質問する」ボタン */
+.btn-use-search {
+  width: 100%;
+  padding: 12px;
+  margin-top: 12px;
+  background: linear-gradient(135deg, #FF9800, #FFB74D);
+  color: #fff;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+}
+.btn-use-search:active {
+  opacity: 0.8;
+}

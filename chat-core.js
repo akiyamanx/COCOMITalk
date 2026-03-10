@@ -234,6 +234,17 @@ const ChatCore = (() => {
         }
       }
 
+      // v1.4追加 - Phase 2a 検索結果をプロンプトに注入
+      if (typeof SearchUI !== 'undefined' && SearchUI.hasSearchResults()) {
+        const searchText = SearchUI.getSearchPrompt();
+        if (searchText) {
+          fullPrompt = fullPrompt + searchText;
+          console.log('[ChatCore] 検索結果注入OK');
+        }
+        // 使ったらクリア（1回限り）
+        SearchUI.clearSearchResults();
+      }
+
       const modelKey = (typeof ModeSwitcher !== 'undefined')
         ? ModeSwitcher.getModelKey(currentSister)
         : undefined;
