@@ -9,8 +9,9 @@
 // v2.2 2026-03-10 - chat-ui.js追加（chat-core.js分割）
 // v2.3 2026-03-10 - chat-core.js v1.3メモリー注入対応
 // v2.4 2026-03-10 - meeting-memory.js v1.1 AI要約対応
+// v2.5 2026-03-11 - meeting-memory.js v1.2 フォールバック品質改善
 
-const CACHE_NAME = 'cocomitalk-v2.4';
+const CACHE_NAME = 'cocomitalk-v2.5';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

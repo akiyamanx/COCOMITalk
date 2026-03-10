@@ -2,6 +2,7 @@
 // このファイルはWorkerの /memory エンドポイント経由で会議記憶を保存・取得する
 // v1.0 2026-03-10 - Step 4 新規作成
 // v1.1 2026-03-10 - Step 4強化: AI要約対応（rawHistoryをWorkerに送信）
+// v1.2 2026-03-11 - フォールバック要約/決定事項の品質改善
 'use strict';
 
 /** 会議メモリーモジュール */
@@ -135,11 +136,19 @@ const MeetingMemory = (() => {
 
     // フォールバック用: 従来のキーワードマッチ要約（AI要約失敗時に使われる）
     const allText = history.map(h => h.content).join('\n');
-    const fallbackSummary = allText.substring(0, 200) + (allText.length > 200 ? '...' : '');
+    // v1.2修正 - フォールバック要約も80文字以内に
+    const fallbackSummary = `${topic}について議論。` + allText.substring(0, 60).replace(/\n/g, ' ');
     const decisionKeywords = /決定|結論|まとめ|確定|採用|方針|するべき|することに/;
+    // v1.2修正 - フォールバックdecisionsも短く（AI要約失敗時用）
     const fallbackDecisions = history
       .filter(h => decisionKeywords.test(h.content))
-      .map(h => h.content.substring(0, 100))
+      .map(h => {
+        // 決定キーワードを含む文を抽出して40文字以内に
+        const sentences = h.content.split(/[。！？\n]/);
+        const hit = sentences.find(s => decisionKeywords.test(s)) || sentences[0];
+        return (hit || '').trim().substring(0, 40);
+      })
+      .filter(d => d.length > 5)
       .slice(0, 5);
 
     const lastRound = history.length > 0
