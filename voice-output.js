@@ -1,4 +1,4 @@
-// voice-output.js v1.2
+// voice-output.js v1.4
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -6,6 +6,8 @@
 // v1.0 新規作成 - Step 5b TTS再生管理
 // v1.1 追加 - キュー再生機能（グループモード3人全員対応）
 // v1.2 追加 - プロバイダー切替＋VOICEVOX長文分割連続再生
+// v1.3 追加 - playbackRate再生速度＋canplaythrough待ち
+// v1.4 追加 - Step 5d TTSフォールバック（VOICEVOX→OpenAI自動切替）
 
 /**
  * AudioPlaybackManager
@@ -42,6 +44,8 @@ class AudioPlaybackManager {
     this.onQueueEnd = null;    // () => {}
     // v1.3追加 - 再生速度（playbackRateで制御）
     this._speed = 1.0;
+    // v1.4追加 - フォールバック通知コールバック
+    this.onFallback = null; // (message) => {} — UI通知用
   }
 
   /**
@@ -148,6 +152,36 @@ class AudioPlaybackManager {
       await audio.play();
 
     } catch (error) {
+      // v1.4追加 - VOICEVOXエラー時にOpenAI TTSへフォールバック
+      if (this._ttsProvider === this._voicevoxProvider && this._openaiProvider.isAvailable()) {
+        console.warn(`[AudioPM] VOICEVOXエラー → OpenAI TTSにフォールバック: ${error.message}`);
+        if (this.onFallback) this.onFallback('🔄 VOICEVOX→OpenAI TTSに自動切替');
+        try {
+          const fbVoice = getSisterVoice(sisterId);
+          const openaiVoice = SISTER_VOICE_MAP[sisterId]?.openai?.voice || 'alloy';
+          const fbAudio = await this._openaiProvider.synthesize(
+            cleanText, openaiVoice, { speed: options.speed || 1.0 }
+          );
+          this._currentAudio = fbAudio;
+          this._playing = true;
+          fbAudio.playbackRate = this._speed;
+          if (this.onPlayStart) this.onPlayStart(sisterId);
+          fbAudio.addEventListener('ended', () => {
+            this._playing = false;
+            this._currentAudio = null;
+            if (this.onPlayEnd) this.onPlayEnd(sisterId);
+          });
+          fbAudio.addEventListener('error', () => {
+            this._playing = false;
+            this._currentAudio = null;
+            if (this.onPlayError) this.onPlayError('フォールバック再生エラー', sisterId);
+          });
+          await fbAudio.play();
+          return;
+        } catch (fbErr) {
+          console.error(`[AudioPM] フォールバックも失敗: ${fbErr.message}`);
+        }
+      }
       this._playing = false;
       this._currentAudio = null;
       const msg = `TTS生成エラー: ${error.message}`;
@@ -290,6 +324,33 @@ class AudioPlaybackManager {
 
         await audio.play();
       } catch (error) {
+        // v1.4追加 - VOICEVOXエラー時にOpenAI TTSへフォールバック
+        if (this._ttsProvider === this._voicevoxProvider && this._openaiProvider.isAvailable()) {
+          console.warn(`[AudioPM] キューVOICEVOXエラー → OpenAIフォールバック: ${error.message}`);
+          if (this.onFallback) this.onFallback('🔄 VOICEVOX→OpenAI TTSに自動切替');
+          try {
+            const openaiVoice = SISTER_VOICE_MAP[sisterId]?.openai?.voice || 'alloy';
+            const fbAudio = await this._openaiProvider.synthesize(
+              cleanText, openaiVoice, { speed: options.speed || 1.0 }
+            );
+            this._currentAudio = fbAudio;
+            this._playing = true;
+            fbAudio.playbackRate = this._speed;
+            if (this.onPlayStart) this.onPlayStart(sisterId);
+            await new Promise((res) => {
+              fbAudio.addEventListener('ended', res, { once: true });
+              fbAudio.addEventListener('error', res, { once: true });
+              fbAudio.play().catch(res);
+            });
+            this._playing = false;
+            this._currentAudio = null;
+            if (this.onPlayEnd) this.onPlayEnd(sisterId);
+            resolve();
+            return;
+          } catch (fbErr) {
+            console.error(`[AudioPM] キューフォールバックも失敗: ${fbErr.message}`);
+          }
+        }
         this._playing = false;
         this._currentAudio = null;
         console.warn(`[AudioPM] TTS生成エラー: ${error.message}`);

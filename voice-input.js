@@ -1,4 +1,4 @@
-// voice-input.js v1.3
+// voice-input.js v1.4
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
@@ -148,6 +148,11 @@ class VoiceController {
       this._ui.highlightSister(sisterId, false);
       this._ui.showStatus(error, 'error');
       this._ui.updateMicState('idle');
+    };
+
+    // v1.4追加 - TTSフォールバック通知（VOICEVOX→OpenAI切替時）
+    this._playback.onFallback = (message) => {
+      this._ui.showStatus(message, 'info');
     };
   }
 
