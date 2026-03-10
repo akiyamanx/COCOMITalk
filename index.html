@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="styles.css">
   <link rel="stylesheet" href="meeting-styles.css">
   <link rel="stylesheet" href="meeting-archive-styles.css">
+  <link rel="stylesheet" href="memory-ui-styles.css">
 </head>
 <body>
 
@@ -209,6 +210,11 @@
           </div>
         </section>
         <section class="settings-section" style="margin-top:24px;">
+          <h3>🧠 記憶管理（KV）</h3>
+          <p style="font-size:0.82rem;color:#888;margin:0 0 8px;">会議のAI要約記憶を確認・削除できます</p>
+          <button id="btn-open-memory-ui" class="btn-secondary" style="width:100%;">🧠 記憶管理を開く</button>
+        </section>
+        <section class="settings-section" style="margin-top:24px;">
           <h3>🗑️ 会話履歴</h3>
           <button id="btn-clear-history" class="btn-danger">全ての会話履歴をクリア</button>
         </section>
@@ -220,6 +226,22 @@
       </div>
     </div>
   </div>
+
+  <!-- ========== メモリー管理オーバーレイ ========== -->
+  <div id="memory-manager" class="memory-manager hidden">
+    <div class="memory-header">
+      <h2>🧠 記憶管理</h2>
+      <div class="memory-header-right">
+        <span id="memory-count"></span>
+        <button id="btn-memory-close" class="icon-btn" aria-label="閉じる">✕</button>
+      </div>
+    </div>
+    <div id="memory-list" class="memory-list">
+      <p class="memory-empty">まだ記憶がありません</p>
+    </div>
+  </div>
+  <!-- メモリー詳細パネル（モーダル） -->
+  <div id="memory-detail" class="memory-detail hidden"></div>
 
   <!-- スクリプト読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
@@ -242,6 +264,7 @@
   <script src="meeting-doc-actions.js"></script>
   <script src="meeting-ui.js"></script>
   <script src="meeting-archive-ui.js"></script>
+  <script src="memory-ui.js"></script>
   <script src="meeting-voice.js"></script>
   <script src="chat-group.js"></script>
   <script src="chat-ui.js"></script>

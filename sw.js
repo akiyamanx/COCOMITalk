@@ -14,7 +14,8 @@
 // v2.7 2026-03-11 - meeting-memory.js v1.3 マークダウン記法除去
 // v2.8 2026-03-11 - マークダウン除去の正規表現改善
 
-const CACHE_NAME = 'cocomitalk-v2.8';
+// v2.9 2026-03-12 - memory-ui.js + memory-ui-styles.css 追加（メモリー管理UI）
+const CACHE_NAME = 'cocomitalk-v2.9';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -41,6 +42,8 @@ const CACHE_FILES = [
   './meeting-doc-actions.js',
   './meeting-ui.js',
   './meeting-archive-ui.js',
+  './memory-ui.js',
+  './memory-ui-styles.css',
   './meeting-voice.js',
   './doc-generator.js',
   './file-handler.js',
