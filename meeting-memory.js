@@ -3,6 +3,7 @@
 // v1.0 2026-03-10 - Step 4 新規作成
 // v1.1 2026-03-10 - Step 4強化: AI要約対応（rawHistoryをWorkerに送信）
 // v1.2 2026-03-11 - フォールバック要約/決定事項の品質改善
+// v1.3 2026-03-11 - マークダウン記法除去（見出し・太字・リスト・テーブル）
 'use strict';
 
 /** 会議メモリーモジュール */
@@ -139,16 +140,23 @@ const MeetingMemory = (() => {
     // v1.2修正 - フォールバック要約も80文字以内に
     const fallbackSummary = `${topic}について議論。` + allText.substring(0, 60).replace(/\n/g, ' ');
     const decisionKeywords = /決定|結論|まとめ|確定|採用|方針|するべき|することに/;
-    // v1.2修正 - フォールバックdecisionsも短く（AI要約失敗時用）
+    // v1.3修正 - マークダウン見出し・記法を除去してからキーワード抽出
+    const stripMarkdown = (s) => s
+      .replace(/^#{1,6}\s+\d*\.?\s*/g, '')  // ### 5. 見出し → 除去
+      .replace(/\*{1,2}([^*]+)\*{1,2}/g, '$1')  // **太字** → 中身だけ
+      .replace(/^[-*]\s+/g, '')  // - リスト → 除去
+      .replace(/\|[^|]*\|/g, '')  // |テーブル| → 除去
+      .trim();
     const fallbackDecisions = history
       .filter(h => decisionKeywords.test(h.content))
       .map(h => {
-        // 決定キーワードを含む文を抽出して40文字以内に
+        // 決定キーワードを含む文を抽出してマークダウン除去＋40文字以内に
         const sentences = h.content.split(/[。！？\n]/);
         const hit = sentences.find(s => decisionKeywords.test(s)) || sentences[0];
-        return (hit || '').trim().substring(0, 40);
+        const cleaned = stripMarkdown(hit || '');
+        return cleaned.substring(0, 40);
       })
-      .filter(d => d.length > 5)
+      .filter(d => d.length > 5 && !d.startsWith('#'))
       .slice(0, 5);
 
     const lastRound = history.length > 0
