@@ -8,6 +8,7 @@
 //                  - originalTopic保持でcontinueRound時のコンテキスト欠落を解消
 // v1.3 2026-03-10 - Step 5c: ラウンド完了後にTTSキュー再生（パターンB方式）
 // v1.4 2026-03-10 - Step 4: ラウンド完了時にMeetingMemory.autoSaveFromMeeting()呼び出し
+// v1.5 2026-03-11 - 他の姉妹の発言をuser roleで渡す（assistant混同＝なりすまし防止）
 
 'use strict';
 
@@ -249,20 +250,22 @@ const MeetingRelay = (() => {
       if (!sister) continue; // userエントリはスキップ
       const leadMark = msg.isLead ? '【主担当】' : '';
 
+      // v1.5修正 - 他の姉妹の発言はuser roleで渡す（assistant混同防止）
+      // これにより各APIが「自分以外の発言」として正しく認識する
       if (msg.round < roundNum) {
         // 過去ラウンド: 先頭200文字に切り詰め（トークン節約）
         const truncated = msg.content.length > 200
           ? msg.content.slice(0, 200) + '…（省略）'
           : msg.content;
         context.push({
-          role: 'assistant',
-          content: `[ラウンド${msg.round}] ${sister.emoji}${sister.name}${leadMark}:\n${truncated}`,
+          role: 'user',
+          content: `[ラウンド${msg.round}] ${sister.emoji}${sister.name}${leadMark}の発言:\n${truncated}`,
         });
       } else if (msg.round === roundNum) {
         // 現在ラウンド: 全文
         context.push({
-          role: 'assistant',
-          content: `${sister.emoji}${sister.name}${leadMark}:\n${msg.content}`,
+          role: 'user',
+          content: `${sister.emoji}${sister.name}${leadMark}の発言:\n${msg.content}`,
         });
       }
     }
