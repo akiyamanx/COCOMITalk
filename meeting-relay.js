@@ -228,11 +228,10 @@ const MeetingRelay = (() => {
     // v1.1修正 - maxTokens:6144に増加（会議は長文発言＋コード例が必要）
     // v1.4追加 - メモリープロンプトをシステムプロンプトに注入
     // v1.6追加 - Phase 2a 検索結果をプロンプトに注入
+    // 会議では全姉妹に注入（クリアはラウンド完了後にchat-core.jsで行う）
     let searchPrompt = '';
     if (typeof SearchUI !== 'undefined' && SearchUI.hasSearchResults()) {
       searchPrompt = SearchUI.getSearchPrompt();
-      // 会議では最初の姉妹にだけ注入（1回限り）
-      SearchUI.clearSearchResults();
     }
     const fullPrompt = systemPrompt + leadInstruction + _memoryPrompt + searchPrompt;
     const reply = await apiModule.sendMessage(

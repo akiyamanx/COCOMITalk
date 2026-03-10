@@ -17,7 +17,7 @@
 // v2.9 2026-03-12 - memory-ui.js + memory-ui-styles.css 追加（メモリー管理UI）
 // v2.10 2026-03-12 - memory-ui-styles.css z-index修正（設定モーダルの上に表示）
 // v2.11 2026-03-12 - Phase 2a 検索UI追加（search-ui.js, search-ui-styles.css）
-// v2.12 2026-03-12 - 検索結果HTMLタグ除去 + 会議モード検索対応
+// v2.12 2026-03-12 - 検索結果HTMLタグ除去 + 会議/グループ全モード検索対応
 const CACHE_NAME = 'cocomitalk-v2.12';
 
 // v0.5更新 - 会議系・API系ファイル追加

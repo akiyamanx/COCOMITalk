@@ -83,6 +83,9 @@ const ChatGroup = (() => {
       }
     }
 
+    // v1.2追加 - 全姉妹の発言完了後に検索結果をクリア
+    if (typeof SearchUI !== 'undefined') SearchUI.clearSearchResults();
+
     // 今ターンのリレーを保存（次ターンの補完用）
     prevTurnRelay = relayContext.map(r => ({
       sisterKey: r.sisterKey,
@@ -184,8 +187,22 @@ const ChatGroup = (() => {
       ? ModeSwitcher.getModelKey(sisterKey)
       : undefined;
 
+    // v1.2追加 - メモリー＋検索結果をプロンプトに注入（グループチャット対応）
+    // 検索結果は全姉妹に注入（クリアはchat-core.jsのユーザー送信後に行う）
+    let extraPrompt = '';
+    if (typeof MeetingMemory !== 'undefined') {
+      try {
+        const memText = await MeetingMemory.getMemoryPrompt(3);
+        if (memText) extraPrompt += memText;
+      } catch (e) { /* スキップ */ }
+    }
+    if (typeof SearchUI !== 'undefined' && SearchUI.hasSearchResults()) {
+      extraPrompt += SearchUI.getSearchPrompt();
+      // グループではクリアしない（全姉妹が参照できるように）
+    }
+
     return await apiModule.sendMessage(
-      userText, systemPrompt + leadNote + (extraInstruction || ''), history, { model: modelKey }
+      userText, systemPrompt + leadNote + (extraInstruction || '') + extraPrompt, history, { model: modelKey }
     );
   }
 
