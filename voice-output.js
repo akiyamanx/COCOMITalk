@@ -314,7 +314,6 @@ class AudioPlaybackManager {
         console.log(`[AudioPM] VVチャンク${i + 2}/${chunks.length + 1}: "${chunks[i].substring(0, 20)}..."`);
         const audio = await provider.synthesizeChunk(chunks[i], speakerId, apiKey);
         this._currentAudio = audio;
-        audio.playbackRate = this._speed;
         // 読み込み完了を待ってから再生（途中切れ防止）
         await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => { reject(new Error('チャンク読み込みタイムアウト')); }, 15000);
@@ -322,6 +321,8 @@ class AudioPlaybackManager {
           audio.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('チャンク読み込みエラー')); }, { once: true });
           audio.load();
         });
+        // load()後にplaybackRate設定（load()でリセットされるため）
+        audio.playbackRate = this._speed;
         // 再生完了を待つ
         await new Promise((resolve) => {
           audio.addEventListener('ended', resolve, { once: true });
