@@ -6,9 +6,9 @@
 // v0.9 2026-03-09 - meeting-archive-ui v1.1対応
 // v1.0 2026-03-09 - Step 5b 音声会話モジュール7ファイル追加
 // v1.1 2026-03-09 - STTデバッグ＋キュー再生対応
-// v2.1 2026-03-10 - Step 5c 会議モード音声対応
+// v2.2 2026-03-10 - chat-ui.js追加（chat-core.js分割）
 
-const CACHE_NAME = 'cocomitalk-v2.1';
+const CACHE_NAME = 'cocomitalk-v2.2';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -17,6 +17,7 @@ const CACHE_FILES = [
   './styles.css',
   './meeting-styles.css',
   './app.js',
+  './chat-ui.js',
   './chat-core.js',
   './chat-group.js',
   './chat-history.js',

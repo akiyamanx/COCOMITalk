@@ -1,6 +1,6 @@
-// COCOMITalk - チャットコア（メッセージ送受信＋UI管理）
-// v0.3-v1.0: 履歴保存/トークン表示/三姉妹API/グループモード/Markdown/音声対応
-// v1.1 2026-03-10 - 送信キャンセル（⏹停止ボタン）＋AbortController対応
+// COCOMITalk - チャットコア（メッセージ送受信＋チャット管理）
+// v0.3-v1.1: 履歴保存/トークン表示/三姉妹API/グループ/音声/停止ボタン
+// v1.2 2026-03-10 - 表示系をChatUiに分離（499→355行に軽量化）
 'use strict';
 
 /** チャットコアモジュール */
@@ -69,13 +69,22 @@ const ChatCore = (() => {
     welcomeMsg = document.getElementById('welcome-msg');
     charCount = document.getElementById('char-count');
 
+    // v1.2追加 - ChatUiの初期化（表示系を委譲）
+    if (typeof ChatUi !== 'undefined') {
+      ChatUi.init({
+        chatArea,
+        getCurrentSister: () => currentSister,
+        getSisters: () => SISTERS,
+      });
+    }
+
     // イベントリスナー設定
     _setupInputEvents();
     _setupSendEvents();
 
     await _loadAllHistories();
 
-    console.log('[ChatCore] 初期化完了');
+    console.log('[ChatCore] 初期化完了 v1.2');
   }
 
   /** 入力欄のイベント設定 */
@@ -111,7 +120,7 @@ const ChatCore = (() => {
   function _setupSendEvents() {
     btnSend.addEventListener('click', () => {
       if (isProcessing) {
-        _handleCancel(); // v1.1追加: 処理中なら停止
+        _handleCancel();
       } else if (!btnSend.disabled) {
         _handleSend();
       }
@@ -137,14 +146,25 @@ const ChatCore = (() => {
   /** v1.1追加 - 送信キャンセル処理 */
   function _handleCancel() {
     console.log('[ChatCore] 送信キャンセル実行');
-    // 全APIリクエストを中断
     const aborted = (typeof ApiCommon !== 'undefined') ? ApiCommon.abortAll() : 0;
-    // 会議リレーも中断
     if (typeof MeetingRelay !== 'undefined') MeetingRelay.abort();
     hideTyping();
     if (aborted > 0) addMessage('ai', '⏹ 送信をキャンセルしました');
     isProcessing = false;
     _restoreSendButton();
+  }
+
+  // v1.2改修 - 表示系はChatUiに委譲するラッパー関数
+  function addMessage(role, text, options) {
+    if (typeof ChatUi !== 'undefined') {
+      ChatUi.addMessage(role, text, options);
+    }
+  }
+  function showTyping() {
+    if (typeof ChatUi !== 'undefined') ChatUi.showTyping();
+  }
+  function hideTyping() {
+    if (typeof ChatUi !== 'undefined') ChatUi.hideTyping();
   }
 
   /** メッセージ送信処理 */
@@ -175,16 +195,14 @@ const ChatCore = (() => {
 
     // タイピングインジケーター表示
     isProcessing = true;
-    _showStopButton(); // v1.1追加
+    _showStopButton();
     showTyping();
 
     const isGroup = (typeof ModeSwitcher !== 'undefined') && ModeSwitcher.isGroupMode();
 
     if (isGroup) {
-      // 👥 グループモード: 三姉妹全員がリレー応答
       _groupReply(text);
     } else {
-      // 👤 ソロモード: 1対1で返答
       const sisterAPI = SISTER_API[currentSister];
       const apiModule = sisterAPI ? sisterAPI.module() : null;
 
@@ -201,15 +219,12 @@ const ChatCore = (() => {
     try {
       const history = chatHistories[currentSister];
 
-      // v0.8追加 - モード連動のモデルキー取得
       const modelKey = (typeof ModeSwitcher !== 'undefined')
         ? ModeSwitcher.getModelKey(currentSister)
         : undefined;
 
-      // v1.0追加 - 添付ファイル＋モード連動maxTokens
       const opts = { model: modelKey };
       if (attachment) opts.attachment = attachment;
-      // dev/meetingモードは長い応答が必要（normalは1024で節約）
       const mode = (typeof ModeSwitcher !== 'undefined') ? ModeSwitcher.getMode() : 'normal';
       if (mode !== 'normal') opts.maxTokens = 2048;
 
@@ -220,13 +235,12 @@ const ChatCore = (() => {
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
       _saveHistory();
 
-      // v1.0追加 - 音声モードなら応答を声で再生（Step 5b）
+      // 音声モードなら応答を声で再生
       if (window.voiceController && window.voiceController.isEnabled()) {
         window.voiceController.speakResponse(reply, currentSister);
       }
 
     } catch (error) {
-      // v1.1追加 - AbortErrorはキャンセルなのでエラー表示しない
       if (error.name === 'AbortError') {
         console.log('[ChatCore] API呼び出しがキャンセルされました');
         hideTyping();
@@ -240,7 +254,7 @@ const ChatCore = (() => {
       }
     } finally {
       isProcessing = false;
-      _restoreSendButton(); // v1.1追加
+      _restoreSendButton();
     }
   }
 
@@ -267,10 +281,11 @@ const ChatCore = (() => {
     }
   }
 
-  // デモ返答（API未接続時の仮実装）
+  // v1.2改修 - デモ返答（ChatUiに委譲）
   function _demoReply(userText) {
-    const replies = _getDemoReplies(currentSister, userText);
-    const reply = replies[Math.floor(Math.random() * replies.length)];
+    const reply = (typeof ChatUi !== 'undefined')
+      ? ChatUi.getDemoReply(currentSister, userText)
+      : '（※デモモードです）';
 
     const delay = 800 + Math.random() * 1200;
     setTimeout(() => {
@@ -283,113 +298,6 @@ const ChatCore = (() => {
     }, delay);
   }
 
-  // デモ返答パターン
-  function _getDemoReplies(sister, userText) {
-    const isGreeting = /おはよう|おは/.test(userText);
-    const greetings = {
-      koko: 'アキちゃん、おはよう！✨ 今日も一緒に頑張ろうね！😊',
-      gpt: 'おはよう、アキヤ。今日も良い一日にしよう。',
-      claude: 'おはよ、アキヤ！今日は何やる？',
-    };
-    const defaults = {
-      koko: ['うんうん！もっと聞かせて、アキちゃん！😊', 'なるほどね〜！アキちゃん、面白い！✨'],
-      gpt: ['なるほど、それは興味深いね。もう少し詳しく聞かせてくれる？'],
-      claude: ['うんうん、それいいね！もうちょっと具体的に聞かせて？'],
-    };
-    if (isGreeting && greetings[sister]) return [greetings[sister]];
-    return defaults[sister] || ['（※デモモードです）'];
-  }
-
-  /** メッセージをチャットエリアに追加 */
-  function addMessage(role, text, options = {}) {
-    const sisterKey = options.sisterKey || currentSister;
-    const sister = SISTERS[sisterKey];
-    const isGroupReply = options.sisterKey && role === 'ai';
-
-    const msgDiv = document.createElement('div');
-    msgDiv.className = `message ${role}`;
-
-    const avatar = document.createElement('div');
-    avatar.className = 'msg-avatar';
-    avatar.textContent = role === 'user' ? '👤' : sister.icon;
-
-    const bubble = document.createElement('div');
-    bubble.className = 'msg-bubble';
-
-    if (isGroupReply) {
-      const nameTag = document.createElement('div');
-      nameTag.className = 'msg-sister-name';
-      nameTag.textContent = sister.name + (options.isLead ? ' 👑' : '');
-      nameTag.style.color = _getSisterColor(sisterKey);
-      bubble.appendChild(nameTag);
-    }
-
-    const textNode = document.createElement('div');
-    textNode.className = 'msg-text';
-    if (role === 'ai' && typeof marked !== 'undefined' && marked.parse) {
-      try {
-        textNode.innerHTML = marked.parse(text, { breaks: true, gfm: true });
-      } catch (e) {
-        textNode.textContent = text;
-      }
-    } else {
-      textNode.textContent = text;
-    }
-    bubble.appendChild(textNode);
-
-    if (options.noHistory) {
-      msgDiv.classList.add('msg-no-history');
-    }
-
-    msgDiv.appendChild(avatar);
-    msgDiv.appendChild(bubble);
-    chatArea.appendChild(msgDiv);
-
-    _scrollToBottom();
-  }
-
-  // 姉妹テーマカラー
-  function _getSisterColor(sisterKey) {
-    const colors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
-    return colors[sisterKey] || '#888';
-  }
-
-  // タイピングインジケーター表示
-  function showTyping() {
-    hideTyping();
-    const sister = SISTERS[currentSister];
-    const msgDiv = document.createElement('div');
-    msgDiv.className = 'message ai';
-    msgDiv.id = 'typing-msg';
-    const avatar = document.createElement('div');
-    avatar.className = 'msg-avatar';
-    avatar.textContent = sister.icon;
-    const indicator = document.createElement('div');
-    indicator.className = 'msg-bubble typing-indicator';
-    indicator.innerHTML = `
-      <span class="typing-dot"></span>
-      <span class="typing-dot"></span>
-      <span class="typing-dot"></span>
-    `;
-    msgDiv.appendChild(avatar);
-    msgDiv.appendChild(indicator);
-    chatArea.appendChild(msgDiv);
-    _scrollToBottom();
-  }
-
-  // タイピングインジケーター非表示
-  function hideTyping() {
-    const typing = document.getElementById('typing-msg');
-    if (typing) typing.remove();
-  }
-
-  // チャットエリアを最下部にスクロール
-  function _scrollToBottom() {
-    requestAnimationFrame(() => {
-      chatArea.scrollTop = chatArea.scrollHeight;
-    });
-  }
-
   // 姉妹切り替え
   function switchSister(sisterKey) {
     if (!SISTERS[sisterKey]) return;
@@ -397,7 +305,7 @@ const ChatCore = (() => {
 
     const sister = SISTERS[sisterKey];
 
-    _clearChat();
+    if (typeof ChatUi !== 'undefined') ChatUi.clearMessages();
 
     const history = chatHistories[sisterKey];
     if (history.length === 0) {
@@ -416,12 +324,6 @@ const ChatCore = (() => {
     msgInput.placeholder = sister.placeholder;
 
     console.log(`[ChatCore] 姉妹切替: ${sister.name}`);
-  }
-
-  // チャットエリアをクリア
-  function _clearChat() {
-    const messages = chatArea.querySelectorAll('.message');
-    messages.forEach(msg => msg.remove());
   }
 
   // 現在の姉妹キーを取得
@@ -466,7 +368,7 @@ const ChatCore = (() => {
     }
   }
 
-  // 会話履歴をクリア（v0.3追加）
+  // 会話履歴をクリア
   async function clearHistory(sisterKey) {
     if (sisterKey) {
       chatHistories[sisterKey] = [];
@@ -481,7 +383,7 @@ const ChatCore = (() => {
         await ChatHistory.clearAll();
       }
     }
-    _clearChat();
+    if (typeof ChatUi !== 'undefined') ChatUi.clearMessages();
     if (welcomeMsg) {
       welcomeMsg.classList.remove('hidden');
       const sister = SISTERS[currentSister];
