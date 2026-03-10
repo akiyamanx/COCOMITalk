@@ -1,6 +1,7 @@
 // COCOMITalk - 会議専用画面UI（メッセージ表示・ラウンド管理・アクションボタン）
 // v0.8 新規作成 / v0.9 Markdown対応 / v1.0 ヘッダー常時表示＋アーカイブ
 // v1.1 restoreDisplay＋topicInput方式 / v1.2 確認ダイアログ＋UX改善
+// v1.3 2026-03-10 - 議事録DL＋指示書生成をMeetingDocActionsに分離（496→413行に軽量化）
 'use strict';
 
 /** 会議UIモジュール */
@@ -32,7 +33,7 @@ const MeetingUI = (() => {
     _setupEvents();
     // v1.2追加 - MeetingVoice初期化（確認ダイアログ）
     if (typeof MeetingVoice !== 'undefined') MeetingVoice.init();
-    console.log('[MeetingUI] 初期化完了');
+    console.log('[MeetingUI] 初期化完了 v1.3');
   }
 
   /** イベントリスナー設定 */
@@ -71,16 +72,23 @@ const MeetingUI = (() => {
       btnEnd.addEventListener('click', _handleEndMeeting);
     }
 
-    // v1.0変更 - 議事録DLボタン（ヘッダー常時表示版）
+    // v1.3改修 - 議事録DL＋指示書生成はMeetingDocActionsに委譲
     const btnMinutes = meetingScreen.querySelector('#btn-meeting-minutes');
     if (btnMinutes) {
-      btnMinutes.addEventListener('click', _handleDownloadMinutes);
+      btnMinutes.addEventListener('click', () => {
+        if (typeof MeetingDocActions !== 'undefined') {
+          MeetingDocActions.downloadMinutes(currentRouting);
+        }
+      });
     }
 
-    // v1.0変更 - 指示書生成ボタン（ヘッダー常時表示版）
     const btnDoc = meetingScreen.querySelector('#btn-meeting-doc');
     if (btnDoc) {
-      btnDoc.addEventListener('click', _handleGenerateDoc);
+      btnDoc.addEventListener('click', () => {
+        if (typeof MeetingDocActions !== 'undefined') {
+          MeetingDocActions.generateDoc();
+        }
+      });
     }
 
     // v1.0追加 - 📂過去の会議一覧ボタン
@@ -186,88 +194,6 @@ const MeetingUI = (() => {
     }
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
     if (btnStart) btnStart.disabled = false;
-  }
-
-  /** v0.9追加 - 議事録をMarkdownでダウンロード */
-  function _handleDownloadMinutes() {
-    if (typeof MeetingRelay === 'undefined') return;
-    const history = MeetingRelay.getHistory();
-    if (!history || history.length === 0) { addSystemMessage('まだ発言がないよ。会議を始めてからダウンロードしてね'); return; }
-
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
-    const timeStr = now.toTimeString().slice(0, 5);
-    let md = `# COCOMI Family 会議議事録\n`;
-    md += `- 日時: ${dateStr} ${timeStr}\n`;
-    if (currentRouting) {
-      md += `- カテゴリ: ${currentRouting.label}\n`;
-      md += `- 主担当: ${SISTER_DISPLAY[currentRouting.lead]?.name || currentRouting.lead}\n`;
-    }
-    md += `\n---\n\n`;
-
-    let lastRound = 0;
-    for (const msg of history) {
-      if (msg.round !== lastRound) {
-        md += `## ラウンド ${msg.round}\n\n`;
-        lastRound = msg.round;
-      }
-      const sister = SISTER_DISPLAY[msg.sister] || { emoji: '?', name: msg.sister };
-      const leadMark = msg.isLead ? ' 👑主担当' : '';
-      md += `### ${sister.emoji} ${sister.name}${leadMark}\n\n`;
-      md += `${msg.content}\n\n---\n\n`;
-    }
-
-    // ダウンロード実行
-    const blob = new Blob([md], { type: 'text/markdown; charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `COCOMI会議_${dateStr}.md`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-
-    addSystemMessage('📝 議事録をダウンロードしたよ！');
-  }
-
-  /** v0.9追加 - 会議履歴から指示書を生成 */
-  async function _handleGenerateDoc() {
-    if (typeof MeetingRelay === 'undefined' || typeof DocGenerator === 'undefined') { addSystemMessage('指示書生成モジュールが未読み込み'); return; }
-    const history = MeetingRelay.getHistory();
-    if (!history || history.length === 0) { addSystemMessage('まだ発言がないよ。会議を始めてから📋を押してね'); return; }
-
-    // 会議履歴をDocGeneratorが受け取れる形式に変換
-    const chatMessages = history.map(msg => {
-      const sister = SISTER_DISPLAY[msg.sister] || { name: msg.sister };
-      return {
-        role: 'ai',
-        content: `【${sister.name}】\n${msg.content}`,
-      };
-    });
-
-    addSystemMessage('📋 指示書を生成中... お姉ちゃんが統合→クロちゃんがチェック');
-
-    try {
-      const result = await DocGenerator.generate(chatMessages);
-      if (result.success && result.files.length > 0) {
-        // 各ファイルをダウンロード
-        for (const file of result.files) {
-          const blob = new Blob([file.content], { type: 'text/markdown; charset=utf-8' });
-          const url = URL.createObjectURL(blob);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = file.name;
-          document.body.appendChild(a);
-          a.click();
-          document.body.removeChild(a);
-          URL.revokeObjectURL(url);
-        }
-        addSystemMessage(`📋 指示書${result.files.length}ファイルをダウンロードしたよ！`);
-      }
-    } catch (error) {
-      addSystemMessage(`指示書生成エラー: ${error.message}`);
-    }
   }
 
   /** 会議画面を表示 */
@@ -397,10 +323,7 @@ const MeetingUI = (() => {
     if (typing) typing.remove();
   }
 
-  /**
-   * アクションボタン表示（ラウンド完了後）
-   * v1.0変更 - 📝📋ヘッダーボタンも有効化
-   */
+  /** アクションボタン表示（ラウンド完了後） */
   function _showActionButtons() {
     const actions = meetingScreen?.querySelector('.meeting-actions');
     if (actions) actions.classList.remove('hidden');
@@ -442,9 +365,7 @@ const MeetingUI = (() => {
       .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
   }
 
-  /**
-   * v1.0追加 - 📂過去の会議一覧を表示（MeetingArchiveUIに委譲）
-   */
+  /** v1.0追加 - 📂過去の会議一覧を表示（MeetingArchiveUIに委譲） */
   async function _handleShowArchive() {
     if (typeof MeetingArchiveUI !== 'undefined') {
       MeetingArchiveUI.show();
@@ -490,7 +411,7 @@ const MeetingUI = (() => {
     showTyping,
     hideTyping,
     restoreDisplay,
-    startNewMeeting: _startNewMeeting,  // v1.2追加 - 外部から新規会議開始
-    handleContinue: _handleContinue,    // v1.2追加 - 外部から追加ラウンド
+    startNewMeeting: _startNewMeeting,
+    handleContinue: _handleContinue,
   };
 })();
