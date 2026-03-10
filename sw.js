@@ -7,8 +7,9 @@
 // v1.0 2026-03-09 - Step 5b 音声会話モジュール7ファイル追加
 // v1.1 2026-03-09 - STTデバッグ＋キュー再生対応
 // v2.2 2026-03-10 - chat-ui.js追加（chat-core.js分割）
+// v2.3 2026-03-10 - chat-core.js v1.3メモリー注入対応
 
-const CACHE_NAME = 'cocomitalk-v2.2';
+const CACHE_NAME = 'cocomitalk-v2.3';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

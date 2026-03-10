@@ -1,6 +1,7 @@
 // COCOMITalk - チャットコア（メッセージ送受信＋チャット管理）
 // v0.3-v1.1: 履歴保存/トークン表示/三姉妹API/グループ/音声/停止ボタン
 // v1.2 2026-03-10 - 表示系をChatUiに分離（499→355行に軽量化）
+// v1.3 2026-03-10 - 1対1チャットにもKVメモリー注入（Step 4強化）
 'use strict';
 
 /** チャットコアモジュール */
@@ -84,7 +85,7 @@ const ChatCore = (() => {
 
     await _loadAllHistories();
 
-    console.log('[ChatCore] 初期化完了 v1.2');
+    console.log('[ChatCore] 初期化完了 v1.3');
   }
 
   /** 入力欄のイベント設定 */
@@ -219,6 +220,20 @@ const ChatCore = (() => {
     try {
       const history = chatHistories[currentSister];
 
+      // v1.3追加 - 1対1チャットにもKVメモリーを注入（過去の会議記憶を踏まえた応答）
+      let fullPrompt = systemPrompt;
+      if (typeof MeetingMemory !== 'undefined') {
+        try {
+          const memoryText = await MeetingMemory.getMemoryPrompt(3);
+          if (memoryText) {
+            fullPrompt = systemPrompt + memoryText;
+            console.log('[ChatCore] メモリー注入OK（1対1チャット）');
+          }
+        } catch (e) {
+          console.warn('[ChatCore] メモリー取得スキップ:', e.message);
+        }
+      }
+
       const modelKey = (typeof ModeSwitcher !== 'undefined')
         ? ModeSwitcher.getModelKey(currentSister)
         : undefined;
@@ -228,7 +243,7 @@ const ChatCore = (() => {
       const mode = (typeof ModeSwitcher !== 'undefined') ? ModeSwitcher.getMode() : 'normal';
       if (mode !== 'normal') opts.maxTokens = 2048;
 
-      const reply = await apiModule.sendMessage(userText, systemPrompt, history, opts);
+      const reply = await apiModule.sendMessage(userText, fullPrompt, history, opts);
 
       hideTyping();
       addMessage('ai', reply);
