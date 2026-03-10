@@ -30,6 +30,7 @@ const CACHE_FILES = [
   './mode-switcher.js',
   './meeting-router.js',
   './meeting-history.js',
+  './meeting-memory.js',
   './meeting-relay.js',
   './meeting-doc-actions.js',
   './meeting-ui.js',

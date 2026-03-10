@@ -7,6 +7,7 @@
 // v1.2 2026-03-09 - ラウンド2以降に元議題＋フォローアップを両方渡すように修正
 //                  - originalTopic保持でcontinueRound時のコンテキスト欠落を解消
 // v1.3 2026-03-10 - Step 5c: ラウンド完了後にTTSキュー再生（パターンB方式）
+// v1.4 2026-03-10 - Step 4: ラウンド完了時にMeetingMemory.autoSaveFromMeeting()呼び出し
 
 'use strict';
 
@@ -54,6 +55,8 @@ const MeetingRelay = (() => {
   let currentMeetingId = null;
   // v1.2追加 - 元の議題を保持（ラウンド2以降で参照）
   let originalTopic = '';
+  // v1.4追加 - Step 4: 会議メモリーのプロンプト注入テキスト
+  let _memoryPrompt = '';
 
   /**
    * 会議を開始する
@@ -93,12 +96,29 @@ const MeetingRelay = (() => {
       MeetingUI.showRoutingResult(routing);
     }
 
+    // v1.4追加 - Step 4: KVから過去の記憶を取得してプロンプト注入用に保持
+    _memoryPrompt = '';
+    if (typeof MeetingMemory !== 'undefined') {
+      try {
+        _memoryPrompt = await MeetingMemory.getMemoryPrompt(5);
+        if (_memoryPrompt) console.log('[MeetingRelay] メモリー注入準備OK');
+      } catch (e) {
+        console.warn('[MeetingRelay] メモリー取得エラー（続行）:', e);
+      }
+    }
+
     try {
       // ラウンド1は必ず実行
       await _runRound(topic, order, lead, 1);
 
       // v1.0追加 - 会議完了ステータスに更新
       _updateMeetingStatus('completed');
+
+      // v1.4追加 - Step 4: 会議記憶をKVに自動保存
+      if (typeof MeetingMemory !== 'undefined') {
+        MeetingMemory.autoSaveFromMeeting(topic, meetingHistory, routing)
+          .catch(e => console.warn('[MeetingRelay] メモリー保存エラー（続行）:', e));
+      }
 
       console.log(`[MeetingRelay] 会議完了: ${currentRound}ラウンド`);
       return { rounds: currentRound, history: meetingHistory, routing };
@@ -205,9 +225,11 @@ const MeetingRelay = (() => {
 
     // API呼び出し
     // v1.1修正 - maxTokens:6144に増加（会議は長文発言＋コード例が必要）
+    // v1.4追加 - メモリープロンプトをシステムプロンプトに注入
+    const fullPrompt = systemPrompt + leadInstruction + _memoryPrompt;
     const reply = await apiModule.sendMessage(
       `【会議議題】${topic}`,
-      systemPrompt + leadInstruction,
+      fullPrompt,
       history,
       { model: modelKey, maxTokens: 6144 }
     );
@@ -284,6 +306,12 @@ const MeetingRelay = (() => {
         await _runRound(combinedTopic, routing.order, routing.lead, nextRound);
         // v1.0追加 - 追加ラウンド完了
         _updateMeetingStatus('completed');
+
+        // v1.4追加 - Step 4: 追加ラウンド後もKVメモリー更新
+        if (typeof MeetingMemory !== 'undefined') {
+          MeetingMemory.autoSaveFromMeeting(originalTopic, meetingHistory, routing)
+            .catch(e => console.warn('[MeetingRelay] メモリー更新エラー（続行）:', e));
+        }
         return { rounds: currentRound, history: meetingHistory };
       } finally {
         isRunning = false;
