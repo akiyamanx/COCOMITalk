@@ -15,7 +15,8 @@
 // v2.8 2026-03-11 - マークダウン除去の正規表現改善
 
 // v2.9 2026-03-12 - memory-ui.js + memory-ui-styles.css 追加（メモリー管理UI）
-const CACHE_NAME = 'cocomitalk-v2.9';
+// v2.10 2026-03-12 - memory-ui-styles.css z-index修正（設定モーダルの上に表示）
+const CACHE_NAME = 'cocomitalk-v2.10';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
