@@ -128,6 +128,9 @@ class VoiceController {
     };
 
     this._stt.onEnd = () => {
+      // ★デバッグ（原因特定後に削除）
+      document.title = `onEnd: final=${this._hasFinalText} last="${(this._lastText||'').slice(0,10)}"`;
+
       // v1.8追加: STT即終了リトライ判定
       const duration = Date.now() - this._sttStartTime;
       const hasText = this._hasFinalText || (this._lastText && this._lastText.trim().length > 0);
@@ -275,6 +278,9 @@ class VoiceController {
 
   /** マイクボタン押下時の処理 */
   toggleListening() {
+    // ★デバッグ（原因特定後に削除）
+    document.title = `TGL: listen=${this._stt.isListening()} timer=${this._silenceTimer!==null} play=${this._playback.isPlaying()}`;
+
     if (this._stt.isListening() || this._silenceTimer !== null) {
       this._clearSilenceTimer();
       const text = (this._lastText || '').trim();
@@ -289,6 +295,8 @@ class VoiceController {
       this._playback.stop();
       this._forceIdleState();
     } else {
+      // ★デバッグ
+      document.title = 'TGL→startListening';
       this.startListening();
     }
   }
