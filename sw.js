@@ -27,7 +27,8 @@
 // v2.20 2026-03-11 - voice-input v1.5.1 無音タイマー改善(息継ぎ対策強化)
 // v2.21 2026-03-11 - voice-input v1.5.2 コマンド句読点除去修正
 // v2.22 2026-03-11 - voice-command.js分離＋voice-input v1.6 try-catch追加（UI固まり防止）
-const CACHE_NAME = 'cocomitalk-v2.22';
+// v2.23 2026-03-11 - voice-input v1.6.1 VoiceCommand未定義でもマイクボタン表示される防御
+const CACHE_NAME = 'cocomitalk-v2.23';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

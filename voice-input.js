@@ -10,6 +10,7 @@
 // v1.3 追加 - Step 5c: 会議モード音声入力対応（マイクボタン＋会議入力欄送信）
 // v1.5 追加 - Step 5e: 音声コマンド対応（ストップ・姉妹切替・スピード調整）
 // v1.6 修正 - 音声コマンドをvoice-command.jsに分離＋try-catch追加（UI固まり防止）
+// v1.6.1 修正 - VoiceCommand未定義でもマイクボタンが消えない防御コード追加
 
 /**
  * VoiceController
@@ -29,29 +30,40 @@ class VoiceController {
     this._playback = new AudioPlaybackManager();
     this._ui = new VoiceUI();
     // v1.6追加 - 音声コマンドハンドラー（voice-command.jsに委譲）
-    this._voiceCmd = new VoiceCommand({
-      onStop: () => { this._playback.stop(); this._forceIdleState(); },
-      onResume: () => { this._forceIdleState(); setTimeout(() => this.startListening(), 500); },
-      onSwitchSister: (key, name) => {
-        if (typeof window.switchToSister === 'function') {
-          window.switchToSister(key);
-          this._currentSisterId = key;
-          this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
-          this._forceIdleState();
-          if (this._autoListen) setTimeout(() => this.startListening(), 800);
-        }
-      },
-      onSwitchGroup: () => {
-        if (typeof window.switchToGroup === 'function') {
-          window.switchToGroup();
-          this._ui.showStatus('👥 グループモードに切り替えました', 'success');
-          this._forceIdleState();
-          if (this._autoListen) setTimeout(() => this.startListening(), 800);
-        }
-      },
-      onSpeedChange: (newSpeed) => { this._speed = newSpeed; },
-      onStatus: (msg, type) => { this._ui.showStatus(msg, type); this._forceIdleState(); },
-    });
+    // v1.6.1修正 - VoiceCommandが読み込まれてない場合も安全に動作
+    this._voiceCmd = null;
+    try {
+      if (typeof VoiceCommand !== 'undefined') {
+        this._voiceCmd = new VoiceCommand({
+          onStop: () => { this._playback.stop(); this._forceIdleState(); },
+          onResume: () => { this._forceIdleState(); setTimeout(() => this.startListening(), 500); },
+          onSwitchSister: (key, name) => {
+            if (typeof window.switchToSister === 'function') {
+              window.switchToSister(key);
+              this._currentSisterId = key;
+              this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
+              this._forceIdleState();
+              if (this._autoListen) setTimeout(() => this.startListening(), 800);
+            }
+          },
+          onSwitchGroup: () => {
+            if (typeof window.switchToGroup === 'function') {
+              window.switchToGroup();
+              this._ui.showStatus('👥 グループモードに切り替えました', 'success');
+              this._forceIdleState();
+              if (this._autoListen) setTimeout(() => this.startListening(), 800);
+            }
+          },
+          onSpeedChange: (newSpeed) => { this._speed = newSpeed; },
+          onStatus: (msg, type) => { this._ui.showStatus(msg, type); this._forceIdleState(); },
+        });
+        console.log('[Voice] VoiceCommand初期化OK');
+      } else {
+        console.warn('[Voice] VoiceCommand未定義 — 音声コマンド無効で続行');
+      }
+    } catch (e) {
+      console.warn('[Voice] VoiceCommand初期化エラー（無視して続行）:', e.message);
+    }
     // 音声モードが有効か（一度でもマイクを押したらtrue）
     this._enabled = false;
     // 現在の姉妹ID
@@ -364,7 +376,7 @@ class VoiceController {
   _sendVoiceMessage(text) {
     try {
       // v1.6変更 - 音声コマンドチェック（voice-command.jsに委譲）
-      if (this._voiceCmd.handle(text)) return;
+      if (this._voiceCmd && this._voiceCmd.handle(text)) return;
 
       this._ui.hideInterim();
       this._lastText = '';
