@@ -44,7 +44,11 @@ const App = (() => {
         window.voiceController = new VoiceController();
         window.voiceController.init();
       }
-    } catch (e) { console.warn('[App] VoiceController初期化スキップ:', e.message); }
+    } catch (e) {
+      console.warn('[App] VoiceController初期化スキップ:', e.message);
+      // ★デバッグ: 初期化エラーを画面に表示（原因特定後に削除）
+      document.title = 'VC-ERR: ' + e.message;
+    }
     // v1.2追加 - 進行中の会議があれば復元
     await _restoreActiveMeeting();
     _setupFileButtons();

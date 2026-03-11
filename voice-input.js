@@ -368,9 +368,8 @@ class VoiceController {
   /** 音声メッセージの送信（コマンド判定→送信） */
   _sendVoiceMessage(text) {
     try {
-      // ★デバッグ: STTテキストと判定結果を画面表示（原因特定後に削除）
-      const debugNorm = this._voiceCmd ? this._voiceCmd._normalize(text) : text;
-      this._ui.showStatus(`🔍 STT: "${text}" → "${debugNorm}"`, 'info');
+      // ★デバッグ: タブタイトルで確認（原因特定後に削除）
+      document.title = `CMD: "${text}" vc=${!!this._voiceCmd}`;
 
       // 音声コマンドチェック
       if (this._voiceCmd && this._voiceCmd.handle(text)) return;
