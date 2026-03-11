@@ -1,8 +1,10 @@
-// COCOMITalk - メモリー管理UI（KV記憶の一覧・詳細・削除）
+// COCOMITalk - メモリー管理UI（KV記憶の一覧・詳細・削除・検索・一括削除）
 // このファイルはKVに保存された会議記憶を一覧表示し、確認・削除を行うUI
 // 設定画面の「🧠記憶管理を開く」ボタンから起動される
 // meeting-archive-ui.js のパターンを踏襲
 // v1.0 2026-03-12 - Step 4補完: 新規作成
+// v1.1 2026-03-11 - メモリー管理UI改善（件数正確化・検索フィルタ・一括削除）
+// v1.2 2026-03-11 - 期間指定削除機能追加＋CSS整備
 'use strict';
 
 /** メモリー管理UIモジュール */
@@ -15,25 +17,43 @@ const MemoryUI = (() => {
     claude: { name: 'クロちゃん', emoji: '🔮', color: '#E6783E' },
   };
 
+  // 全記憶データ（検索フィルタ用にキャッシュ）
+  let _allMemories = [];
+  // 現在のWorker側の全件数
+  let _totalCount = 0;
+
   /** 初期化（イベント設定） */
   function init() {
-    // 記憶管理を開くボタン（設定モーダル内）
     const btnOpen = document.getElementById('btn-open-memory-ui');
     if (btnOpen) btnOpen.addEventListener('click', show);
-    // オーバーレイの閉じるボタン
     const btnClose = document.getElementById('btn-memory-close');
     if (btnClose) btnClose.addEventListener('click', hide);
+    // v1.1追加 - 一括削除ボタン
+    const btnDeleteAll = document.getElementById('btn-memory-delete-all');
+    if (btnDeleteAll) btnDeleteAll.addEventListener('click', _deleteAll);
+    // v1.1追加 - 検索入力
+    const searchInput = document.getElementById('memory-search-input');
+    if (searchInput) {
+      searchInput.addEventListener('input', _onSearchInput);
+    }
+    // v1.2追加 - 期間指定削除ボタン
+    const btnDeleteByPeriod = document.getElementById('btn-memory-delete-period');
+    if (btnDeleteByPeriod) btnDeleteByPeriod.addEventListener('click', _deleteByPeriod);
     console.log('[MemoryUI] 初期化完了');
   }
 
   /**
    * メモリー一覧画面を表示
-   * Worker /memory?limit=20 から取得して描画
+   * Worker /memory?limit=100 から全件取得して描画
    */
   async function show() {
     const overlay = document.getElementById('memory-manager');
     const listDiv = document.getElementById('memory-list');
     if (!overlay || !listDiv) return;
+
+    // 検索欄をクリア
+    const searchInput = document.getElementById('memory-search-input');
+    if (searchInput) searchInput.value = '';
 
     // ローディング
     listDiv.innerHTML = '<p class="memory-loading">🧠 記憶を読み込み中...</p>';
@@ -45,30 +65,25 @@ const MemoryUI = (() => {
         return;
       }
 
-      // 最大20件取得
-      const memories = await MeetingMemory.getMemories(20);
-      if (!memories || memories.length === 0) {
+      // v1.1変更 - 最大100件取得（検索フィルタ用に全件保持）
+      const result = await MeetingMemory.getMemoriesWithTotal(100);
+      _allMemories = result.memories || [];
+      _totalCount = result.total || _allMemories.length;
+
+      if (_allMemories.length === 0) {
         listDiv.innerHTML = '<p class="memory-empty">まだ記憶がありません</p>';
         _updateCount(0, 0);
         return;
       }
 
-      // 新しい順に表示（Worker側はslice(-limit)で古い順なのでreverse）
-      const sorted = [...memories].reverse();
+      // 新しい順にソート
+      _allMemories = [..._allMemories].reverse();
 
-      // 全件数を取得（getMemoriesの中でtotalも取れるが、ここでは配列長で代用）
-      _updateCount(sorted.length, sorted.length);
+      // v1.1修正 - 正確な件数表示（Worker側のtotalを使用）
+      _updateCount(_allMemories.length, _totalCount);
 
-      // 一覧HTML生成
-      listDiv.innerHTML = sorted.map(m => _renderItem(m)).join('');
-
-      // イベント委譲（詳細・削除ボタン）
-      listDiv.onclick = (e) => {
-        const detailBtn = e.target.closest('.memory-detail-btn');
-        const delBtn = e.target.closest('.memory-delete-btn');
-        if (detailBtn) _showDetail(detailBtn.dataset.key, sorted);
-        if (delBtn) _deleteMemory(delBtn.dataset.key);
-      };
+      // 一覧描画
+      _renderList(_allMemories);
 
     } catch (e) {
       console.error('[MemoryUI] 一覧取得エラー:', e);
@@ -82,17 +97,146 @@ const MemoryUI = (() => {
     if (overlay) overlay.classList.add('hidden');
   }
 
-  /** 件数表示を更新 */
-  function _updateCount(shown, total) {
-    const el = document.getElementById('memory-count');
-    if (el) el.textContent = `${total}件の記憶`;
+  // =========================================
+  // v1.1追加 - 検索フィルタ
+  // =========================================
+
+  /** 検索入力時のフィルタ処理 */
+  function _onSearchInput(e) {
+    const query = (e.target.value || '').trim().toLowerCase();
+    if (!query) {
+      _renderList(_allMemories);
+      _updateCount(_allMemories.length, _totalCount);
+      return;
+    }
+
+    // 議題・要約・決定事項で部分一致フィルタ
+    const filtered = _allMemories.filter(m => {
+      const topic = (m.topic || '').toLowerCase();
+      const summary = (m.summary || '').toLowerCase();
+      const decisions = (m.decisions || []).join(' ').toLowerCase();
+      return topic.includes(query) || summary.includes(query) || decisions.includes(query);
+    });
+
+    _renderList(filtered);
+    _updateCount(filtered.length, _totalCount, query);
   }
 
-  /**
-   * 一覧アイテムのHTML生成
-   * @param {object} m - 記憶データ
-   * @returns {string} HTML文字列
-   */
+  // =========================================
+  // v1.1追加 - 一括削除
+  // =========================================
+
+  /** 全件削除（確認ダイアログ2段階） */
+  async function _deleteAll() {
+    if (_totalCount === 0) {
+      alert('削除する記憶がありません。');
+      return;
+    }
+
+    if (!confirm(`全${_totalCount}件の記憶を削除しますか？\nこの操作は取り消せません。`)) return;
+    if (!confirm('本当に全件削除しますか？\nWorker KVから完全に消えます。')) return;
+
+    try {
+      const result = await MeetingMemory.deleteAllMemories();
+      if (result && result.success) {
+        _allMemories = [];
+        _totalCount = 0;
+        const listDiv = document.getElementById('memory-list');
+        if (listDiv) listDiv.innerHTML = '<p class="memory-empty">全ての記憶を削除しました</p>';
+        _updateCount(0, 0);
+      } else {
+        alert('一括削除に失敗しました。もう一度お試しください。');
+      }
+    } catch (e) {
+      console.error('[MemoryUI] 一括削除エラー:', e);
+      alert(`一括削除エラー: ${e.message}`);
+    }
+  }
+
+  // =========================================
+  // v1.2追加 - 期間指定削除
+  // =========================================
+
+  /** 指定期間より古い記憶を削除 */
+  async function _deleteByPeriod() {
+    const select = document.getElementById('memory-period-select');
+    if (!select) return;
+
+    const days = parseInt(select.value, 10);
+    if (!days || days <= 0) {
+      alert('削除する期間を選択してください。');
+      return;
+    }
+
+    // 基準日時を計算
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffISO = cutoff.toISOString();
+
+    // 対象件数を先にカウント
+    const targets = _allMemories.filter(m => m.createdAt && m.createdAt < cutoffISO);
+    if (targets.length === 0) {
+      alert(`${days}日以上前の記憶はありません。`);
+      return;
+    }
+
+    if (!confirm(`${days}日以上前の記憶を${targets.length}件削除しますか？\nこの操作は取り消せません。`)) return;
+
+    // 1件ずつ削除（Worker側に期間指定APIがないため）
+    let deleted = 0;
+    for (const m of targets) {
+      try {
+        const result = await MeetingMemory.deleteMemory(m.key);
+        if (result && result.success) deleted++;
+      } catch (e) {
+        console.warn(`[MemoryUI] 期間削除中エラー: ${m.key}`, e);
+      }
+    }
+
+    // UIを更新
+    _allMemories = _allMemories.filter(m => !targets.includes(m));
+    _totalCount = Math.max(0, _totalCount - deleted);
+    _renderList(_allMemories);
+    _updateCount(_allMemories.length, _totalCount);
+    alert(`${deleted}件の記憶を削除しました。`);
+  }
+
+  // =========================================
+  // 描画ヘルパー
+  // =========================================
+
+  /** v1.1修正 - 件数表示を正確化 */
+  function _updateCount(shown, total, query) {
+    const el = document.getElementById('memory-count');
+    if (!el) return;
+    if (query) {
+      el.textContent = `${shown}/${total}件（検索中）`;
+    } else {
+      el.textContent = `${total}件の記憶`;
+    }
+  }
+
+  /** 一覧を描画 */
+  function _renderList(memories) {
+    const listDiv = document.getElementById('memory-list');
+    if (!listDiv) return;
+
+    if (memories.length === 0) {
+      listDiv.innerHTML = '<p class="memory-empty">該当する記憶がありません</p>';
+      return;
+    }
+
+    listDiv.innerHTML = memories.map(m => _renderItem(m)).join('');
+
+    listDiv.onclick = (e) => {
+      const detailBtn = e.target.closest('.memory-detail-btn');
+      const delBtn = e.target.closest('.memory-delete-btn');
+      if (detailBtn) _showDetail(detailBtn.dataset.key, memories);
+      if (delBtn) _deleteMemory(delBtn.dataset.key);
+    };
+  }
+
+  /** 一覧アイテムのHTML生成 */
   function _renderItem(m) {
     const date = m.createdAt ? m.createdAt.slice(0, 10) : '不明';
     const time = m.createdAt ? m.createdAt.slice(11, 16) : '';
@@ -100,7 +244,6 @@ const MemoryUI = (() => {
     const leadEmoji = SISTER_DISPLAY[m.lead]?.emoji || '👤';
     const aiIcon = m.aiSummary ? '🤖' : '📝';
     const aiLabel = m.aiSummary ? 'AI要約' : 'フォールバック';
-    // decisions表示（最大2件まで）
     const decStr = (m.decisions && m.decisions.length > 0)
       ? m.decisions.slice(0, 2).map(d => _escapeHtml(d)).join(' / ')
       : '（決定事項なし）';
@@ -124,11 +267,7 @@ const MemoryUI = (() => {
     </div>`;
   }
 
-  /**
-   * 記憶の詳細をモーダル表示
-   * @param {string} key - 記憶のキー
-   * @param {Array} memories - 記憶配列
-   */
+  /** 記憶の詳細をモーダル表示 */
   function _showDetail(key, memories) {
     const m = memories.find(mem => mem.key === key);
     if (!m) return;
@@ -183,27 +322,23 @@ const MemoryUI = (() => {
 
     detailDiv.classList.remove('hidden');
 
-    // 閉じるボタン
     const closeBtn = document.getElementById('btn-memory-detail-close');
     if (closeBtn) {
-      closeBtn.addEventListener('click', () => {
-        detailDiv.classList.add('hidden');
-      });
+      closeBtn.addEventListener('click', () => detailDiv.classList.add('hidden'));
     }
   }
 
-  /**
-   * 記憶を1件削除（確認ダイアログあり）
-   * @param {string} key - 記憶のキー
-   */
+  /** 記憶を1件削除 */
   async function _deleteMemory(key) {
     if (!confirm('この記憶を削除しますか？\n削除するとWorker KVから完全に消えます。')) return;
 
     try {
       const result = await MeetingMemory.deleteMemory(key);
       if (result && result.success) {
-        // 一覧を再取得して再描画
-        await show();
+        _allMemories = _allMemories.filter(m => m.key !== key);
+        _totalCount = Math.max(0, _totalCount - 1);
+        _renderList(_allMemories);
+        _updateCount(_allMemories.length, _totalCount);
       } else {
         alert('削除に失敗しました。もう一度お試しください。');
       }
