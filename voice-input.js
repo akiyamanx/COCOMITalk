@@ -270,7 +270,7 @@ class VoiceController {
     if (!this._playback._ttsProvider.isAvailable()) {
       console.warn('[Voice] TTS未設定（Worker URL/認証トークンが必要）');
     }
-    console.log('[Voice] 音声モード初期化完了（v1.8 3バグ修正版）');
+    console.log(`[Voice] 音声モード初期化完了（v1.8） cmd=${!!this._voiceCmd} sender=${!!this._sender}`);
   }
 
   /** マイクボタン押下時の処理 */
@@ -368,6 +368,10 @@ class VoiceController {
   /** 音声メッセージの送信（コマンド判定→送信） */
   _sendVoiceMessage(text) {
     try {
+      // ★デバッグ: STTテキストと判定結果を画面表示（原因特定後に削除）
+      const debugNorm = this._voiceCmd ? this._voiceCmd._normalize(text) : text;
+      this._ui.showStatus(`🔍 STT: "${text}" → "${debugNorm}"`, 'info');
+
       // 音声コマンドチェック
       if (this._voiceCmd && this._voiceCmd.handle(text)) return;
 
