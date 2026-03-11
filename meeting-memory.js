@@ -4,6 +4,7 @@
 // v1.1 2026-03-10 - Step 4強化: AI要約対応（rawHistoryをWorkerに送信）
 // v1.2 2026-03-11 - フォールバック要約/決定事項の品質改善
 // v1.3 2026-03-11 - マークダウン記法除去（見出し・太字・リスト・テーブル）
+// v1.4 2026-03-11 - getMemoriesWithTotal追加＋deleteAllMemories追加（メモリー管理UI改善）
 'use strict';
 
 /** 会議メモリーモジュール */
@@ -181,10 +182,43 @@ const MeetingMemory = (() => {
     });
   }
 
+  /**
+   * v1.4追加 - 記憶をtotal付きで取得（メモリー管理UI用）
+   * @param {number} limit - 取得件数（最大100）
+   * @returns {Promise<{memories: Array, total: number}>}
+   */
+  async function getMemoriesWithTotal(limit = 20) {
+    // キャッシュを無効化して常に最新を取得（管理UI用）
+    _cachedMemories = null;
+    const result = await _request('GET', { limit });
+    if (result && result.memories) {
+      _cachedMemories = result.memories;
+      _cacheTime = Date.now();
+      return { memories: result.memories, total: result.total || result.memories.length };
+    }
+    return { memories: [], total: 0 };
+  }
+
+  /**
+   * v1.4追加 - 全記憶を一括削除
+   * Worker DELETE /memory に { action: "deleteAll" } を送信
+   * @returns {Promise<object|null>}
+   */
+  async function deleteAllMemories() {
+    const result = await _request('DELETE', { action: 'deleteAll' });
+    if (result && result.success) {
+      _cachedMemories = null;
+      console.log(`[Memory] 一括削除成功: ${result.deleted}件`);
+    }
+    return result;
+  }
+
   return {
     getMemories,
+    getMemoriesWithTotal,
     saveMemory,
     deleteMemory,
+    deleteAllMemories,
     getMemoryPrompt,
     autoSaveFromMeeting,
   };

@@ -30,7 +30,16 @@ const MemoryUI = (() => {
     if (btnClose) btnClose.addEventListener('click', hide);
     // v1.1追加 - 一括削除ボタン
     const btnDeleteAll = document.getElementById('btn-memory-delete-all');
-    if (btnDeleteAll) btnDeleteAll.addEventListener('click', _deleteAll);
+    if (btnDeleteAll) {
+      btnDeleteAll.addEventListener('click', (e) => {
+        e.stopPropagation();
+        console.log('[MemoryUI] 全削除ボタン押下');
+        _deleteAll();
+      });
+      console.log('[MemoryUI] 全削除ボタン: イベント設定OK');
+    } else {
+      console.warn('[MemoryUI] 全削除ボタンが見つかりません');
+    }
     // v1.1追加 - 検索入力
     const searchInput = document.getElementById('memory-search-input');
     if (searchInput) {
