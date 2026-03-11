@@ -8,6 +8,7 @@
 // v1.4 2026-03-09 - max_completion_tokens 4096→8192（リーズニングトークン枯渇対策）
 //                  - 空レスポンス時のリトライ機能追加（最大2回、安全ガイド準拠）
 //                  - _extractText()戻り値をオブジェクト化（{text, retryable}）
+// v1.5 2026-03-11 - Phase 2a+ Function Calling対応（web_search自動検索）
 
 'use strict';
 
@@ -57,6 +58,13 @@ const ApiOpenAI = (() => {
       messages: messages,
     };
 
+    // v1.5追加 - Function Calling: web_searchツールを追加
+    // GPT-5系はreasoningモデルのためFunction Callingの互換性に注意
+    if (typeof SearchCaller !== 'undefined' && !modelName.startsWith('gpt-5')) {
+      body.tools = [SearchCaller.getOpenAITool()];
+      body.tool_choice = 'auto';
+    }
+
     // v1.4修正 - GPT-5系のmax_completion_tokensを8192に増加
     // リーズニングトークンが3000〜4000消費するため、4096では出力枠が足りない
     if (modelName.startsWith('gpt-5')) {
@@ -71,6 +79,11 @@ const ApiOpenAI = (() => {
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       try {
         const data = await ApiCommon.callAPI('openai', body);
+
+        // v1.5追加 - Function Calling応答（tool_calls）の検出と処理
+        const fcText = await _handleToolCalls(data, body, modelName, options);
+        if (fcText) return fcText;
+
         const result = _extractText(data);
 
         // トークン使用量を記録（リトライ時も毎回記録）
@@ -137,6 +150,49 @@ const ApiOpenAI = (() => {
     }
 
     return messages;
+  }
+
+  /**
+   * v1.5追加 - OpenAI tool_calls応答を処理
+   * tool_callsが返ってきたら検索実行 → 結果をOpenAIに返して最終回答を取得
+   * 安全ガイド: 最大1回の検索（ループ防止）
+   */
+  async function _handleToolCalls(data, originalBody, modelName, options) {
+    const msg = data?.choices?.[0]?.message;
+    if (!msg?.tool_calls || msg.tool_calls.length === 0) return null;
+
+    const tc = msg.tool_calls[0]; // 最初の1つだけ処理（ループ防止）
+    if (tc.function?.name !== 'web_search' || typeof SearchCaller === 'undefined') return null;
+
+    let args = {};
+    try { args = JSON.parse(tc.function.arguments || '{}'); } catch (e) { /* パースエラー */ }
+    console.log(`[ApiOpenAI] tool_calls検出: ${tc.function.name}(${JSON.stringify(args)})`);
+
+    // SearchCallerで検索実行
+    const searchResult = await SearchCaller.execute(args.query || '');
+
+    // 検索結果をOpenAIに返す（tool role形式）
+    const followUpBody = { ...originalBody };
+    followUpBody.messages = [
+      ...originalBody.messages,
+      msg, // assistantのtool_calls応答をそのまま含める
+      { role: 'tool', tool_call_id: tc.id, content: searchResult },
+    ];
+    // 2回目はツール定義なし（ループ防止）
+    delete followUpBody.tools;
+    delete followUpBody.tool_choice;
+
+    const data2 = await ApiCommon.callAPI('openai', followUpBody);
+    const result = _extractText(data2);
+
+    // トークン記録（2回目の分）
+    const usage2 = data2?.usage;
+    if (usage2 && typeof TokenMonitor !== 'undefined') {
+      TokenMonitor.record(modelName, usage2.prompt_tokens || 0, usage2.completion_tokens || 0);
+    }
+
+    console.log('[ApiOpenAI] Function Calling完了 → 最終回答取得');
+    return result.text || 'ごめん、検索結果からの回答生成に失敗しちゃった…💦';
   }
 
   /**

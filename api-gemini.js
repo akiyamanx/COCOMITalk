@@ -5,6 +5,7 @@
 // v0.5 Step 2 - Worker中継＋ApiCommon共通化
 // v0.8 Step 3 - モデルグレード切替対応（flash-3/pro-3.1追加）
 // v0.9 2026-03-08 - maxOutputTokens増加（1024→4096、会議モードで発言が途切れるバグ修正）
+// v1.0 2026-03-11 - Phase 2a+ Function Calling対応（web_search自動検索）
 
 'use strict';
 
@@ -56,9 +57,19 @@ const ApiGemini = (() => {
     // v0.5追加 - Worker用にmodelフィールドを追加
     body.model = modelName;
 
+    // v1.0追加 - Function Calling: web_searchツールを追加
+    if (typeof SearchCaller !== 'undefined') {
+      body.tools = [SearchCaller.getGeminiTool()];
+    }
+
     try {
       // v0.5変更 - ApiCommon経由でリクエスト
       const data = await ApiCommon.callAPI('gemini', body);
+
+      // v1.0追加 - Function Calling応答の検出と処理
+      const fcResult = await _handleFunctionCall(data, body, modelName, options);
+      if (fcResult) return fcResult;
+
       const text = _extractText(data);
 
       // v0.4追加 - トークン使用量を記録（変更なし）
@@ -136,6 +147,52 @@ const ApiGemini = (() => {
     ];
 
     return body;
+  }
+
+  /**
+   * v1.0追加 - Gemini Function Calling応答を処理
+   * functionCallが返ってきたら検索実行 → 結果をGeminiに返して最終回答を取得
+   * 安全ガイド: 最大1回の検索（ループ防止）
+   */
+  async function _handleFunctionCall(data, originalBody, modelName, options) {
+    const parts = data?.candidates?.[0]?.content?.parts;
+    if (!parts) return null;
+
+    const fcPart = parts.find(p => p.functionCall);
+    if (!fcPart || !fcPart.functionCall) return null;
+
+    const fc = fcPart.functionCall;
+    if (fc.name !== 'web_search' || typeof SearchCaller === 'undefined') return null;
+
+    console.log(`[ApiGemini] Function Call検出: ${fc.name}(${JSON.stringify(fc.args)})`);
+
+    // SearchCallerで検索実行
+    const searchResult = await SearchCaller.execute(fc.args?.query || '');
+
+    // 検索結果をGeminiに返す（functionResponse形式）
+    const followUpBody = { ...originalBody };
+    // 元のcontentsにmodel応答＋functionResponseを追加
+    followUpBody.contents = [
+      ...originalBody.contents,
+      // modelのfunctionCall応答
+      { role: 'model', parts: [{ functionCall: fc }] },
+      // functionResponseを返す
+      { role: 'user', parts: [{ functionResponse: { name: fc.name, response: { result: searchResult } } }] },
+    ];
+    // 2回目はツール定義なし（ループ防止）
+    delete followUpBody.tools;
+
+    const data2 = await ApiCommon.callAPI('gemini', followUpBody);
+    const text = _extractText(data2);
+
+    // トークン記録（2回目の分）
+    const usage2 = data2?.usageMetadata;
+    if (usage2 && typeof TokenMonitor !== 'undefined') {
+      TokenMonitor.record(modelName, usage2.promptTokenCount || 0, usage2.candidatesTokenCount || 0);
+    }
+
+    console.log('[ApiGemini] Function Calling完了 → 最終回答取得');
+    return text;
   }
 
   /**

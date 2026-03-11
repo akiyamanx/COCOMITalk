@@ -2,6 +2,7 @@
 // v1.1 2026-03-08 - Opus 4.6のtemperature非対応修正（Opusはtemperature省略）
 // v1.2 2026-03-08 - モデル名修正（claude-opus-4-6-20260205 → claude-opus-4-6）
 // v1.3 2026-03-08 - max_tokens増加（1024→4096、会議モードで発言途切れ防止）
+// v1.4 2026-03-11 - Phase 2a+ Tool Use対応（web_search自動検索）
 
 'use strict';
 
@@ -56,9 +57,18 @@ const ApiClaude = (() => {
       body.system = systemPrompt;
     }
 
+    // v1.4追加 - Tool Use: web_searchツールを追加
+    if (typeof SearchCaller !== 'undefined') {
+      body.tools = [SearchCaller.getClaudeTool()];
+    }
+
     try {
       // v0.5 - Worker経由でリクエスト
       const data = await ApiCommon.callAPI('claude', body);
+
+      // v1.4追加 - Tool Use応答の検出と処理
+      const tuText = await _handleToolUse(data, body, modelName, options);
+      if (tuText) return tuText;
 
       // レスポンスからテキスト抽出
       const text = _extractText(data);
@@ -106,6 +116,48 @@ const ApiClaude = (() => {
     }
 
     return messages;
+  }
+
+  /**
+   * v1.4追加 - Claude Tool Use応答を処理
+   * tool_useブロックが返ってきたら検索実行 → 結果をClaudeに返して最終回答を取得
+   * 安全ガイド: 最大1回の検索（ループ防止）
+   */
+  async function _handleToolUse(data, originalBody, modelName, options) {
+    const content = data?.content;
+    if (!content || !Array.isArray(content)) return null;
+
+    const tuBlock = content.find(b => b.type === 'tool_use');
+    if (!tuBlock || tuBlock.name !== 'web_search' || typeof SearchCaller === 'undefined') return null;
+
+    console.log(`[ApiClaude] tool_use検出: ${tuBlock.name}(${JSON.stringify(tuBlock.input)})`);
+
+    // SearchCallerで検索実行
+    const searchResult = await SearchCaller.execute(tuBlock.input?.query || '');
+
+    // 検索結果をClaudeに返す（tool_result形式）
+    const followUpBody = { ...originalBody };
+    followUpBody.messages = [
+      ...originalBody.messages,
+      // assistantのtool_use応答
+      { role: 'assistant', content: content },
+      // tool_resultを返す
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: tuBlock.id, content: searchResult }] },
+    ];
+    // 2回目はツール定義なし（ループ防止）
+    delete followUpBody.tools;
+
+    const data2 = await ApiCommon.callAPI('claude', followUpBody);
+    const text = _extractText(data2);
+
+    // トークン記録（2回目の分）
+    const usage2 = data2?.usage;
+    if (usage2 && typeof TokenMonitor !== 'undefined') {
+      TokenMonitor.record(modelName, usage2.input_tokens || 0, usage2.output_tokens || 0);
+    }
+
+    console.log('[ApiClaude] Tool Use完了 → 最終回答取得');
+    return text;
   }
 
   /**
