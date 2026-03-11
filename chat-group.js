@@ -3,6 +3,7 @@
 // v0.9 Step 3.5 - chat-core.jsから分離して新規作成
 // v0.9.1 - 前ターン補完方式: 各姉妹が「自分の後に話した姉妹」の前ターン発言を受け取る
 // v0.9.2 - 姉妹間対話促進: 他の姉妹の発言に自然に反応するグループ会話ルール追加
+// v1.3 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
 
 'use strict';
 
@@ -83,8 +84,8 @@ const ChatGroup = (() => {
       }
     }
 
-    // v1.2追加 - 全姉妹の発言完了後に検索結果をクリア
-    if (typeof SearchUI !== 'undefined') SearchUI.clearSearchResults();
+    // v1.3改修 - PromptBuilderで全姉妹完了後に検索結果をクリア
+    if (typeof PromptBuilder !== 'undefined') PromptBuilder.clearSearch();
 
     // 今ターンのリレーを保存（次ターンの補完用）
     prevTurnRelay = relayContext.map(r => ({
@@ -187,18 +188,10 @@ const ChatGroup = (() => {
       ? ModeSwitcher.getModelKey(sisterKey)
       : undefined;
 
-    // v1.2追加 - メモリー＋検索結果をプロンプトに注入（グループチャット対応）
-    // 検索結果は全姉妹に注入（クリアはchat-core.jsのユーザー送信後に行う）
+    // v1.3改修 - PromptBuilderでメモリー＋検索結果を一括注入（グループは全姉妹参照用にクリアしない）
     let extraPrompt = '';
-    if (typeof MeetingMemory !== 'undefined') {
-      try {
-        const memText = await MeetingMemory.getMemoryPrompt(3);
-        if (memText) extraPrompt += memText;
-      } catch (e) { /* スキップ */ }
-    }
-    if (typeof SearchUI !== 'undefined' && SearchUI.hasSearchResults()) {
-      extraPrompt += SearchUI.getSearchPrompt();
-      // グループではクリアしない（全姉妹が参照できるように）
+    if (typeof PromptBuilder !== 'undefined') {
+      extraPrompt = await PromptBuilder.build({ mode: 'group' });
     }
 
     return await apiModule.sendMessage(

@@ -2,6 +2,7 @@
 // v0.3-v1.1: 履歴保存/トークン表示/三姉妹API/グループ/音声/停止ボタン
 // v1.2 2026-03-10 - 表示系をChatUiに分離（499→355行に軽量化）
 // v1.3 2026-03-10 - 1対1チャットにもKVメモリー注入（Step 4強化）
+// v1.5 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
 'use strict';
 
 /** チャットコアモジュール */
@@ -85,7 +86,7 @@ const ChatCore = (() => {
 
     await _loadAllHistories();
 
-    console.log('[ChatCore] 初期化完了 v1.3');
+    console.log('[ChatCore] 初期化完了 v1.5');
   }
 
   /** 入力欄のイベント設定 */
@@ -220,29 +221,11 @@ const ChatCore = (() => {
     try {
       const history = chatHistories[currentSister];
 
-      // v1.3追加 - 1対1チャットにもKVメモリーを注入（過去の会議記憶を踏まえた応答）
+      // v1.5改修 - PromptBuilderでメモリー＋検索結果を一括注入
       let fullPrompt = systemPrompt;
-      if (typeof MeetingMemory !== 'undefined') {
-        try {
-          const memoryText = await MeetingMemory.getMemoryPrompt(3);
-          if (memoryText) {
-            fullPrompt = systemPrompt + memoryText;
-            console.log('[ChatCore] メモリー注入OK（1対1チャット）');
-          }
-        } catch (e) {
-          console.warn('[ChatCore] メモリー取得スキップ:', e.message);
-        }
-      }
-
-      // v1.4追加 - Phase 2a 検索結果をプロンプトに注入
-      if (typeof SearchUI !== 'undefined' && SearchUI.hasSearchResults()) {
-        const searchText = SearchUI.getSearchPrompt();
-        if (searchText) {
-          fullPrompt = fullPrompt + searchText;
-          console.log('[ChatCore] 検索結果注入OK');
-        }
-        // 使ったらクリア（1回限り）
-        SearchUI.clearSearchResults();
+      if (typeof PromptBuilder !== 'undefined') {
+        const extra = await PromptBuilder.build({ mode: 'chat' });
+        fullPrompt = systemPrompt + extra;
       }
 
       const modelKey = (typeof ModeSwitcher !== 'undefined')

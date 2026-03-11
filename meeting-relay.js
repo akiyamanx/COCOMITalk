@@ -9,6 +9,7 @@
 // v1.3 2026-03-10 - Step 5c: ラウンド完了後にTTSキュー再生（パターンB方式）
 // v1.4 2026-03-10 - Step 4: ラウンド完了時にMeetingMemory.autoSaveFromMeeting()呼び出し
 // v1.5 2026-03-11 - 他の姉妹の発言をuser roleで渡す（assistant混同＝なりすまし防止）
+// v1.7 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
 
 'use strict';
 
@@ -97,11 +98,11 @@ const MeetingRelay = (() => {
       MeetingUI.showRoutingResult(routing);
     }
 
-    // v1.4追加 - Step 4: KVから過去の記憶を取得してプロンプト注入用に保持
+    // v1.7改修 - PromptBuilderで事前メモリー取得
     _memoryPrompt = '';
-    if (typeof MeetingMemory !== 'undefined') {
+    if (typeof PromptBuilder !== 'undefined') {
       try {
-        _memoryPrompt = await MeetingMemory.getMemoryPrompt(5);
+        _memoryPrompt = await PromptBuilder.preloadMemory(5);
         if (_memoryPrompt) console.log('[MeetingRelay] メモリー注入準備OK');
       } catch (e) {
         console.warn('[MeetingRelay] メモリー取得エラー（続行）:', e);
@@ -224,14 +225,14 @@ const MeetingRelay = (() => {
       ? ModeSwitcher.getModelKey(sisterKey)
       : undefined;
 
-    // API呼び出し
-    // v1.1修正 - maxTokens:6144に増加（会議は長文発言＋コード例が必要）
-    // v1.4追加 - メモリープロンプトをシステムプロンプトに注入
-    // v1.6追加 - Phase 2a 検索結果をプロンプトに注入
-    // 会議では全姉妹に注入（クリアはラウンド完了後にchat-core.jsで行う）
+    // v1.7改修 - PromptBuilderで検索結果を注入（会議中はクリアしない）
+    // メモリーは会議開始時に事前取得済み（_memoryPrompt）
     let searchPrompt = '';
-    if (typeof SearchUI !== 'undefined' && SearchUI.hasSearchResults()) {
-      searchPrompt = SearchUI.getSearchPrompt();
+    if (typeof PromptBuilder !== 'undefined') {
+      searchPrompt = await PromptBuilder.build({
+        mode: 'meeting',
+        skipMemory: true,  // メモリーは_memoryPromptで既に持っている
+      });
     }
     const fullPrompt = systemPrompt + leadInstruction + _memoryPrompt + searchPrompt;
     const reply = await apiModule.sendMessage(
