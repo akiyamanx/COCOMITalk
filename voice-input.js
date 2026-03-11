@@ -33,9 +33,11 @@ class VoiceController {
     // 音声設定
     this._speed = 1.0;
     this._autoListen = false;
-    // 息継ぎ対策: 無音タイマー（2.5秒待ってから送信）
+    // 息継ぎ対策: 無音タイマー
     this._silenceTimer = null;
-    this._SILENCE_DELAY = 2500; // ミリ秒 v1.3修正: 1500→2500（早すぎる送信防止）
+    // v1.5改善: ハンズフリー時は長め（運転中は考えながら話す）
+    this._SILENCE_DELAY = 3500; // v1.5修正: 2500→3500ms
+    this._SILENCE_DELAY_HANDSFREE = 5000; // ハンズフリー時は5秒
     // 最後に受け取ったテキスト（タイマー用）
     this._lastText = '';
 
@@ -66,6 +68,8 @@ class VoiceController {
       if (this._hasFinalText) return;
       this._ui.showInterim(text);
       this._lastText = text;
+      // v1.5追加: interimが来てる=まだ話し中。タイマーリセットして延長
+      if (this._silenceTimer) { this._clearSilenceTimer(); this._resetSilenceTimer(); }
     };
 
     this._stt.onFinal = (text) => {
@@ -162,13 +166,14 @@ class VoiceController {
   // ═══════════════════════════════════════════
 
   /**
-   * 無音タイマーをリセット v1.3改修 - 短いテキストはさらに長く待つ
+   * 無音タイマーをリセット v1.5改修 - ハンズフリー時は長めに待つ
    */
   _resetSilenceTimer() {
     this._clearSilenceTimer();
     const text = (this._lastText || '').trim();
-    // 短いテキスト（5文字未満）はまだ話し始めたばかりなので長めに待つ
-    const delay = (text.length < 5) ? this._SILENCE_DELAY + 1500 : this._SILENCE_DELAY;
+    const baseDelay = this._autoListen ? this._SILENCE_DELAY_HANDSFREE : this._SILENCE_DELAY;
+    // 短いテキスト（5文字未満）はまだ話し始めたばかりなので+1.5秒
+    const delay = (text.length < 5) ? baseDelay + 1500 : baseDelay;
     this._silenceTimer = setTimeout(() => {
       this._silenceTimer = null;
       const finalText = this._lastText.trim();

@@ -24,7 +24,8 @@
 // v2.17 2026-03-11 - memory-ui v1.1 検索フィルタ＋一括削除＋件数正確化
 // v2.18 2026-03-11 - memory-ui v1.2 期間指定削除 + CSS整備 + Worker limit引き上げ
 // v2.19 2026-03-11 - Step 5e 音声コマンド対応(voice-input v1.5 + app.js グローバル関数)
-const CACHE_NAME = 'cocomitalk-v2.19';
+// v2.20 2026-03-11 - voice-input v1.5.1 無音タイマー改善(息継ぎ対策強化)
+const CACHE_NAME = 'cocomitalk-v2.20';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
