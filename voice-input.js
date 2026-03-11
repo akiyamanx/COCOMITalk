@@ -355,7 +355,8 @@ class VoiceController {
 
   /** 音声テキストが音声コマンドかチェックして実行。コマンドならtrue返す */
   _handleVoiceCommand(text) {
-    const t = (text || '').trim();
+    // v1.5.1改善: STTが付ける句読点・記号を除去してからマッチ
+    const t = (text || '').trim().replace(/[。、！？!?.，,\s]+$/g, '').trim();
     if (t.length < 2 || t.length > 20) return false;
 
     // 停止コマンド
