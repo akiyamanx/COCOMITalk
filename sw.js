@@ -26,7 +26,8 @@
 // v2.19 2026-03-11 - Step 5e 音声コマンド対応(voice-input v1.5 + app.js グローバル関数)
 // v2.20 2026-03-11 - voice-input v1.5.1 無音タイマー改善(息継ぎ対策強化)
 // v2.21 2026-03-11 - voice-input v1.5.2 コマンド句読点除去修正
-const CACHE_NAME = 'cocomitalk-v2.21';
+// v2.22 2026-03-11 - voice-command.js分離＋voice-input v1.6 try-catch追加（UI固まり防止）
+const CACHE_NAME = 'cocomitalk-v2.22';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -70,6 +71,7 @@ const CACHE_FILES = [
   './web-speech-provider.js',
   './voice-output.js',
   './voice-ui.js',
+  './voice-command.js',
   './voice-input.js',
   './app-settings.js',
   './prompts/koko-system.js',
