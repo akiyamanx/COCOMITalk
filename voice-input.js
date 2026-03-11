@@ -1,69 +1,21 @@
-// voice-input.js v1.6
+// voice-input.js v1.7
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
-// 音声コマンド処理はvoice-command.jsのVoiceCommandクラスに委譲する
 
 // v1.0 新規作成 - Step 5b 音声会話フロー制御
 // v1.1 修正 - 自動送信＋息継ぎ1.5秒待機＋セレクタバグ修正
 // v1.2 修正 - STT繰り返し問題対策: finalText優先＋interim蓄積防止
 // v1.3 追加 - Step 5c: 会議モード音声入力対応（マイクボタン＋会議入力欄送信）
 // v1.5 追加 - Step 5e: 音声コマンド対応（ストップ・姉妹切替・スピード調整）
-// v1.6 修正 - 音声コマンドをvoice-command.jsに分離＋try-catch追加（UI固まり防止）
-// v1.6.1 修正 - VoiceCommand未定義でもマイクボタンが消えない防御コード追加
+// v1.7 修正 - コマンド処理を内蔵に戻し確実に動作。部分一致＋正規化強化＋try-catch
 
-/**
- * VoiceController
- * 音声会話の全体フロー制御
- *
- * フロー:
- * ① マイクボタン押す → 🎤赤く光る
- * ② 話し始める → リアルタイムで途中テキスト表示
- * ③ 話し終わる → 1.5秒待ってから自動送信（息継ぎで切れない）
- * ④ AI応答テキスト着信 → テキスト表示
- * ⑤ TTS変換＋音声再生 → キャラアイコン発光
- * ⑥ 再生完了 → マイクボタン待機状態
- */
+/** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
   constructor() {
     this._stt = new WebSpeechProvider();
     this._playback = new AudioPlaybackManager();
     this._ui = new VoiceUI();
-    // v1.6追加 - 音声コマンドハンドラー（voice-command.jsに委譲）
-    // v1.6.1修正 - VoiceCommandが読み込まれてない場合も安全に動作
-    this._voiceCmd = null;
-    try {
-      if (typeof VoiceCommand !== 'undefined') {
-        this._voiceCmd = new VoiceCommand({
-          onStop: () => { this._playback.stop(); this._forceIdleState(); },
-          onResume: () => { this._forceIdleState(); setTimeout(() => this.startListening(), 500); },
-          onSwitchSister: (key, name) => {
-            if (typeof window.switchToSister === 'function') {
-              window.switchToSister(key);
-              this._currentSisterId = key;
-              this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
-              this._forceIdleState();
-              if (this._autoListen) setTimeout(() => this.startListening(), 800);
-            }
-          },
-          onSwitchGroup: () => {
-            if (typeof window.switchToGroup === 'function') {
-              window.switchToGroup();
-              this._ui.showStatus('👥 グループモードに切り替えました', 'success');
-              this._forceIdleState();
-              if (this._autoListen) setTimeout(() => this.startListening(), 800);
-            }
-          },
-          onSpeedChange: (newSpeed) => { this._speed = newSpeed; },
-          onStatus: (msg, type) => { this._ui.showStatus(msg, type); this._forceIdleState(); },
-        });
-        console.log('[Voice] VoiceCommand初期化OK');
-      } else {
-        console.warn('[Voice] VoiceCommand未定義 — 音声コマンド無効で続行');
-      }
-    } catch (e) {
-      console.warn('[Voice] VoiceCommand初期化エラー（無視して続行）:', e.message);
-    }
     // 音声モードが有効か（一度でもマイクを押したらtrue）
     this._enabled = false;
     // 現在の姉妹ID
@@ -326,11 +278,8 @@ class VoiceController {
   /** 現在の姉妹IDを設定 */
   setCurrentSister(sisterId) { this._currentSisterId = sisterId; }
 
-  /** 音声速度を設定（0.5〜1.5） v1.6修正: VoiceCommandと同期 */
-  setSpeed(speed) {
-    this._speed = Math.max(0.5, Math.min(1.5, speed));
-    if (this._voiceCmd) this._voiceCmd.setSpeed(this._speed);
-  }
+  /** 音声速度を設定（0.5〜1.5） */
+  setSpeed(speed) { this._speed = Math.max(0.5, Math.min(1.5, speed)); }
 
   /**
    * v1.2追加 - ハンズフリーモード切替（設定画面から呼ばれる）
@@ -369,14 +318,12 @@ class VoiceController {
 
   /**
    * 音声メッセージを自動送信（既存のチャット送信フローに合流）
-   * v1.1修正: セレクタをCOCOMITalkの実際のID（#msg-input, #btn-send）に修正
-   * v1.3追加: 会議モード時はmeeting-topic-inputに送信
-   * v1.6修正: try-catch追加（UI固まり防止）＋VoiceCommandに委譲
+   * v1.7修正: 音声コマンドをvoice-input.js内に直接実装（外部依存なし）
    */
   _sendVoiceMessage(text) {
     try {
-      // v1.6変更 - 音声コマンドチェック（voice-command.jsに委譲）
-      if (this._voiceCmd && this._voiceCmd.handle(text)) return;
+      // 音声コマンドチェック（コマンドなら送信しない）
+      if (this._handleVoiceCommand(text)) return;
 
       this._ui.hideInterim();
       this._lastText = '';
@@ -397,9 +344,64 @@ class VoiceController {
     }
   }
 
-  // ═══════════════════════════════════════════
-  // v1.6変更 - 音声コマンドはvoice-command.jsに分離済み
-  // ═══════════════════════════════════════════
+  // === v1.7 音声コマンド処理（内蔵版・部分一致＋正規化強化） ===
+  /** STT認識テキストを正規化（句読点・スペース・全角英数を除去） v1.7追加 */
+  _normalizeCmd(t) {
+    if (!t) return '';
+    return t.trim().replace(/[。、！？!?.，,：:；;…・～〜「」『』（）()\[\]]+/g, '')
+      .replace(/　/g, '').replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
+      .replace(/\s+/g, '').trim();
+  }
+  /** 音声コマンドかチェックして実行。コマンドならtrue返す v1.7改修 */
+  _handleVoiceCommand(text) {
+    const t = this._normalizeCmd(text);
+    console.log(`[VoiceCmd] 正規化前: "${text}" → 正規化後: "${t}"`);
+    if (t.length < 1 || t.length > 30) return false;
+
+    // 停止コマンド（部分一致）
+    if (/ストップ|止めて|停止|とめて|やめて/.test(t)) {
+      this._playback.stop(); this._forceIdleState();
+      this._ui.showStatus('⏹️ 再生を停止しました', 'info'); return true;
+    }
+    // マイク再開コマンド
+    if (/もう一回|もう1回|もういっかい|聞いて|きいて/.test(t)) {
+      this._forceIdleState(); setTimeout(() => this.startListening(), 500); return true;
+    }
+    // 姉妹切替コマンド
+    const sMap = [['ここちゃん','koko'],['お姉ちゃん','gpt'],['おねえちゃん','gpt'],['おねーちゃん','gpt'],['クロちゃん','claude'],['くろちゃん','claude'],['くろちやん','claude']];
+    for (const [name, key] of sMap) {
+      if (t === name || t.startsWith(name)) {
+        const sfx = t.slice(name.length);
+        if (sfx === '' || /^(にして|に切り替え|に替えて|に変えて|にかえて|お願い|おねがい)/.test(sfx)) {
+          if (typeof window.switchToSister === 'function') {
+            window.switchToSister(key); this._currentSisterId = key;
+            this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
+            this._forceIdleState();
+            if (this._autoListen) setTimeout(() => this.startListening(), 800);
+            return true;
+          }
+        }
+      }
+    }
+    // グループモード切替
+    if (/^(みんな|グループ|全員|みんなで|ぜんいん)$/.test(t) && typeof window.switchToGroup === 'function') {
+      window.switchToGroup();
+      this._ui.showStatus('👥 グループモードに切り替えました', 'success');
+      this._forceIdleState();
+      if (this._autoListen) setTimeout(() => this.startListening(), 800);
+      return true;
+    }
+    // スピード調整（部分一致）
+    if (/速く|早く|はやく|スピードアップ|speedup/.test(t)) {
+      this._speed = Math.min(1.5, this._speed + 0.25);
+      this._ui.showStatus(`⏩ 速度: ${this._speed}x`, 'info'); this._forceIdleState(); return true;
+    }
+    if (/遅く|ゆっくり|おそく|スピードダウン|speeddown/.test(t)) {
+      this._speed = Math.max(0.5, this._speed - 0.25);
+      this._ui.showStatus(`⏪ 速度: ${this._speed}x`, 'info'); this._forceIdleState(); return true;
+    }
+    return false;
+  }
 
   /** v1.3追加 - 通常チャットへの音声送信 */
   _sendToNormalChat(text) {
