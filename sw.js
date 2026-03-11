@@ -19,8 +19,8 @@
 // v2.11 2026-03-12 - Phase 2a 検索UI追加（search-ui.js, search-ui-styles.css）
 // v2.12 2026-03-12 - 検索結果HTMLタグ除去 + 会議/グループ全モード検索対応
 // v2.13 2026-03-11 - prompt-builder.js追加（プロンプト注入共通化）
-// v2.14 2026-03-11 - Phase 2a+ search-caller.js追加 + api-*.js Function Calling対応
-const CACHE_NAME = 'cocomitalk-v2.14';
+// v2.15 2026-03-11 - Phase 2c tool-registry.js追加 + api-*.js ToolRegistry統合
+const CACHE_NAME = 'cocomitalk-v2.15';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -52,6 +52,7 @@ const CACHE_FILES = [
   './search-ui.js',
   './search-ui-styles.css',
   './search-caller.js',
+  './tool-registry.js',
   './prompt-builder.js',
   './meeting-voice.js',
   './doc-generator.js',

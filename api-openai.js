@@ -9,6 +9,7 @@
 //                  - 空レスポンス時のリトライ機能追加（最大2回、安全ガイド準拠）
 //                  - _extractText()戻り値をオブジェクト化（{text, retryable}）
 // v1.5 2026-03-11 - Phase 2a+ Function Calling対応（web_search自動検索）
+// v1.6 2026-03-11 - Phase 2c ToolRegistry統合（複数ツール対応）
 
 'use strict';
 
@@ -58,10 +59,10 @@ const ApiOpenAI = (() => {
       messages: messages,
     };
 
-    // v1.5追加 - Function Calling: web_searchツールを追加
+    // v1.6変更 - ToolRegistry経由で全ツール定義を追加（Phase 2c）
     // GPT-5系はreasoningモデルのためFunction Callingの互換性に注意
-    if (typeof SearchCaller !== 'undefined' && !modelName.startsWith('gpt-5')) {
-      body.tools = [SearchCaller.getOpenAITool()];
+    if (typeof ToolRegistry !== 'undefined' && !modelName.startsWith('gpt-5')) {
+      body.tools = ToolRegistry.getOpenAITools();
       body.tool_choice = 'auto';
     }
 
@@ -153,30 +154,30 @@ const ApiOpenAI = (() => {
   }
 
   /**
-   * v1.5追加 - OpenAI tool_calls応答を処理
-   * tool_callsが返ってきたら検索実行 → 結果をOpenAIに返して最終回答を取得
-   * 安全ガイド: 最大1回の検索（ループ防止）
+   * v1.6変更 - OpenAI tool_calls応答を処理（ToolRegistry統合版）
+   * tool_callsが返ってきたらToolRegistryで実行 → 結果をOpenAIに返して最終回答を取得
+   * 安全ガイド: 最大1回のツール呼び出し（ループ防止）
    */
   async function _handleToolCalls(data, originalBody, modelName, options) {
     const msg = data?.choices?.[0]?.message;
     if (!msg?.tool_calls || msg.tool_calls.length === 0) return null;
 
     const tc = msg.tool_calls[0]; // 最初の1つだけ処理（ループ防止）
-    if (tc.function?.name !== 'web_search' || typeof SearchCaller === 'undefined') return null;
+    if (typeof ToolRegistry === 'undefined' || !ToolRegistry.hasTool(tc.function?.name)) return null;
 
     let args = {};
     try { args = JSON.parse(tc.function.arguments || '{}'); } catch (e) { /* パースエラー */ }
     console.log(`[ApiOpenAI] tool_calls検出: ${tc.function.name}(${JSON.stringify(args)})`);
 
-    // SearchCallerで検索実行
-    const searchResult = await SearchCaller.execute(args.query || '');
+    // ToolRegistryでツール実行
+    const toolResult = await ToolRegistry.execute(tc.function.name, args);
 
-    // 検索結果をOpenAIに返す（tool role形式）
+    // ツール結果をOpenAIに返す（tool role形式）
     const followUpBody = { ...originalBody };
     followUpBody.messages = [
       ...originalBody.messages,
       msg, // assistantのtool_calls応答をそのまま含める
-      { role: 'tool', tool_call_id: tc.id, content: searchResult },
+      { role: 'tool', tool_call_id: tc.id, content: toolResult },
     ];
     // 2回目はツール定義なし（ループ防止）
     delete followUpBody.tools;
@@ -191,8 +192,8 @@ const ApiOpenAI = (() => {
       TokenMonitor.record(modelName, usage2.prompt_tokens || 0, usage2.completion_tokens || 0);
     }
 
-    console.log('[ApiOpenAI] Function Calling完了 → 最終回答取得');
-    return result.text || 'ごめん、検索結果からの回答生成に失敗しちゃった…💦';
+    console.log(`[ApiOpenAI] Function Calling完了（${tc.function.name}） → 最終回答取得`);
+    return result.text || 'ごめん、ツール結果からの回答生成に失敗しちゃった…💦';
   }
 
   /**

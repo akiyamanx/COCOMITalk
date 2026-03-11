@@ -6,6 +6,7 @@
 // v0.8 Step 3 - モデルグレード切替対応（flash-3/pro-3.1追加）
 // v0.9 2026-03-08 - maxOutputTokens増加（1024→4096、会議モードで発言が途切れるバグ修正）
 // v1.0 2026-03-11 - Phase 2a+ Function Calling対応（web_search自動検索）
+// v1.1 2026-03-11 - Phase 2c ToolRegistry統合（複数ツール対応）
 
 'use strict';
 
@@ -57,9 +58,9 @@ const ApiGemini = (() => {
     // v0.5追加 - Worker用にmodelフィールドを追加
     body.model = modelName;
 
-    // v1.0追加 - Function Calling: web_searchツールを追加
-    if (typeof SearchCaller !== 'undefined') {
-      body.tools = [SearchCaller.getGeminiTool()];
+    // v1.1変更 - ToolRegistry経由で全ツール定義を追加（Phase 2c）
+    if (typeof ToolRegistry !== 'undefined') {
+      body.tools = [ToolRegistry.getGeminiTools()];
     }
 
     try {
@@ -150,9 +151,9 @@ const ApiGemini = (() => {
   }
 
   /**
-   * v1.0追加 - Gemini Function Calling応答を処理
-   * functionCallが返ってきたら検索実行 → 結果をGeminiに返して最終回答を取得
-   * 安全ガイド: 最大1回の検索（ループ防止）
+   * v1.1変更 - Gemini Function Calling応答を処理（ToolRegistry統合版）
+   * functionCallが返ってきたらToolRegistryで実行 → 結果をGeminiに返して最終回答を取得
+   * 安全ガイド: 最大1回のツール呼び出し（ループ防止）
    */
   async function _handleFunctionCall(data, originalBody, modelName, options) {
     const parts = data?.candidates?.[0]?.content?.parts;
@@ -162,22 +163,19 @@ const ApiGemini = (() => {
     if (!fcPart || !fcPart.functionCall) return null;
 
     const fc = fcPart.functionCall;
-    if (fc.name !== 'web_search' || typeof SearchCaller === 'undefined') return null;
+    if (typeof ToolRegistry === 'undefined' || !ToolRegistry.hasTool(fc.name)) return null;
 
     console.log(`[ApiGemini] Function Call検出: ${fc.name}(${JSON.stringify(fc.args)})`);
 
-    // SearchCallerで検索実行
-    const searchResult = await SearchCaller.execute(fc.args?.query || '');
+    // ToolRegistryでツール実行
+    const toolResult = await ToolRegistry.execute(fc.name, fc.args || {});
 
-    // 検索結果をGeminiに返す（functionResponse形式）
+    // ツール結果をGeminiに返す（functionResponse形式）
     const followUpBody = { ...originalBody };
-    // 元のcontentsにmodel応答＋functionResponseを追加
     followUpBody.contents = [
       ...originalBody.contents,
-      // modelのfunctionCall応答
       { role: 'model', parts: [{ functionCall: fc }] },
-      // functionResponseを返す
-      { role: 'user', parts: [{ functionResponse: { name: fc.name, response: { result: searchResult } } }] },
+      { role: 'user', parts: [{ functionResponse: { name: fc.name, response: { result: toolResult } } }] },
     ];
     // 2回目はツール定義なし（ループ防止）
     delete followUpBody.tools;
@@ -191,7 +189,7 @@ const ApiGemini = (() => {
       TokenMonitor.record(modelName, usage2.promptTokenCount || 0, usage2.candidatesTokenCount || 0);
     }
 
-    console.log('[ApiGemini] Function Calling完了 → 最終回答取得');
+    console.log(`[ApiGemini] Function Calling完了（${fc.name}） → 最終回答取得`);
     return text;
   }
 

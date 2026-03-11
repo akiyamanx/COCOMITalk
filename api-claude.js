@@ -3,6 +3,7 @@
 // v1.2 2026-03-08 - モデル名修正（claude-opus-4-6-20260205 → claude-opus-4-6）
 // v1.3 2026-03-08 - max_tokens増加（1024→4096、会議モードで発言途切れ防止）
 // v1.4 2026-03-11 - Phase 2a+ Tool Use対応（web_search自動検索）
+// v1.5 2026-03-11 - Phase 2c ToolRegistry統合（複数ツール対応）
 
 'use strict';
 
@@ -57,9 +58,9 @@ const ApiClaude = (() => {
       body.system = systemPrompt;
     }
 
-    // v1.4追加 - Tool Use: web_searchツールを追加
-    if (typeof SearchCaller !== 'undefined') {
-      body.tools = [SearchCaller.getClaudeTool()];
+    // v1.5変更 - ToolRegistry経由で全ツール定義を追加（Phase 2c）
+    if (typeof ToolRegistry !== 'undefined') {
+      body.tools = ToolRegistry.getClaudeTools();
     }
 
     try {
@@ -119,30 +120,28 @@ const ApiClaude = (() => {
   }
 
   /**
-   * v1.4追加 - Claude Tool Use応答を処理
-   * tool_useブロックが返ってきたら検索実行 → 結果をClaudeに返して最終回答を取得
-   * 安全ガイド: 最大1回の検索（ループ防止）
+   * v1.5変更 - Claude Tool Use応答を処理（ToolRegistry統合版）
+   * tool_useブロックが返ってきたらToolRegistryで実行 → 結果をClaudeに返して最終回答を取得
+   * 安全ガイド: 最大1回のツール呼び出し（ループ防止）
    */
   async function _handleToolUse(data, originalBody, modelName, options) {
     const content = data?.content;
     if (!content || !Array.isArray(content)) return null;
 
     const tuBlock = content.find(b => b.type === 'tool_use');
-    if (!tuBlock || tuBlock.name !== 'web_search' || typeof SearchCaller === 'undefined') return null;
+    if (!tuBlock || typeof ToolRegistry === 'undefined' || !ToolRegistry.hasTool(tuBlock.name)) return null;
 
     console.log(`[ApiClaude] tool_use検出: ${tuBlock.name}(${JSON.stringify(tuBlock.input)})`);
 
-    // SearchCallerで検索実行
-    const searchResult = await SearchCaller.execute(tuBlock.input?.query || '');
+    // ToolRegistryでツール実行
+    const toolResult = await ToolRegistry.execute(tuBlock.name, tuBlock.input || {});
 
-    // 検索結果をClaudeに返す（tool_result形式）
+    // ツール結果をClaudeに返す（tool_result形式）
     const followUpBody = { ...originalBody };
     followUpBody.messages = [
       ...originalBody.messages,
-      // assistantのtool_use応答
       { role: 'assistant', content: content },
-      // tool_resultを返す
-      { role: 'user', content: [{ type: 'tool_result', tool_use_id: tuBlock.id, content: searchResult }] },
+      { role: 'user', content: [{ type: 'tool_result', tool_use_id: tuBlock.id, content: toolResult }] },
     ];
     // 2回目はツール定義なし（ループ防止）
     delete followUpBody.tools;
@@ -156,7 +155,7 @@ const ApiClaude = (() => {
       TokenMonitor.record(modelName, usage2.input_tokens || 0, usage2.output_tokens || 0);
     }
 
-    console.log('[ApiClaude] Tool Use完了 → 最終回答取得');
+    console.log(`[ApiClaude] Tool Use完了（${tuBlock.name}） → 最終回答取得`);
     return text;
   }
 
