@@ -29,8 +29,8 @@
 // v2.22 2026-03-11 - voice-command.js分離＋voice-input v1.6 try-catch追加（UI固まり防止）
 // v2.23 2026-03-11 - voice-input v1.6.1 VoiceCommand未定義でもマイクボタン表示される防御
 // v2.25 2026-03-11 - 3バグ全修正: voice-input v1.8 + voice-command v1.1 + voice-send v1.0新規
-// v2.29 2026-03-12 - デバッグ: 赤バーDOM方式（title方式はAndroidで効かなかった）
-const CACHE_NAME = 'cocomitalk-v2.29';
+// v2.30 2026-03-12 - voice-command.js v1.1.1 構文エラー修正（JSDocネストコメント問題）
+const CACHE_NAME = 'cocomitalk-v2.30';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

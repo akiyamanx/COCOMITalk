@@ -12,7 +12,7 @@
  *
  * 使い方:
  *   const cmd = new VoiceCommand({ onStop, onResume, onSwitchSister, onSwitchGroup, onSpeedChange, onStatus });
- *   if (cmd.handle(sttText)) { /* コマンド実行済み */ }
+ *   if (cmd.handle(sttText)) { // コマンド実行済み }
  */
 class VoiceCommand {
   /**
