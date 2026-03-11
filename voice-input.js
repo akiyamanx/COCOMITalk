@@ -11,26 +11,12 @@
 // v1.7 修正 - コマンド処理を内蔵に戻し確実に動作。部分一致＋正規化強化＋try-catch
 // v1.8 修正 - 3バグ全修正: コマンド→VoiceCommand分離 / 送信→VoiceSend分離 / STT即終了リトライ
 
-// ★デバッグバー（原因特定後に削除）
-function _dbg(msg) {
-  let el = document.getElementById('voice-debug-bar');
-  if (!el) {
-    el = document.createElement('div');
-    el.id = 'voice-debug-bar';
-    el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;font-size:12px;padding:4px 8px;z-index:999999;font-family:monospace;white-space:nowrap;overflow:hidden;';
-    document.body.appendChild(el);
-  }
-  el.textContent = msg;
-  console.log('[DBG] ' + msg);
-}
-
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
   constructor() {
     this._stt = new WebSpeechProvider();
     this._playback = new AudioPlaybackManager();
     this._ui = new VoiceUI();
-    this._sender = new VoiceSend(); // v1.8追加: 送信処理モジュール
     // 音声モードが有効か（一度でもマイクを押したらtrue）
     this._enabled = false;
     // 現在の姉妹ID
@@ -141,8 +127,6 @@ class VoiceController {
     };
 
     this._stt.onEnd = () => {
-      // ★デバッグ（原因特定後に削除）
-      _dbg(`onEnd: final=${this._hasFinalText} last="${(this._lastText||'').slice(0,10)}"`);
 
       // v1.8追加: STT即終了リトライ判定
       const duration = Date.now() - this._sttStartTime;
@@ -291,8 +275,6 @@ class VoiceController {
 
   /** マイクボタン押下時の処理 */
   toggleListening() {
-    // ★デバッグ（原因特定後に削除）
-    _dbg(`TGL: listen=${this._stt.isListening()} timer=${this._silenceTimer!==null}`);
 
     if (this._stt.isListening() || this._silenceTimer !== null) {
       this._clearSilenceTimer();
@@ -308,8 +290,6 @@ class VoiceController {
       this._playback.stop();
       this._forceIdleState();
     } else {
-      // ★デバッグ
-      _dbg('TGL→startListening');
       this.startListening();
     }
   }
@@ -389,32 +369,75 @@ class VoiceController {
   /** 音声メッセージの送信（コマンド判定→送信） */
   _sendVoiceMessage(text) {
     try {
-      // ★デバッグ（原因特定後に削除）
-      _dbg(`CMD: "${text}" vc=${!!this._voiceCmd}`);
-
       // 音声コマンドチェック
       if (this._voiceCmd && this._voiceCmd.handle(text)) return;
 
-      // 通常メッセージ送信
+      // 通常メッセージ送信（v1.7の実績あるロジックに戻し）
       this._ui.hideInterim();
       this._lastText = '';
 
-      this._sender.send(text, {
-        onComplete: () => {
-          this._ui.updateMicState('idle');
-          this._updateMeetingMicState('idle');
-        },
-        onError: (msg) => {
-          console.error('[Voice] 送信エラー:', msg);
-          this._forceIdleState();
-          this._ui.showStatus(msg, 'error');
-        }
-      });
+      const inMeeting = typeof MeetingUI !== 'undefined' && MeetingUI.getIsVisible();
+      if (inMeeting) {
+        this._sendToMeeting(text);
+      } else {
+        this._sendToNormalChat(text);
+      }
     } catch (e) {
       console.error('[Voice] _sendVoiceMessage エラー:', e);
       this._forceIdleState();
       this._ui.showStatus('送信エラーが発生しました', 'error');
     }
+  }
+
+  /** 通常チャットへの音声送信（v1.7実績ロジック） */
+  _sendToNormalChat(text) {
+    const input = document.getElementById('msg-input');
+    if (!input) {
+      console.error('[Voice] #msg-input が見つかりません');
+      this._forceIdleState();
+      return;
+    }
+    input.value = text;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    setTimeout(() => {
+      const sendBtn = document.getElementById('btn-send');
+      if (sendBtn && !sendBtn.disabled) {
+        sendBtn.click();
+        console.log('[Voice] 通常チャット音声送信完了');
+      } else {
+        const event = new KeyboardEvent('keydown', {
+          key: 'Enter', code: 'Enter',
+          keyCode: 13, which: 13, bubbles: true
+        });
+        input.dispatchEvent(event);
+      }
+      this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle');
+    }, 50);
+  }
+
+  /** 会議モードへの音声送信（v1.7実績ロジック） */
+  _sendToMeeting(text) {
+    const topicInput = document.querySelector('.meeting-topic-input');
+    if (!topicInput) {
+      console.error('[Voice] .meeting-topic-input が見つかりません');
+      this._forceIdleState();
+      return;
+    }
+    topicInput.value = text;
+    topicInput.dispatchEvent(new Event('input', { bubbles: true }));
+    setTimeout(() => {
+      const isRunning = typeof MeetingRelay !== 'undefined' && MeetingRelay.getCurrentRound() > 0;
+      if (isRunning) {
+        const btnContinue = document.getElementById('btn-meeting-continue');
+        if (btnContinue) { btnContinue.click(); console.log('[Voice] 会議追加ラウンド音声送信完了'); }
+      } else {
+        const btnStart = document.getElementById('btn-meeting-start');
+        if (btnStart) { btnStart.click(); console.log('[Voice] 会議開始音声送信完了'); }
+      }
+      this._ui.updateMicState('idle');
+      this._updateMeetingMicState('idle');
+    }, 50);
   }
 
   /** 会議マイクボタンのUI状態を同期更新 */
