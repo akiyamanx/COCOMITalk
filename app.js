@@ -264,6 +264,22 @@ const App = (() => {
   return { init };
 })();
 
+// v1.5追加 - 音声コマンド用グローバル関数（Step 5e）
+window.switchToSister = (sisterKey) => {
+  const tab = document.querySelector(`.tab[data-sister="${sisterKey}"]`);
+  if (tab) tab.click();
+};
+window.switchToGroup = () => {
+  const modeBtn = document.getElementById('btn-mode');
+  if (modeBtn && typeof ModeSwitcher !== 'undefined') {
+    // グループモードになるまでサイクル（最大3回）
+    for (let i = 0; i < 3; i++) {
+      if (ModeSwitcher.isGroupMode()) break;
+      modeBtn.click();
+    }
+  }
+};
+
 // DOMContentLoaded で起動
 document.addEventListener('DOMContentLoaded', () => App.init());
 // Service Worker登録
