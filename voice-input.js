@@ -1,4 +1,4 @@
-// voice-input.js v1.7
+// voice-input.js v1.8
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
@@ -9,6 +9,7 @@
 // v1.3 追加 - Step 5c: 会議モード音声入力対応（マイクボタン＋会議入力欄送信）
 // v1.5 追加 - Step 5e: 音声コマンド対応（ストップ・姉妹切替・スピード調整）
 // v1.7 修正 - コマンド処理を内蔵に戻し確実に動作。部分一致＋正規化強化＋try-catch
+// v1.8 修正 - 3バグ全修正: コマンド→VoiceCommand分離 / 送信→VoiceSend分離 / STT即終了リトライ
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
@@ -16,6 +17,7 @@ class VoiceController {
     this._stt = new WebSpeechProvider();
     this._playback = new AudioPlaybackManager();
     this._ui = new VoiceUI();
+    this._sender = new VoiceSend(); // v1.8追加: 送信処理モジュール
     // 音声モードが有効か（一度でもマイクを押したらtrue）
     this._enabled = false;
     // 現在の姉妹ID
@@ -26,12 +28,64 @@ class VoiceController {
     // 息継ぎ対策: 無音タイマー
     this._silenceTimer = null;
     // v1.5改善: ハンズフリー時は長め（運転中は考えながら話す）
-    this._SILENCE_DELAY = 3500; // v1.5修正: 2500→3500ms
-    this._SILENCE_DELAY_HANDSFREE = 5000; // ハンズフリー時は5秒
+    this._SILENCE_DELAY = 3500;
+    this._SILENCE_DELAY_HANDSFREE = 5000;
     // 最後に受け取ったテキスト（タイマー用）
     this._lastText = '';
+    // v1.8追加: STT即終了リトライ用
+    this._sttStartTime = 0;
+    this._sttRetryCount = 0;
+    this._STT_MIN_DURATION = 500; // STTが500ms未満で終了したら誤終了と判断
+    this._STT_MAX_RETRY = 2;     // リトライは最大2回まで
 
+    this._setupVoiceCommand(); // v1.8: VoiceCommandモジュール初期化
     this._setupCallbacks();
+  }
+
+  // ═══════════════════════════════════════════
+  // v1.8 VoiceCommandモジュール初期化
+  // ═══════════════════════════════════════════
+
+  _setupVoiceCommand() {
+    if (typeof VoiceCommand === 'undefined') {
+      console.warn('[Voice] VoiceCommandが未定義 — 音声コマンド無効');
+      this._voiceCmd = null;
+      return;
+    }
+    this._voiceCmd = new VoiceCommand({
+      onStop: () => {
+        this._playback.stop();
+        this._forceIdleState();
+      },
+      onResume: () => {
+        this._forceIdleState();
+        setTimeout(() => this.startListening(), 500);
+      },
+      onSwitchSister: (key, name) => {
+        if (typeof window.switchToSister === 'function') {
+          window.switchToSister(key);
+          this._currentSisterId = key;
+          this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
+          this._forceIdleState();
+          if (this._autoListen) setTimeout(() => this.startListening(), 800);
+        }
+      },
+      onSwitchGroup: () => {
+        if (typeof window.switchToGroup === 'function') {
+          window.switchToGroup();
+          this._ui.showStatus('👥 グループモードに切り替えました', 'success');
+          this._forceIdleState();
+          if (this._autoListen) setTimeout(() => this.startListening(), 800);
+        }
+      },
+      onSpeedChange: (newSpeed) => {
+        this._speed = newSpeed;
+      },
+      onStatus: (msg, type) => {
+        this._ui.showStatus(msg, type);
+        this._forceIdleState();
+      }
+    });
   }
 
   /**
@@ -39,22 +93,21 @@ class VoiceController {
    */
   _setupCallbacks() {
     // --- STTコールバック ---
-    // v1.2追加 - finalテキストを確定済みフラグで管理
     this._hasFinalText = false;
     this._finalText = '';
 
     this._stt.onStart = () => {
       this._ui.updateMicState('listening');
-      this._updateMeetingMicState('listening'); // v1.3追加
+      this._updateMeetingMicState('listening');
       this._ui.showInterim('🎤 聞いてるよ...');
       this._lastText = '';
       this._finalText = '';
       this._hasFinalText = false;
       this._clearSilenceTimer();
+      this._sttStartTime = Date.now(); // v1.8: STT開始時刻を記録
     };
 
     this._stt.onInterim = (text) => {
-      // v1.2: finalが来た後のinterimは無視（モバイル二重発火対策）
       if (this._hasFinalText) return;
       this._ui.showInterim(text);
       this._lastText = text;
@@ -63,7 +116,6 @@ class VoiceController {
     };
 
     this._stt.onFinal = (text) => {
-      // v1.2: finalは1回だけ採用。2回目以降は無視
       if (this._hasFinalText) {
         console.log(`[Voice] final重複無視: "${text}"`);
         return;
@@ -76,11 +128,28 @@ class VoiceController {
     };
 
     this._stt.onEnd = () => {
-      // v1.2: finalTextを最優先、なければlastText（interim）をフォールバック
+      // v1.8追加: STT即終了リトライ判定
+      const duration = Date.now() - this._sttStartTime;
+      const hasText = this._hasFinalText || (this._lastText && this._lastText.trim().length > 0);
+
+      if (duration < this._STT_MIN_DURATION && !hasText && this._sttRetryCount < this._STT_MAX_RETRY) {
+        this._sttRetryCount++;
+        console.log(`[Voice] STT即終了(${duration}ms) → リトライ ${this._sttRetryCount}/${this._STT_MAX_RETRY}`);
+        setTimeout(() => {
+          if (this._enabled) {
+            this._stt.start({ language: 'ja-JP' });
+          }
+        }, 300);
+        return;
+      }
+      // リトライカウントをリセット（正常終了 or リトライ上限）
+      this._sttRetryCount = 0;
+
       const text = this._hasFinalText
         ? this._finalText
         : (this._stt.stopAndGetText() || this._lastText);
-      console.log(`[Voice] onEnd: hasFinal=${this._hasFinalText} text="${text}"`);
+      console.log(`[Voice] onEnd: hasFinal=${this._hasFinalText} text="${text}" duration=${duration}ms`);
+
       if (text && text.trim().length > 0) {
         this._lastText = text;
         this._ui.showInterim(text + ' ⏳ 送信中...');
@@ -88,19 +157,20 @@ class VoiceController {
         this._resetSilenceTimer();
       } else {
         this._ui.updateMicState('idle');
-        this._updateMeetingMicState('idle'); // v1.3修正
+        this._updateMeetingMicState('idle');
         this._ui.hideInterim();
       }
     };
 
     this._stt.onError = (error) => {
+      this._sttRetryCount = 0; // v1.8: エラー時はリトライカウントをリセット
       this._clearSilenceTimer();
       this._ui.updateMicState('error');
-      this._updateMeetingMicState('error'); // v1.3修正
+      this._updateMeetingMicState('error');
       this._ui.showStatus(error, 'error');
       setTimeout(() => {
         this._ui.updateMicState('idle');
-        this._updateMeetingMicState('idle'); // v1.3修正
+        this._updateMeetingMicState('idle');
       }, 2000);
     };
 
@@ -108,8 +178,8 @@ class VoiceController {
     this._playback.onPlayStart = (sisterId) => {
       this._ui.highlightSister(sisterId, true);
       this._ui.updateMicState('speaking');
-      this._updateMeetingMicState('speaking'); // v1.3追加
-      // v1.3追加: ハウリング防止 — TTS再生開始時にSTTを強制停止
+      this._updateMeetingMicState('speaking');
+      // ハウリング防止 — TTS再生開始時にSTTを強制停止
       if (this._stt.isListening()) {
         this._clearSilenceTimer();
         this._stt.stop();
@@ -120,20 +190,17 @@ class VoiceController {
 
     this._playback.onPlayEnd = (sisterId) => {
       this._ui.highlightSister(sisterId, false);
-      // キュー再生中は自動マイク再開しない（次の姉妹の番）
       if (this._playback.isQueuePlaying()) return;
       this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle'); // v1.3追加
+      this._updateMeetingMicState('idle');
       if (this._autoListen && this._enabled) {
-        // v1.3修正: 1.2秒待つ（スピーカー残響がマイクに入るのを防止）
         setTimeout(() => this.startListening(), 1200);
       }
     };
 
-    // キュー全体が完了した時のコールバック
     this._playback.onQueueEnd = () => {
       this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle'); // v1.3追加
+      this._updateMeetingMicState('idle');
       if (this._autoListen && this._enabled) {
         setTimeout(() => this.startListening(), 1200);
       }
@@ -145,7 +212,7 @@ class VoiceController {
       this._ui.updateMicState('idle');
     };
 
-    // v1.4追加 - TTSフォールバック通知（VOICEVOX→OpenAI切替時）
+    // TTSフォールバック通知
     this._playback.onFallback = (message) => {
       this._ui.showStatus(message, 'info');
     };
@@ -155,14 +222,11 @@ class VoiceController {
   // 息継ぎ対策タイマー
   // ═══════════════════════════════════════════
 
-  /**
-   * 無音タイマーをリセット v1.5改修 - ハンズフリー時は長めに待つ
-   */
+  /** 無音タイマーをリセット v1.5改修 - ハンズフリー時は長めに待つ */
   _resetSilenceTimer() {
     this._clearSilenceTimer();
     const text = (this._lastText || '').trim();
     const baseDelay = this._autoListen ? this._SILENCE_DELAY_HANDSFREE : this._SILENCE_DELAY;
-    // 短いテキスト（5文字未満）はまだ話し始めたばかりなので+1.5秒
     const delay = (text.length < 5) ? baseDelay + 1500 : baseDelay;
     this._silenceTimer = setTimeout(() => {
       this._silenceTimer = null;
@@ -175,9 +239,7 @@ class VoiceController {
     }, delay);
   }
 
-  /**
-   * 無音タイマーをクリア
-   */
+  /** 無音タイマーをクリア */
   _clearSilenceTimer() {
     if (this._silenceTimer) {
       clearTimeout(this._silenceTimer);
@@ -193,7 +255,6 @@ class VoiceController {
   init() {
     this._ui.init(() => this.toggleListening());
 
-    // v1.3追加 - 会議用マイクボタンのイベント接続
     const meetingMic = document.getElementById('btn-meeting-mic');
     if (meetingMic) {
       meetingMic.addEventListener('click', () => this.toggleListening());
@@ -202,7 +263,6 @@ class VoiceController {
     if (!this._stt.isAvailable()) {
       this._ui.showStatus('このブラウザは音声入力に対応していません', 'error');
       this._ui.disableMic();
-      // v1.3追加 - 会議マイクも無効化
       if (meetingMic) { meetingMic.disabled = true; meetingMic.style.opacity = '0.4'; }
       return;
     }
@@ -210,12 +270,11 @@ class VoiceController {
     if (!this._playback._ttsProvider.isAvailable()) {
       console.warn('[Voice] TTS未設定（Worker URL/認証トークンが必要）');
     }
-    console.log('[Voice] 音声モード初期化完了（会議マイク対応）');
+    console.log('[Voice] 音声モード初期化完了（v1.8 3バグ修正版）');
   }
 
-  /** マイクボタン押下時の処理 v1.3改修 - silenceTimer稼働中も停止対象 */
+  /** マイクボタン押下時の処理 */
   toggleListening() {
-    // STT認識中 or 無音タイマー稼働中（＝送信待ち）→ 停止処理
     if (this._stt.isListening() || this._silenceTimer !== null) {
       this._clearSilenceTimer();
       const text = (this._lastText || '').trim();
@@ -227,7 +286,6 @@ class VoiceController {
         this._forceIdleState();
       }
     } else if (this._playback.isPlaying() || this._playback.isQueuePlaying()) {
-      // 再生中（キュー含む）→ 割り込み停止
       this._playback.stop();
       this._forceIdleState();
     } else {
@@ -235,7 +293,7 @@ class VoiceController {
     }
   }
 
-  /** v1.3追加 - 全マイクUIを確実にidle状態に戻す */
+  /** 全マイクUIを確実にidle状態に戻す */
   _forceIdleState() {
     this._ui.updateMicState('idle');
     this._updateMeetingMicState('idle');
@@ -246,6 +304,7 @@ class VoiceController {
   startListening() {
     this._enabled = true;
     this._lastText = '';
+    this._sttRetryCount = 0; // v1.8: リトライカウントリセット
     this._clearSilenceTimer();
     this._stt.start({ language: 'ja-JP' });
   }
@@ -256,20 +315,13 @@ class VoiceController {
     this._stt.stop();
   }
 
-  /**
-   * AI応答を声で再生する（chat-core.jsから呼ばれる）
-   * @param {string} responseText - AI応答テキスト
-   * @param {string} sisterId - 'koko' | 'gpt' | 'claude'
-   */
+  /** AI応答を声で再生する */
   async speakResponse(responseText, sisterId) {
     if (!this._enabled) return;
     await this._playback.speak(responseText, sisterId, { speed: this._speed });
   }
 
-  /**
-   * v1.2追加 - 複数の姉妹の応答を順番に再生（chat-group.jsから呼ばれる）
-   * @param {Array<{text: string, sisterId: string}>} items - 再生キュー
-   */
+  /** 複数の姉妹の応答を順番に再生 */
   async speakQueue(items) {
     if (!this._enabled) return;
     await this._playback.speakQueue(items, { speed: this._speed });
@@ -279,21 +331,18 @@ class VoiceController {
   setCurrentSister(sisterId) { this._currentSisterId = sisterId; }
 
   /** 音声速度を設定（0.5〜1.5） */
-  setSpeed(speed) { this._speed = Math.max(0.5, Math.min(1.5, speed)); }
+  setSpeed(speed) {
+    this._speed = Math.max(0.5, Math.min(1.5, speed));
+    if (this._voiceCmd) this._voiceCmd.setSpeed(this._speed);
+  }
 
-  /**
-   * v1.2追加 - ハンズフリーモード切替（設定画面から呼ばれる）
-   * @param {boolean} enabled - true=TTS完了後に自動マイク再開
-   */
+  /** ハンズフリーモード切替 */
   setAutoListen(enabled) {
     this._autoListen = !!enabled;
     console.log(`[Voice] ハンズフリー: ${this._autoListen ? 'ON' : 'OFF'}`);
   }
 
-  /**
-   * v1.2追加 - STTデバッグパネル表示切替（設定画面から呼ばれる）
-   * @param {boolean} visible - true=デバッグパネル表示
-   */
+  /** STTデバッグパネル表示切替 */
   setDebugVisible(visible) {
     if (this._stt && typeof this._stt.setDebugVisible === 'function') {
       this._stt.setDebugVisible(visible);
@@ -313,160 +362,38 @@ class VoiceController {
   }
 
   // ═══════════════════════════════════════════
-  // 送信処理
+  // 送信処理 v1.8改修 — VoiceCommand + VoiceSend に委譲
   // ═══════════════════════════════════════════
 
-  /**
-   * 音声メッセージを自動送信（既存のチャット送信フローに合流）
-   * v1.7修正: 音声コマンドをvoice-input.js内に直接実装（外部依存なし）
-   */
+  /** 音声メッセージの送信（コマンド判定→送信） */
   _sendVoiceMessage(text) {
     try {
-      // 音声コマンドチェック（コマンドなら送信しない）
-      if (this._handleVoiceCommand(text)) return;
+      // 音声コマンドチェック
+      if (this._voiceCmd && this._voiceCmd.handle(text)) return;
 
+      // 通常メッセージ送信
       this._ui.hideInterim();
       this._lastText = '';
 
-      // v1.3追加 - 会議画面が表示中かチェック
-      const inMeeting = typeof MeetingUI !== 'undefined' && MeetingUI.getIsVisible();
-
-      if (inMeeting) {
-        this._sendToMeeting(text);
-      } else {
-        this._sendToNormalChat(text);
-      }
+      this._sender.send(text, {
+        onComplete: () => {
+          this._ui.updateMicState('idle');
+          this._updateMeetingMicState('idle');
+        },
+        onError: (msg) => {
+          console.error('[Voice] 送信エラー:', msg);
+          this._forceIdleState();
+          this._ui.showStatus(msg, 'error');
+        }
+      });
     } catch (e) {
-      // v1.6追加 - エラー時は必ずUIを復帰させる
       console.error('[Voice] _sendVoiceMessage エラー:', e);
       this._forceIdleState();
       this._ui.showStatus('送信エラーが発生しました', 'error');
     }
   }
 
-  // === v1.7 音声コマンド処理（内蔵版・部分一致＋正規化強化） ===
-  /** STT認識テキストを正規化（句読点・スペース・全角英数を除去） v1.7追加 */
-  _normalizeCmd(t) {
-    if (!t) return '';
-    return t.trim().replace(/[。、！？!?.，,：:；;…・～〜「」『』（）()\[\]]+/g, '')
-      .replace(/　/g, '').replace(/[Ａ-Ｚａ-ｚ０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
-      .replace(/\s+/g, '').trim();
-  }
-  /** 音声コマンドかチェックして実行。コマンドならtrue返す v1.7改修 */
-  _handleVoiceCommand(text) {
-    const t = this._normalizeCmd(text);
-    console.log(`[VoiceCmd] 正規化前: "${text}" → 正規化後: "${t}"`);
-    if (t.length < 1 || t.length > 30) return false;
-
-    // 停止コマンド（部分一致）
-    if (/ストップ|止めて|停止|とめて|やめて/.test(t)) {
-      this._playback.stop(); this._forceIdleState();
-      this._ui.showStatus('⏹️ 再生を停止しました', 'info'); return true;
-    }
-    // マイク再開コマンド
-    if (/もう一回|もう1回|もういっかい|聞いて|きいて/.test(t)) {
-      this._forceIdleState(); setTimeout(() => this.startListening(), 500); return true;
-    }
-    // 姉妹切替コマンド
-    const sMap = [['ここちゃん','koko'],['お姉ちゃん','gpt'],['おねえちゃん','gpt'],['おねーちゃん','gpt'],['クロちゃん','claude'],['くろちゃん','claude'],['くろちやん','claude']];
-    for (const [name, key] of sMap) {
-      if (t === name || t.startsWith(name)) {
-        const sfx = t.slice(name.length);
-        if (sfx === '' || /^(にして|に切り替え|に替えて|に変えて|にかえて|お願い|おねがい)/.test(sfx)) {
-          if (typeof window.switchToSister === 'function') {
-            window.switchToSister(key); this._currentSisterId = key;
-            this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
-            this._forceIdleState();
-            if (this._autoListen) setTimeout(() => this.startListening(), 800);
-            return true;
-          }
-        }
-      }
-    }
-    // グループモード切替
-    if (/^(みんな|グループ|全員|みんなで|ぜんいん)$/.test(t) && typeof window.switchToGroup === 'function') {
-      window.switchToGroup();
-      this._ui.showStatus('👥 グループモードに切り替えました', 'success');
-      this._forceIdleState();
-      if (this._autoListen) setTimeout(() => this.startListening(), 800);
-      return true;
-    }
-    // スピード調整（部分一致）
-    if (/速く|早く|はやく|スピードアップ|speedup/.test(t)) {
-      this._speed = Math.min(1.5, this._speed + 0.25);
-      this._ui.showStatus(`⏩ 速度: ${this._speed}x`, 'info'); this._forceIdleState(); return true;
-    }
-    if (/遅く|ゆっくり|おそく|スピードダウン|speeddown/.test(t)) {
-      this._speed = Math.max(0.5, this._speed - 0.25);
-      this._ui.showStatus(`⏪ 速度: ${this._speed}x`, 'info'); this._forceIdleState(); return true;
-    }
-    return false;
-  }
-
-  /** v1.3追加 - 通常チャットへの音声送信 */
-  _sendToNormalChat(text) {
-    const input = document.getElementById('msg-input');
-    if (!input) {
-      console.error('[Voice] #msg-input が見つかりません');
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle');
-      return;
-    }
-    input.value = text;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    setTimeout(() => {
-      const sendBtn = document.getElementById('btn-send');
-      if (sendBtn && !sendBtn.disabled) {
-        sendBtn.click();
-        console.log('[Voice] 通常チャット音声送信完了');
-      } else {
-        const event = new KeyboardEvent('keydown', {
-          key: 'Enter', code: 'Enter',
-          keyCode: 13, which: 13, bubbles: true
-        });
-        input.dispatchEvent(event);
-      }
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle');
-    }, 50);
-  }
-
-  /** v1.3追加 - 会議モードへの音声送信 */
-  _sendToMeeting(text) {
-    const topicInput = document.querySelector('.meeting-topic-input');
-    if (!topicInput) {
-      console.error('[Voice] .meeting-topic-input が見つかりません');
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle');
-      return;
-    }
-    topicInput.value = text;
-    topicInput.dispatchEvent(new Event('input', { bubbles: true }));
-    setTimeout(() => {
-      // 会議進行中かどうかで送信先を判定
-      const isRunning = typeof MeetingRelay !== 'undefined' && MeetingRelay.getCurrentRound() > 0;
-      if (isRunning) {
-        const btnContinue = document.getElementById('btn-meeting-continue');
-        if (btnContinue) {
-          btnContinue.click();
-          console.log('[Voice] 会議追加ラウンド音声送信完了');
-        }
-      } else {
-        const btnStart = document.getElementById('btn-meeting-start');
-        if (btnStart) {
-          btnStart.click();
-          console.log('[Voice] 会議開始音声送信完了');
-        }
-      }
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle');
-    }, 50);
-  }
-
-  /**
-   * v1.3追加 - 会議マイクボタンのUI状態を同期更新
-   * @param {string} state - 'idle'|'listening'|'speaking'|'error'
-   */
+  /** 会議マイクボタンのUI状態を同期更新 */
   _updateMeetingMicState(state) {
     const btn = document.getElementById('btn-meeting-mic');
     if (!btn) return;
@@ -480,7 +407,6 @@ class VoiceController {
     btn.style.background = s.bg;
     btn.style.borderColor = s.border;
     btn.innerHTML = s.icon;
-    // 聞き取り中はパルスアニメーション
     btn.style.animation = state === 'listening'
       ? 'cocomi-mic-pulse 1s ease-in-out infinite' : 'none';
   }

@@ -1,10 +1,8 @@
-// voice-command.js v1.0
+// voice-command.js v1.1
 // このファイルは音声コマンドの認識・実行を担当する
 // voice-input.js から分離（500行制限対策＋責務分離）
 // v1.0 新規作成 - Step 5e 音声コマンド対応（バグ修正版）
-//   - 正規表現を完全一致→部分一致に緩和
-//   - STT認識テキストの正規化を強化（句読点・スペース・全角半角）
-//   - デバッグログ追加（認識テキストを必ず出力）
+// v1.1 修正 - ひらがな/カタカナ揺れ対応強化＋部分一致緩和＋コマンド成功ログ改善
 
 'use strict';
 
@@ -21,7 +19,7 @@ class VoiceCommand {
    * @param {Object} callbacks - コマンド実行時のコールバック群
    * @param {Function} callbacks.onStop - 再生停止
    * @param {Function} callbacks.onResume - マイク再開
-   * @param {Function} callbacks.onSwitchSister - 姉妹切替 (sisterKey)
+   * @param {Function} callbacks.onSwitchSister - 姉妹切替 (sisterKey, sisterName)
    * @param {Function} callbacks.onSwitchGroup - グループモード切替
    * @param {Function} callbacks.onSpeedChange - 速度変更 (newSpeed)
    * @param {Function} callbacks.onStatus - ステータス表示 (message, type)
@@ -42,11 +40,8 @@ class VoiceCommand {
    * @returns {boolean} コマンドだったらtrue
    */
   handle(rawText) {
-    // === 正規化処理 ===
-    // STTが付ける句読点・記号・スペースを除去
     const t = this._normalize(rawText);
     console.log(`[VoiceCmd] 正規化前: "${rawText}" → 正規化後: "${t}"`);
-
     if (t.length < 1 || t.length > 30) return false;
 
     // --- 停止コマンド ---
@@ -101,65 +96,68 @@ class VoiceCommand {
   }
 
   // ═══════════════════════════════════════════
-  // テキスト正規化
+  // テキスト正規化 v1.1強化
   // ═══════════════════════════════════════════
 
   /**
    * STT認識テキストを正規化する
    * - 句読点・記号を除去
-   * - 全角スペース→半角スペース→除去
+   * - 全角スペース→除去
    * - 全角英数→半角英数
-   * - 前後の空白除去
+   * - v1.1追加: カタカナ長音「ー」のゆらぎ正規化
+   * - スペースを全て除去
    */
   _normalize(text) {
     if (!text) return '';
     return text
       .trim()
-      // 句読点・記号を除去
+      // 句読点・記号を除去（長音「ー」はカタカナ語で意味があるので残す）
       .replace(/[。、！？!?.，,：:；;…・～〜「」『』（）\(\)\[\]｛｝【】]+/g, '')
       // 全角スペース→半角
       .replace(/　/g, ' ')
-      // 全角英数→半角（カタカナはそのまま）
+      // 全角英数→半角
       .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xFEE0))
-      // スペースを除去（日本語コマンドではスペースは不要）
+      // スペースを全て除去（日本語コマンドではスペースは不要）
       .replace(/\s+/g, '')
       .trim();
   }
 
   // ═══════════════════════════════════════════
-  // コマンドマッチング（全て部分一致に緩和）
+  // コマンドマッチング v1.1強化 - ひらがな/カタカナ揺れ対応
   // ═══════════════════════════════════════════
 
-  /** 停止コマンド: 「ストップ」「止めて」「停止」「とめて」「やめて」 */
+  /** 停止コマンド: 「ストップ」「止めて」「停止」「とめて」「やめて」「すとっぷ」 */
   _matchStop(t) {
-    return /ストップ|止めて|停止|とめて|やめて/.test(t);
+    return /ストップ|すとっぷ|止めて|停止|とめて|やめて|ていし/.test(t);
   }
 
-  /** マイク再開: 「もう一回」「もう1回」「もういっかい」「聞いて」 */
+  /** マイク再開: 「もう一回」「もう1回」「もういっかい」「聞いて」「もう一度」 */
   _matchResume(t) {
-    return /もう一回|もう1回|もういっかい|聞いて|きいて/.test(t);
+    return /もう一回|もう1回|もういっかい|もういちど|もう一度|聞いて|きいて/.test(t);
   }
 
   /**
    * 姉妹切替: 「ここちゃん」「お姉ちゃん」「クロちゃん」＋語尾バリエーション
+   * v1.1強化: STTのひらがな/カタカナ変換揺れに対応
    * @returns {{ key: string, name: string } | null}
    */
   _matchSisterSwitch(t) {
     const sisters = [
-      { patterns: ['ここちゃん'], key: 'koko', name: 'ここちゃん' },
-      { patterns: ['お姉ちゃん', 'おねえちゃん', 'おねーちゃん'], key: 'gpt', name: 'お姉ちゃん' },
-      { patterns: ['クロちゃん', 'くろちゃん', 'くろちやん'], key: 'claude', name: 'クロちゃん' },
+      { patterns: ['ここちゃん', 'ココちゃん', 'ココチャン'], key: 'koko', name: 'ここちゃん' },
+      { patterns: ['お姉ちゃん', 'おねえちゃん', 'おねーちゃん', 'オネエチャン'], key: 'gpt', name: 'お姉ちゃん' },
+      { patterns: ['クロちゃん', 'くろちゃん', 'くろちやん', 'クロチャン', 'くろちゃーん'], key: 'claude', name: 'クロちゃん' },
     ];
+
+    // v1.1: 切替を示す語尾パターン
+    const switchSuffixes = /^(にして|に切り替え|に替えて|に変えて|にかえて|にきりかえ|にきりかえて|お願い|おねがい|にかわって|に代わって|にチェンジ|にちぇんじ)/;
 
     for (const sister of sisters) {
       for (const pattern of sister.patterns) {
-        // 名前だけ or 名前+語尾（にして、に切り替え、に変えて等）
         if (t === pattern || t.startsWith(pattern)) {
-          // ただし「ここちゃんおはよう」みたいな普通の呼びかけは除外
-          // → 名前のみ or 名前+切替系語尾の場合だけコマンド扱い
           const suffix = t.slice(pattern.length);
-          if (suffix === '' ||
-              /^(にして|に切り替え|に替えて|に変えて|にかえて|にきりかえ|お願い|おねがい)/.test(suffix)) {
+          // 名前のみ or 名前+切替系語尾の場合だけコマンド扱い
+          // 「ここちゃんおはよう」みたいな普通の呼びかけは除外
+          if (suffix === '' || switchSuffixes.test(suffix)) {
             return { key: sister.key, name: sister.name };
           }
         }
@@ -168,20 +166,23 @@ class VoiceCommand {
     return null;
   }
 
-  /** グループモード: 「みんな」「グループ」「全員」「みんなで」 */
+  /** グループモード: 「みんな」「グループ」「全員」「みんなで」「ぐるーぷ」 */
   _matchGroup(t) {
-    return /^(みんな|グループ|全員|みんなで|ぜんいん)$/.test(t) ||
-           /みんなで(話そう|はなそう|やろう)/.test(t);
+    return /^(みんな|グループ|ぐるーぷ|ぐループ|全員|みんなで|ぜんいん|みんなで(話そう|はなそう|やろう))$/.test(t);
   }
 
-  /** スピードアップ: 「速く」「早く」「スピードアップ」「はやく」 */
+  /**
+   * スピードアップ v1.1強化
+   * STTの認識揺れ: 「スピードアップ」→「スピード アップ」「すぴーどあっぷ」等
+   * 正規化でスペース除去済みなので、ひらがなパターンを追加
+   */
   _matchSpeedUp(t) {
-    return /速く|早く|はやく|スピードアップ|speedup/.test(t);
+    return /速く|早く|はやく|スピードアップ|すぴーどあっぷ|スピードup|speedup|はやくして/.test(t);
   }
 
-  /** スピードダウン: 「遅く」「ゆっくり」「スピードダウン」「おそく」 */
+  /** スピードダウン v1.1強化: ひらがなパターン追加 */
   _matchSpeedDown(t) {
-    return /遅く|ゆっくり|おそく|スピードダウン|speeddown/.test(t);
+    return /遅く|ゆっくり|おそく|スピードダウン|すぴーどだうん|スピードdown|speeddown|ゆっくりして|おそくして/.test(t);
   }
 }
 
