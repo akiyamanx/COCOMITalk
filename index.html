@@ -251,8 +251,23 @@
       <h2>🧠 記憶管理</h2>
       <div class="memory-header-right">
         <span id="memory-count"></span>
+        <button id="btn-memory-delete-all" class="memory-delete-all-btn" aria-label="全件削除">🗑️全削除</button>
         <button id="btn-memory-close" class="icon-btn" aria-label="閉じる">✕</button>
       </div>
+    </div>
+    <div class="memory-search-bar">
+      <input type="text" id="memory-search-input" placeholder="🔍 記憶を検索（議題・要約・決定事項）" autocomplete="off">
+    </div>
+    <!-- v1.2追加 - 期間指定削除 -->
+    <div class="memory-period-bar">
+      <select id="memory-period-select" class="memory-period-select">
+        <option value="0">期間を選択...</option>
+        <option value="7">1週間前より古い</option>
+        <option value="14">2週間前より古い</option>
+        <option value="30">1ヶ月前より古い</option>
+        <option value="90">3ヶ月前より古い</option>
+      </select>
+      <button id="btn-memory-delete-period" class="memory-delete-period-btn">🗑️ 期間削除</button>
     </div>
     <div id="memory-list" class="memory-list">
       <p class="memory-empty">まだ記憶がありません</p>

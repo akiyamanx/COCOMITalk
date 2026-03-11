@@ -54,6 +54,44 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* v1.1追加 - 検索バー */
+.memory-search-bar {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+}
+.memory-search-bar input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  outline: none;
+  background: #fff;
+  box-sizing: border-box;
+}
+.memory-search-bar input:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.2);
+}
+
+/* v1.1追加 - 一括削除ボタン */
+.memory-delete-all-btn {
+  padding: 4px 10px;
+  border: 1px solid rgba(255,255,255,0.4);
+  border-radius: 8px;
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+}
+.memory-delete-all-btn:active {
+  background: rgba(244,67,54,0.3);
+}
+
 /* 空・ローディング */
 .memory-empty,
 .memory-loading {
@@ -291,4 +329,82 @@
   font-size: 0.72rem;
   color: #aaa;
   font-family: monospace;
+}
+
+/* ========== v1.2追加 - 検索バー・全削除ボタン・期間指定削除 ========== */
+
+/* 検索バー */
+.memory-search-bar {
+  padding: 8px 12px;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+}
+.memory-search-bar input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.88rem;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  outline: none;
+  box-sizing: border-box;
+}
+.memory-search-bar input:focus {
+  border-color: #a78bfa;
+  box-shadow: 0 0 0 2px rgba(167, 139, 250, 0.2);
+}
+
+/* 全削除ボタン */
+.memory-delete-all-btn {
+  background: rgba(255,255,255,0.2);
+  border: 1px solid rgba(255,255,255,0.4);
+  color: #fff;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  white-space: nowrap;
+}
+.memory-delete-all-btn:active {
+  background: rgba(255,255,255,0.35);
+}
+
+/* 期間指定削除バー */
+.memory-period-bar {
+  display: flex;
+  gap: 8px;
+  padding: 6px 12px;
+  border-bottom: 1px solid #eee;
+  background: #fafafa;
+  align-items: center;
+}
+.memory-period-select {
+  flex: 1;
+  padding: 6px 10px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  background: #fff;
+  color: #555;
+  outline: none;
+}
+.memory-period-select:focus {
+  border-color: #a78bfa;
+}
+.memory-delete-period-btn {
+  padding: 6px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.82rem;
+  background: #ff7043;
+  color: #fff;
+  cursor: pointer;
+  font-family: 'Zen Maru Gothic', 'M PLUS Rounded 1c', sans-serif;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.memory-delete-period-btn:active {
+  opacity: 0.8;
 }

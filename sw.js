@@ -21,7 +21,9 @@
 // v2.13 2026-03-11 - prompt-builder.js追加（プロンプト注入共通化）
 // v2.15 2026-03-11 - Phase 2c tool-registry.js追加 + api-*.js ToolRegistry統合
 // v2.16 2026-03-11 - tool-registry v1.0.1 get_datetime JST修正 + ツール説明強化
-const CACHE_NAME = 'cocomitalk-v2.16';
+// v2.17 2026-03-11 - memory-ui v1.1 検索フィルタ＋一括削除＋件数正確化
+// v2.18 2026-03-11 - memory-ui v1.2 期間指定削除 + CSS整備 + Worker limit引き上げ
+const CACHE_NAME = 'cocomitalk-v2.18';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
