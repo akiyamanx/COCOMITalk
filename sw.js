@@ -20,7 +20,8 @@
 // v2.12 2026-03-12 - 検索結果HTMLタグ除去 + 会議/グループ全モード検索対応
 // v2.13 2026-03-11 - prompt-builder.js追加（プロンプト注入共通化）
 // v2.15 2026-03-11 - Phase 2c tool-registry.js追加 + api-*.js ToolRegistry統合
-const CACHE_NAME = 'cocomitalk-v2.15';
+// v2.16 2026-03-11 - tool-registry v1.0.1 get_datetime JST修正 + ツール説明強化
+const CACHE_NAME = 'cocomitalk-v2.16';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

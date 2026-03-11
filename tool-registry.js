@@ -44,7 +44,7 @@ const ToolRegistry = (() => {
     },
     {
       name: 'get_datetime',
-      description: '現在の日本時間（JST）を取得する。今日の日付、現在時刻、曜日、年月日を正確に知りたい時に使う。「今何時？」「今日は何曜日？」「今日の日付は？」などの質問に使う。',
+      description: '現在の正確な日本時間（JST）を取得する。今日の日付、現在時刻、曜日、年月日を正確に知りたい時に必ず使う。「今何時？」「今日は何曜日？」「今日の日付は？」「今日は何日？」などの質問では、自分の知識で答えずに必ずこのツールを使って正確な時刻を取得すること。AIの学習データの日時は古いため、このツールなしでは正確な現在時刻を答えられない。',
       parameters: {
         type: 'object',
         properties: {},
@@ -53,7 +53,7 @@ const ToolRegistry = (() => {
     },
     {
       name: 'calculate',
-      description: '数式を計算する。四則演算、べき乗、平方根、三角関数、対数など数学的な計算を正確に行いたい時に使う。「123 × 456は？」「消費税10%込みの金額は？」などの質問に使う。',
+      description: '数式を正確に計算する。四則演算、べき乗、平方根、三角関数、対数など数学的な計算を正確に行う時に使う。「123 × 456は？」「消費税10%込みの金額は？」「割り勘でいくら？」などの計算問題では、暗算せずにこのツールを使って正確な結果を返すこと。',
       parameters: {
         type: 'object',
         properties: {
@@ -84,26 +84,31 @@ const ToolRegistry = (() => {
 
     /**
      * get_datetime — 現在の日本時間を返す（API呼び出しなし・コスト0）
+     * v1.0.1修正 — toLocaleStringでJST確実取得（UTC+9手動計算のバグ修正）
      */
     async get_datetime(_args) {
       try {
         const now = new Date();
-        // 日本時間（UTC+9）に変換
-        const jst = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-        const weekdays = ['日', '月', '火', '水', '木', '金', '土'];
 
-        const year = jst.getUTCFullYear();
-        const month = jst.getUTCMonth() + 1;
-        const day = jst.getUTCDate();
-        const weekday = weekdays[jst.getUTCDay()];
-        const hours = String(jst.getUTCHours()).padStart(2, '0');
-        const minutes = String(jst.getUTCMinutes()).padStart(2, '0');
-        const seconds = String(jst.getUTCSeconds()).padStart(2, '0');
+        // Intl.DateTimeFormatで確実にJST取得
+        const jstOptions = { timeZone: 'Asia/Tokyo' };
+        const year = now.toLocaleString('en', { ...jstOptions, year: 'numeric' });
+        const month = now.toLocaleString('en', { ...jstOptions, month: 'numeric' });
+        const day = now.toLocaleString('en', { ...jstOptions, day: 'numeric' });
+        const weekday = now.toLocaleString('ja', { ...jstOptions, weekday: 'short' });
+        const hours = now.toLocaleString('en', { ...jstOptions, hour: '2-digit', hour12: false });
+        const minutes = now.toLocaleString('en', { ...jstOptions, minute: '2-digit' });
+        const seconds = now.toLocaleString('en', { ...jstOptions, second: '2-digit' });
 
-        return `【現在の日本時間】\n` +
+        // 0埋め
+        const hh = hours.padStart(2, '0');
+        const mm = minutes.padStart(2, '0');
+        const ss = seconds.padStart(2, '0');
+
+        return `【現在の日本時間（JST・UTC+9）】\n` +
           `日付: ${year}年${month}月${day}日（${weekday}曜日）\n` +
-          `時刻: ${hours}時${minutes}分${seconds}秒\n` +
-          `ISO: ${jst.toISOString().replace('Z', '+09:00')}`;
+          `時刻: ${hh}時${mm}分${ss}秒\n` +
+          `※この情報はユーザーの端末から取得した正確な現在時刻です。AIの学習データの日時ではありません。`;
       } catch (e) {
         return `日時取得エラー: ${e.message}`;
       }
