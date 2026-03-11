@@ -11,6 +11,19 @@
 // v1.7 修正 - コマンド処理を内蔵に戻し確実に動作。部分一致＋正規化強化＋try-catch
 // v1.8 修正 - 3バグ全修正: コマンド→VoiceCommand分離 / 送信→VoiceSend分離 / STT即終了リトライ
 
+// ★デバッグバー（原因特定後に削除）
+function _dbg(msg) {
+  let el = document.getElementById('voice-debug-bar');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'voice-debug-bar';
+    el.style.cssText = 'position:fixed;top:0;left:0;right:0;background:red;color:white;font-size:12px;padding:4px 8px;z-index:999999;font-family:monospace;white-space:nowrap;overflow:hidden;';
+    document.body.appendChild(el);
+  }
+  el.textContent = msg;
+  console.log('[DBG] ' + msg);
+}
+
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
   constructor() {
@@ -129,7 +142,7 @@ class VoiceController {
 
     this._stt.onEnd = () => {
       // ★デバッグ（原因特定後に削除）
-      document.title = `onEnd: final=${this._hasFinalText} last="${(this._lastText||'').slice(0,10)}"`;
+      _dbg(`onEnd: final=${this._hasFinalText} last="${(this._lastText||'').slice(0,10)}"`);
 
       // v1.8追加: STT即終了リトライ判定
       const duration = Date.now() - this._sttStartTime;
@@ -279,7 +292,7 @@ class VoiceController {
   /** マイクボタン押下時の処理 */
   toggleListening() {
     // ★デバッグ（原因特定後に削除）
-    document.title = `TGL: listen=${this._stt.isListening()} timer=${this._silenceTimer!==null} play=${this._playback.isPlaying()}`;
+    _dbg(`TGL: listen=${this._stt.isListening()} timer=${this._silenceTimer!==null}`);
 
     if (this._stt.isListening() || this._silenceTimer !== null) {
       this._clearSilenceTimer();
@@ -296,7 +309,7 @@ class VoiceController {
       this._forceIdleState();
     } else {
       // ★デバッグ
-      document.title = 'TGL→startListening';
+      _dbg('TGL→startListening');
       this.startListening();
     }
   }
@@ -376,8 +389,8 @@ class VoiceController {
   /** 音声メッセージの送信（コマンド判定→送信） */
   _sendVoiceMessage(text) {
     try {
-      // ★デバッグ: タブタイトルで確認（原因特定後に削除）
-      document.title = `CMD: "${text}" vc=${!!this._voiceCmd}`;
+      // ★デバッグ（原因特定後に削除）
+      _dbg(`CMD: "${text}" vc=${!!this._voiceCmd}`);
 
       // 音声コマンドチェック
       if (this._voiceCmd && this._voiceCmd.handle(text)) return;
