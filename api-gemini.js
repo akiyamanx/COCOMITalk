@@ -7,6 +7,7 @@
 // v0.9 2026-03-08 - maxOutputTokens増加（1024→4096、会議モードで発言が途切れるバグ修正）
 // v1.0 2026-03-11 - Phase 2a+ Function Calling対応（web_search自動検索）
 // v1.1 2026-03-11 - Phase 2c ToolRegistry統合（複数ツール対応）
+// v1.2 2026-03-12 - history末尾のuserMessage二重送信防止
 
 'use strict';
 
@@ -96,7 +97,14 @@ const ApiGemini = (() => {
     const contents = [];
 
     // 履歴を追加（直近10ターン）
-    const recentHistory = history.slice(-20);
+    // v1.2修正 - 最後のメッセージが今回のuserMessageと同じなら除外（二重送信防止）
+    let recentHistory = history.slice(-20);
+    if (recentHistory.length > 0) {
+      const last = recentHistory[recentHistory.length - 1];
+      if (last.role === 'user' && last.content === userMessage) {
+        recentHistory = recentHistory.slice(0, -1);
+      }
+    }
     for (const msg of recentHistory) {
       contents.push({
         role: msg.role === 'user' ? 'user' : 'model',

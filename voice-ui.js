@@ -1,10 +1,11 @@
-// voice-ui.js v1.1
+// voice-ui.js v1.1.1
 // このファイルは音声会話のUI部品（DOM操作）を担当する
 // マイクボタン、interim表示、送信確認UI、姉妹アイコン発光を管理
 // voice-input.jsのVoiceControllerから呼ばれる
 
 // v1.0 新規作成 - Step 5b voice-input.jsからUI部分を分離
 // v1.1 追加 - リングウェーブ＋呼吸グロー マイクボタンデザイン
+// v1.1.1 修正 - showStatusがinterimバーにフォールバック（status-bar未定義問題修正）
 
 /**
  * VoiceUI
@@ -352,12 +353,24 @@ class VoiceUI {
    */
   showStatus(message, type = 'info') {
     console.log(`[VoiceUI] ${type}: ${message}`);
+    // v1.1.1修正 - interimバーをステータス表示にも使う（status-barが存在しない問題対策）
     const bar = document.querySelector('.status-bar')
-      || document.querySelector('#cocomi-status');
+      || document.querySelector('#cocomi-status')
+      || this._elements.interim;
     if (bar) {
+      bar.style.display = 'block';
       bar.textContent = message;
-      const colors = { info: '#74b9ff', error: '#e74c3c', success: '#00b894' };
+      const colors = { info: '#74b9ff', error: '#e74c3c', success: '#00b894', warning: '#fdcb6e' };
       bar.style.color = colors[type] || '#74b9ff';
+      // success/warningは3秒後に自動で消す
+      if (type === 'success' || type === 'warning') {
+        setTimeout(() => {
+          if (bar.textContent === message) {
+            bar.textContent = '🎤 話しかけてね...';
+            bar.style.color = '#74b9ff';
+          }
+        }, 3000);
+      }
     }
   }
 
