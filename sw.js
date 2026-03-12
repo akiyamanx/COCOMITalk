@@ -33,7 +33,8 @@
 // v2.33 2026-03-12 - voice-input v1.8.3 常時リスニング（無音STT終了→自動リスタート）
 // v2.34 2026-03-12 - voice-input v1.8.3 コマンド実行後もリスニング継続
 // v2.35 2026-03-12 - voice-input v1.8.3 無音タイマー送信時の二重送信防止
-const CACHE_NAME = 'cocomitalk-v2.35';
+// v2.36 2026-03-12 - voice-input v1.9 送信処理をvoice-sender.js v1.0にmixin分離
+const CACHE_NAME = 'cocomitalk-v2.36';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -80,6 +81,7 @@ const CACHE_FILES = [
   './voice-command.js',
   './voice-send.js',
   './voice-input.js',
+  './voice-sender.js',
   './app-settings.js',
   './prompts/koko-system.js',
   './prompts/gpt-system.js',

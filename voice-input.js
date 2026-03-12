@@ -1,7 +1,8 @@
-// voice-input.js v1.8.3
+// voice-input.js v1.9
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
+// 送信処理はvoice-sender.js v1.0にmixin分離
 
 // v1.0 新規作成 - Step 5b 音声会話フロー制御
 // v1.1 修正 - 自動送信＋息継ぎ1.5秒待機＋セレクタバグ修正
@@ -11,6 +12,7 @@
 // v1.7 修正 - コマンド処理を内蔵に戻し確実に動作。部分一致＋正規化強化＋try-catch
 // v1.8 修正 - 3バグ全修正: コマンド→VoiceCommand分離 / 送信→VoiceSend分離 / STT即終了リトライ
 // v1.8.3 追加 - 常時リスニング: 無音でSTT終了しても自動リスタート。明示的停止でenabled=false
+// v1.9 リファクタ - 送信処理をvoice-sender.js v1.0にmixin分離（行数削減: 490→395行）
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
@@ -389,100 +391,9 @@ class VoiceController {
   }
 
   // ═══════════════════════════════════════════
-  // 送信処理 v1.8改修 — VoiceCommand + VoiceSend に委譲
+  // 送信処理はvoice-sender.js v1.0にmixin分離
+  // VoiceController.prototypeに_sendVoiceMessage等を注入
   // ═══════════════════════════════════════════
-
-  /** 音声メッセージの送信（コマンド判定→送信） */
-  _sendVoiceMessage(text) {
-    try {
-      // 音声コマンドチェック
-      if (this._voiceCmd && this._voiceCmd.handle(text)) return;
-
-      // 通常メッセージ送信（v1.7の実績あるロジックに戻し）
-      this._ui.hideInterim();
-      this._lastText = '';
-
-      const inMeeting = typeof MeetingUI !== 'undefined' && MeetingUI.getIsVisible();
-      if (inMeeting) {
-        this._sendToMeeting(text);
-      } else {
-        this._sendToNormalChat(text);
-      }
-    } catch (e) {
-      console.error('[Voice] _sendVoiceMessage エラー:', e);
-      this._forceIdleState();
-      this._ui.showStatus('送信エラーが発生しました', 'error');
-    }
-  }
-
-  /** 通常チャットへの音声送信（v1.7実績ロジック） */
-  _sendToNormalChat(text) {
-    const input = document.getElementById('msg-input');
-    if (!input) {
-      console.error('[Voice] #msg-input が見つかりません');
-      this._forceIdleState();
-      return;
-    }
-    input.value = text;
-    input.dispatchEvent(new Event('input', { bubbles: true }));
-    setTimeout(() => {
-      const sendBtn = document.getElementById('btn-send');
-      if (sendBtn && !sendBtn.disabled) {
-        sendBtn.click();
-        console.log('[Voice] 通常チャット音声送信完了');
-      } else {
-        const event = new KeyboardEvent('keydown', {
-          key: 'Enter', code: 'Enter',
-          keyCode: 13, which: 13, bubbles: true
-        });
-        input.dispatchEvent(event);
-      }
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle');
-    }, 50);
-  }
-
-  /** 会議モードへの音声送信（v1.7実績ロジック） */
-  _sendToMeeting(text) {
-    const topicInput = document.querySelector('.meeting-topic-input');
-    if (!topicInput) {
-      console.error('[Voice] .meeting-topic-input が見つかりません');
-      this._forceIdleState();
-      return;
-    }
-    topicInput.value = text;
-    topicInput.dispatchEvent(new Event('input', { bubbles: true }));
-    setTimeout(() => {
-      const isRunning = typeof MeetingRelay !== 'undefined' && MeetingRelay.getCurrentRound() > 0;
-      if (isRunning) {
-        const btnContinue = document.getElementById('btn-meeting-continue');
-        if (btnContinue) { btnContinue.click(); console.log('[Voice] 会議追加ラウンド音声送信完了'); }
-      } else {
-        const btnStart = document.getElementById('btn-meeting-start');
-        if (btnStart) { btnStart.click(); console.log('[Voice] 会議開始音声送信完了'); }
-      }
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle');
-    }, 50);
-  }
-
-  /** 会議マイクボタンのUI状態を同期更新 */
-  _updateMeetingMicState(state) {
-    const btn = document.getElementById('btn-meeting-mic');
-    if (!btn) return;
-    const styles = {
-      idle:      { bg: 'white', border: 'var(--active-primary,#6c5ce7)', icon: '🎤' },
-      listening: { bg: '#e74c3c', border: '#e74c3c', icon: '🎤' },
-      speaking:  { bg: 'var(--active-primary,#6c5ce7)', border: 'var(--active-primary,#6c5ce7)', icon: '🔊' },
-      error:     { bg: '#e74c3c', border: '#e74c3c', icon: '⚠️' },
-    };
-    const s = styles[state] || styles.idle;
-    btn.style.background = s.bg;
-    btn.style.borderColor = s.border;
-    btn.innerHTML = s.icon;
-    btn.style.animation = state === 'listening'
-      ? 'cocomi-mic-pulse 1s ease-in-out infinite' : 'none';
-  }
 }
 
 // グローバルに公開
