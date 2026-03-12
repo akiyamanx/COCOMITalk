@@ -40,7 +40,9 @@
 // v2.40 2026-03-12 - voice-command v1.2.1 覚えてコマンドパターン拡張
 // v2.41 2026-03-12 - chat-memory v1.0.1 保存通知トースト + voice-command v1.2.2 STT揺れ対策
 // v2.42 2026-03-12 - 二重送信バグ修正（api-gemini/openai/claude全3社）+ voice-ui v1.1.1 showStatus修正
-const CACHE_NAME = 'cocomitalk-v2.42';
+// v2.43 2026-03-12 - voice-input v1.9.2 showStatus順序修正＋無音タイマー延長（息継ぎ対策）
+// v2.44 2026-03-12 - 常時リスニング無音ディレイ7秒に延長（考えながら喋る対応）
+const CACHE_NAME = 'cocomitalk-v2.44';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

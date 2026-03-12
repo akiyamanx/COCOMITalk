@@ -14,6 +14,7 @@
 // v1.8.3 追加 - 常時リスニング: 無音でSTT終了しても自動リスタート。明示的停止でenabled=false
 // v1.9 リファクタ - 送信処理をvoice-sender.js v1.0にmixin分離（行数削減: 490→395行）
 // v1.9.1 追加 - Step 6 Phase 1: 「覚えて」コマンドでチャット記憶手動保存
+// v1.9.2 修正 - 全コマンドコールバック: _forceIdleState→showStatusの順に統一（表示即消え防止）
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
@@ -31,8 +32,9 @@ class VoiceController {
     // 息継ぎ対策: 無音タイマー
     this._silenceTimer = null;
     // v1.5改善: ハンズフリー時は長め（運転中は考えながら話す）
-    this._SILENCE_DELAY = 3500;
-    this._SILENCE_DELAY_HANDSFREE = 5000;
+    // v1.9.2改善 - 常時リスニング中もゆったり待つ＋息継ぎ・考え中に対応
+    this._SILENCE_DELAY = 4000;           // 通常: 4秒
+    this._SILENCE_DELAY_HANDSFREE = 7000; // ハンズフリー/常時リスニング: 7秒
     // 最後に受け取ったテキスト（タイマー用）
     this._lastText = '';
     // v1.8追加: STT即終了リトライ用
@@ -69,34 +71,32 @@ class VoiceController {
         if (typeof window.switchToSister === 'function') {
           window.switchToSister(key);
           this._currentSisterId = key;
-          this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
+          // v1.9.2修正: _forceIdleState→showStatusの順（hideInterimで消される対策）
           this._forceIdleState();
-          // v1.8.3: enabled中は常にリスタート
+          this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
           if (this._enabled) setTimeout(() => this.startListening(), 800);
         }
       },
       onSwitchGroup: () => {
         if (typeof window.switchToGroup === 'function') {
           window.switchToGroup();
-          this._ui.showStatus('👥 グループモードに切り替えました', 'success');
           this._forceIdleState();
-          // v1.8.3: enabled中は常にリスタート
+          this._ui.showStatus('👥 グループモードに切り替えました', 'success');
           if (this._enabled) setTimeout(() => this.startListening(), 800);
         }
       },
       onSpeedChange: (newSpeed) => {
         this._speed = newSpeed;
-        // v1.8.3: スピード変更後もリスニング継続
         if (this._enabled) setTimeout(() => this.startListening(), 500);
       },
       onStatus: (msg, type) => {
-        this._ui.showStatus(msg, type);
         this._forceIdleState();
-        // v1.8.3: ステータス表示後もリスニング継続
+        this._ui.showStatus(msg, type);
         if (this._enabled) setTimeout(() => this.startListening(), 800);
       },
       // v1.9.1追加: 「覚えて」コマンドでチャット記憶を手動保存
       onSaveMemory: () => {
+        this._forceIdleState();
         if (typeof ChatMemory !== 'undefined' && typeof ChatCore !== 'undefined') {
           const ctx = ChatCore.getGroupContext();
           const history = ctx.chatHistories[ctx.currentSister];
@@ -105,7 +105,6 @@ class VoiceController {
         } else {
           this._ui.showStatus('💾 記憶機能が未準備です', 'warning');
         }
-        this._forceIdleState();
         if (this._enabled) setTimeout(() => this.startListening(), 800);
       }
     });
@@ -261,8 +260,16 @@ class VoiceController {
   _resetSilenceTimer() {
     this._clearSilenceTimer();
     const text = (this._lastText || '').trim();
-    const baseDelay = this._autoListen ? this._SILENCE_DELAY_HANDSFREE : this._SILENCE_DELAY;
-    const delay = (text.length < 5) ? baseDelay + 1500 : baseDelay;
+    // v1.9.2改善 - 常時リスニング中（_enabled）もハンズフリー同等の余裕を持たせる
+    const isRelaxed = this._autoListen || this._enabled;
+    const baseDelay = isRelaxed ? this._SILENCE_DELAY_HANDSFREE : this._SILENCE_DELAY;
+    // 短い発言（5文字未満）→ +1.5秒、長い発言（30文字以上）→ +2秒（考えながら喋ってる）
+    let delay = baseDelay;
+    if (text.length < 5) {
+      delay = baseDelay + 1500;
+    } else if (text.length >= 30) {
+      delay = baseDelay + 2000;
+    }
     this._silenceTimer = setTimeout(() => {
       this._silenceTimer = null;
       const finalText = this._lastText.trim();
