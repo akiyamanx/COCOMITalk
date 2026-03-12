@@ -1,4 +1,4 @@
-// voice-input.js v1.9
+// voice-input.js v1.9.1
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
@@ -13,6 +13,7 @@
 // v1.8 修正 - 3バグ全修正: コマンド→VoiceCommand分離 / 送信→VoiceSend分離 / STT即終了リトライ
 // v1.8.3 追加 - 常時リスニング: 無音でSTT終了しても自動リスタート。明示的停止でenabled=false
 // v1.9 リファクタ - 送信処理をvoice-sender.js v1.0にmixin分離（行数削減: 490→395行）
+// v1.9.1 追加 - Step 6 Phase 1: 「覚えて」コマンドでチャット記憶手動保存
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
@@ -92,6 +93,19 @@ class VoiceController {
         this._ui.showStatus(msg, type);
         this._forceIdleState();
         // v1.8.3: ステータス表示後もリスニング継続
+        if (this._enabled) setTimeout(() => this.startListening(), 800);
+      },
+      // v1.9.1追加: 「覚えて」コマンドでチャット記憶を手動保存
+      onSaveMemory: () => {
+        if (typeof ChatMemory !== 'undefined' && typeof ChatCore !== 'undefined') {
+          const ctx = ChatCore.getGroupContext();
+          const history = ctx.chatHistories[ctx.currentSister];
+          ChatMemory.manualSave(ctx.currentSister, history);
+          this._ui.showStatus('💾 覚えたよ！', 'success');
+        } else {
+          this._ui.showStatus('💾 記憶機能が未準備です', 'warning');
+        }
+        this._forceIdleState();
         if (this._enabled) setTimeout(() => this.startListening(), 800);
       }
     });

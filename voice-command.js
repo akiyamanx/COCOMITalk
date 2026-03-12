@@ -1,8 +1,9 @@
-// voice-command.js v1.1
+// voice-command.js v1.2
 // このファイルは音声コマンドの認識・実行を担当する
 // voice-input.js から分離（500行制限対策＋責務分離）
 // v1.0 新規作成 - Step 5e 音声コマンド対応（バグ修正版）
 // v1.1 修正 - ひらがな/カタカナ揺れ対応強化＋部分一致緩和＋コマンド成功ログ改善
+// v1.2 2026-03-12 - Step 6 Phase 1: 「覚えて」記憶保存コマンド追加
 
 'use strict';
 
@@ -89,6 +90,13 @@ class VoiceCommand {
       console.log(`[VoiceCmd] ⏪ スピードダウン: ${this._speed}x`);
       this._cb.onSpeedChange?.(this._speed);
       this._cb.onStatus?.(`⏪ 速度: ${this._speed}x`, 'info');
+      return true;
+    }
+
+    // --- v1.2追加: 記憶保存コマンド ---
+    if (this._matchSaveMemory(t)) {
+      console.log('[VoiceCmd] 💾 記憶保存コマンド発動');
+      this._cb.onSaveMemory?.();
       return true;
     }
 
@@ -183,6 +191,11 @@ class VoiceCommand {
   /** スピードダウン v1.1強化: ひらがなパターン追加 */
   _matchSpeedDown(t) {
     return /遅く|ゆっくり|おそく|スピードダウン|すぴーどだうん|スピードdown|speeddown|ゆっくりして|おそくして/.test(t);
+  }
+
+  /** v1.2追加: 記憶保存コマンド「覚えて」「セーブ」等 */
+  _matchSaveMemory(t) {
+    return /覚えて|おぼえて|記憶して|きおくして|セーブ|せーぶ|save/.test(t);
   }
 }
 

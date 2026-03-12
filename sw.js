@@ -35,7 +35,9 @@
 // v2.35 2026-03-12 - voice-input v1.8.3 無音タイマー送信時の二重送信防止
 // v2.36 2026-03-12 - voice-input v1.9 送信処理をvoice-sender.js v1.0にmixin分離
 // v2.37 2026-03-12 - voice-ui v1.1 リングウェーブ＋呼吸グロー マイクボタンデザイン
-const CACHE_NAME = 'cocomitalk-v2.37';
+// v2.38 2026-03-12 - voice-send.js（旧）削除、voice-sender.js（mixin方式）に統一
+// v2.39 2026-03-12 - Step 6 Phase 1: chat-memory.js追加＋voice-command v1.2＋voice-input v1.9.1
+const CACHE_NAME = 'cocomitalk-v2.39';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -58,6 +60,7 @@ const CACHE_FILES = [
   './meeting-router.js',
   './meeting-history.js',
   './meeting-memory.js',
+  './chat-memory.js',
   './meeting-relay.js',
   './meeting-doc-actions.js',
   './meeting-ui.js',
@@ -80,7 +83,6 @@ const CACHE_FILES = [
   './voice-output.js',
   './voice-ui.js',
   './voice-command.js',
-  './voice-send.js',
   './voice-input.js',
   './voice-sender.js',
   './app-settings.js',

@@ -3,6 +3,7 @@
 // v1.2 2026-03-10 - 表示系をChatUiに分離（499→355行に軽量化）
 // v1.3 2026-03-10 - 1対1チャットにもKVメモリー注入（Step 4強化）
 // v1.5 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
+// v1.6 2026-03-12 - Step 6 Phase 1: チャット記憶自動保存フック＋姉妹切替時リセット
 'use strict';
 
 /** チャットコアモジュール */
@@ -244,6 +245,12 @@ const ChatCore = (() => {
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
       _saveHistory();
 
+      // v1.6追加 - 1対1チャット記憶の自動保存チェック（Step 6 Phase 1）
+      if (typeof ChatMemory !== 'undefined') {
+        ChatMemory.countTurn(currentSister);
+        ChatMemory.autoSave(currentSister, chatHistories[currentSister]);
+      }
+
       // 音声モードなら応答を声で再生
       if (window.voiceController && window.voiceController.isEnabled()) {
         window.voiceController.speakResponse(reply, currentSister);
@@ -311,6 +318,11 @@ const ChatCore = (() => {
   function switchSister(sisterKey) {
     if (!SISTERS[sisterKey]) return;
     currentSister = sisterKey;
+
+    // v1.6追加 - チャット記憶の往復カウントリセット
+    if (typeof ChatMemory !== 'undefined') {
+      ChatMemory.resetTurnCount();
+    }
 
     const sister = SISTERS[sisterKey];
 

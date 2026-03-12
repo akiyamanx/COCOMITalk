@@ -3,6 +3,7 @@
 // システムプロンプトに注入するロジックを一元管理する
 // chat-core.js / chat-group.js / meeting-relay.js が共通で使う
 // v1.0 2026-03-11 - 新規作成（共通化リファクタ）
+// v1.1 2026-03-12 - Step 6 Phase 1: チャット記憶注入（_getChatMemoryText追加）
 'use strict';
 
 /**
@@ -69,8 +70,10 @@ const PromptBuilder = (() => {
     // --- 3. 将来拡張: Vectorize RAG結果（Step 6で追加予定） ---
     // if (!skipVector) { extra += await _getVectorText(query); }
 
-    // --- 4. 将来拡張: 1対1チャット記憶（chat-memory.js連携） ---
-    // if (!skipChatMemory) { extra += await _getChatMemoryText(); }
+    // --- 4. 1対1チャット記憶注入（Step 6 Phase 1） ---
+    if (!options.skipChatMemory && mode === 'chat') {
+      extra += await _getChatMemoryText(options.chatMemoryLimit || 3);
+    }
 
     return extra;
   }
@@ -110,6 +113,25 @@ const PromptBuilder = (() => {
       }
     }
     return text || '';
+  }
+
+  /**
+   * v1.1追加 - チャット記憶テキストを取得（Step 6 Phase 1）
+   * @param {number} limit - 件数
+   * @returns {Promise<string>}
+   */
+  async function _getChatMemoryText(limit) {
+    if (typeof ChatMemory === 'undefined') return '';
+    try {
+      const text = await ChatMemory.getChatMemoryPrompt(limit);
+      if (text) {
+        console.log(`[PromptBuilder] チャット記憶注入OK（${limit}件）`);
+        return text;
+      }
+    } catch (e) {
+      console.warn('[PromptBuilder] チャット記憶取得スキップ:', e.message);
+    }
+    return '';
   }
 
   /**
