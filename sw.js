@@ -34,7 +34,8 @@
 // v2.34 2026-03-12 - voice-input v1.8.3 コマンド実行後もリスニング継続
 // v2.35 2026-03-12 - voice-input v1.8.3 無音タイマー送信時の二重送信防止
 // v2.36 2026-03-12 - voice-input v1.9 送信処理をvoice-sender.js v1.0にmixin分離
-const CACHE_NAME = 'cocomitalk-v2.36';
+// v2.37 2026-03-12 - voice-ui v1.1 リングウェーブ＋呼吸グロー マイクボタンデザイン
+const CACHE_NAME = 'cocomitalk-v2.37';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

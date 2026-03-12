@@ -1,9 +1,10 @@
-// voice-ui.js v1.0
+// voice-ui.js v1.1
 // このファイルは音声会話のUI部品（DOM操作）を担当する
 // マイクボタン、interim表示、送信確認UI、姉妹アイコン発光を管理
 // voice-input.jsのVoiceControllerから呼ばれる
 
 // v1.0 新規作成 - Step 5b voice-input.jsからUI部分を分離
+// v1.1 追加 - リングウェーブ＋呼吸グロー マイクボタンデザイン
 
 /**
  * VoiceUI
@@ -47,38 +48,56 @@ class VoiceUI {
       return;
     }
 
+    // v1.1: ラッパーdiv（波紋がはみ出せるようにoverflow:visible）
+    const wrap = document.createElement('div');
+    wrap.id = 'cocomi-mic-wrap';
+    wrap.style.cssText = `
+      position: relative; width: 42px; height: 42px;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; overflow: visible;
+    `;
+
     const btn = document.createElement('button');
     btn.id = 'cocomi-mic-btn';
-    btn.className = 'cocomi-mic-btn';
+    btn.className = 'cocomi-mic-btn cocomi-mic-idle';
     btn.setAttribute('aria-label', '音声入力');
     btn.innerHTML = '🎤';
     btn.addEventListener('click', onMicClick);
-
     btn.style.cssText = `
-      width: 36px; height: 36px;
+      width: 38px; height: 38px;
       border-radius: 50%;
       border: 2px solid var(--active-primary, #6c5ce7);
       background: white;
       font-size: 18px;
-      cursor: pointer; transition: all 0.2s ease;
+      cursor: pointer; transition: all 0.3s ease;
       flex-shrink: 0;
       display: flex; align-items: center; justify-content: center;
-      padding: 0;
+      padding: 0; position: relative; z-index: 3;
     `;
+
+    // v1.1: リングウェーブ要素（listening時のみ表示）
+    for (let i = 1; i <= 2; i++) {
+      const ring = document.createElement('div');
+      ring.className = `cocomi-mic-ring cocomi-mic-ring-${i}`;
+      ring.style.display = 'none';
+      wrap.appendChild(ring);
+    }
+
+    wrap.appendChild(btn);
 
     const inputArea = this._getInputArea();
     if (inputArea) {
-      inputArea.appendChild(btn);
+      inputArea.appendChild(wrap);
     } else {
-      // フォールバック: 固定配置
-      btn.style.position = 'fixed';
-      btn.style.bottom = '80px';
-      btn.style.right = '16px';
-      btn.style.zIndex = '1000';
-      document.body.appendChild(btn);
+      wrap.style.position = 'fixed';
+      wrap.style.bottom = '80px';
+      wrap.style.right = '16px';
+      wrap.style.zIndex = '1000';
+      document.body.appendChild(wrap);
     }
 
     this._elements.micBtn = btn;
+    this._elements.micWrap = wrap;
   }
 
   /**
@@ -137,9 +156,56 @@ class VoiceUI {
     const style = document.createElement('style');
     style.id = 'cocomi-voice-styles';
     style.textContent = `
-      @keyframes cocomi-mic-pulse {
-        0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(231, 76, 60, 0.4); }
-        50% { transform: scale(1.05); box-shadow: 0 0 0 8px rgba(231, 76, 60, 0); }
+      /* v1.1: リングウェーブ＋呼吸グロー */
+      .cocomi-mic-listening {
+        background: linear-gradient(135deg, #ec4899, #a855f7) !important;
+        border-color: transparent !important;
+        animation: cocomi-breath-scale 3s ease-in-out infinite !important;
+      }
+      .cocomi-mic-listening::before {
+        content: '';
+        position: absolute;
+        inset: -6px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #ec4899, #a855f7);
+        filter: blur(12px);
+        z-index: -1;
+        animation: cocomi-breath-glow 3s ease-in-out infinite;
+      }
+      .cocomi-mic-ring {
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        border-radius: 50%;
+        border: 2px solid;
+        pointer-events: none;
+        z-index: 1;
+      }
+      .cocomi-mic-ring-1 {
+        border-color: rgba(236,72,153,0.4);
+        animation: cocomi-ring-expand 2.4s ease-out infinite;
+      }
+      .cocomi-mic-ring-2 {
+        border-color: rgba(168,85,247,0.3);
+        animation: cocomi-ring-expand 2.4s ease-out infinite 0.8s;
+      }
+      @keyframes cocomi-breath-scale {
+        0%, 100% { transform: scale(1); box-shadow: 0 0 14px rgba(236,72,153,0.3); }
+        50% { transform: scale(1.06); box-shadow: 0 0 24px rgba(168,85,247,0.4); }
+      }
+      @keyframes cocomi-breath-glow {
+        0%, 100% { opacity: 0.25; transform: scale(0.9); }
+        50% { opacity: 0.5; transform: scale(1.1); }
+      }
+      @keyframes cocomi-ring-expand {
+        0% { width: 38px; height: 38px; opacity: 0.7; }
+        100% { width: 72px; height: 72px; opacity: 0; }
+      }
+      /* speaking状態 */
+      .cocomi-mic-speaking {
+        background: linear-gradient(135deg, #a855f7, #6c5ce7) !important;
+        border-color: transparent !important;
+        box-shadow: 0 0 12px rgba(108,92,231,0.4);
       }
       @keyframes cocomi-speak-glow {
         0%, 100% { box-shadow: 0 0 4px rgba(108, 92, 231, 0.3); }
@@ -161,18 +227,40 @@ class VoiceUI {
     const btn = this._elements.micBtn;
     if (!btn) return;
 
-    const styles = {
-      idle:      { bg: 'white', border: 'var(--active-primary, #6c5ce7)', anim: 'none', icon: '🎤' },
-      listening: { bg: '#e74c3c', border: '#e74c3c', anim: 'cocomi-mic-pulse 1s ease-in-out infinite', icon: '🎤' },
-      speaking:  { bg: 'var(--active-primary, #6c5ce7)', border: 'var(--active-primary, #6c5ce7)', anim: 'none', icon: '🔊' },
-      error:     { bg: '#e74c3c', border: '#e74c3c', anim: 'none', icon: '⚠️' }
-    };
+    // v1.1: リング要素の表示/非表示
+    const rings = this._elements.micWrap
+      ? this._elements.micWrap.querySelectorAll('.cocomi-mic-ring')
+      : [];
+    const showRings = (state === 'listening');
+    rings.forEach(r => { r.style.display = showRings ? 'block' : 'none'; });
 
-    const s = styles[state] || styles.idle;
-    btn.style.background = s.bg;
-    btn.style.borderColor = s.border;
-    btn.style.animation = s.anim;
-    btn.innerHTML = s.icon;
+    // CSSクラスをリセット
+    btn.classList.remove('cocomi-mic-idle', 'cocomi-mic-listening', 'cocomi-mic-speaking');
+
+    if (state === 'listening') {
+      btn.classList.add('cocomi-mic-listening');
+      btn.innerHTML = '🎤';
+      btn.style.background = '';
+      btn.style.borderColor = '';
+      btn.style.animation = '';
+    } else if (state === 'speaking') {
+      btn.classList.add('cocomi-mic-speaking');
+      btn.innerHTML = '🔊';
+      btn.style.animation = 'none';
+    } else if (state === 'error') {
+      btn.classList.add('cocomi-mic-idle');
+      btn.style.background = '#e74c3c';
+      btn.style.borderColor = '#e74c3c';
+      btn.style.animation = 'none';
+      btn.innerHTML = '⚠️';
+    } else {
+      // idle
+      btn.classList.add('cocomi-mic-idle');
+      btn.style.background = 'white';
+      btn.style.borderColor = 'var(--active-primary, #6c5ce7)';
+      btn.style.animation = 'none';
+      btn.innerHTML = '🎤';
+    }
   }
 
   /**

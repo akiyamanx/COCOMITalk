@@ -4,6 +4,7 @@
 // voice-input.jsより後に読み込むこと（VoiceControllerクラスが先に定義されている必要あり）
 
 // v1.0 新規作成 - voice-input.js v1.8.3から送信処理を分離（mixin方式）
+// v1.0.1 修正 - 会議マイクもリングウェーブ＋呼吸グローデザインに対応
 
 /**
  * VoiceControllerに送信系メソッドをmixin注入
@@ -89,22 +90,36 @@ VoiceController.prototype._sendToMeeting = function(text) {
   }, 50);
 };
 
-/** 会議マイクボタンのUI状態を同期更新 */
+/** 会議マイクボタンのUI状態を同期更新 v1.0.1 新デザイン対応 */
 VoiceController.prototype._updateMeetingMicState = function(state) {
   const btn = document.getElementById('btn-meeting-mic');
   if (!btn) return;
-  const styles = {
-    idle:      { bg: 'white', border: 'var(--active-primary,#6c5ce7)', icon: '🎤' },
-    listening: { bg: '#e74c3c', border: '#e74c3c', icon: '🎤' },
-    speaking:  { bg: 'var(--active-primary,#6c5ce7)', border: 'var(--active-primary,#6c5ce7)', icon: '🔊' },
-    error:     { bg: '#e74c3c', border: '#e74c3c', icon: '⚠️' },
-  };
-  const s = styles[state] || styles.idle;
-  btn.style.background = s.bg;
-  btn.style.borderColor = s.border;
-  btn.innerHTML = s.icon;
-  btn.style.animation = state === 'listening'
-    ? 'cocomi-mic-pulse 1s ease-in-out infinite' : 'none';
+
+  if (state === 'listening') {
+    btn.style.background = 'linear-gradient(135deg, #ec4899, #a855f7)';
+    btn.style.borderColor = 'transparent';
+    btn.innerHTML = '🎤';
+    btn.style.animation = 'cocomi-breath-scale 3s ease-in-out infinite';
+    btn.style.boxShadow = '0 0 14px rgba(236,72,153,0.3)';
+  } else if (state === 'speaking') {
+    btn.style.background = 'linear-gradient(135deg, #a855f7, #6c5ce7)';
+    btn.style.borderColor = 'transparent';
+    btn.innerHTML = '🔊';
+    btn.style.animation = 'none';
+    btn.style.boxShadow = '0 0 12px rgba(108,92,231,0.4)';
+  } else if (state === 'error') {
+    btn.style.background = '#e74c3c';
+    btn.style.borderColor = '#e74c3c';
+    btn.innerHTML = '⚠️';
+    btn.style.animation = 'none';
+    btn.style.boxShadow = 'none';
+  } else {
+    btn.style.background = 'white';
+    btn.style.borderColor = 'var(--active-primary,#6c5ce7)';
+    btn.innerHTML = '🎤';
+    btn.style.animation = 'none';
+    btn.style.boxShadow = 'none';
+  }
 };
 
 console.log('[VoiceSender] v1.0 mixin注入完了');
