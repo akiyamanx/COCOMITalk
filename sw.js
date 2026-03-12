@@ -45,7 +45,8 @@
 // v2.45 2026-03-12 - voice-ui v1.1.2 showStatus5秒保護 + chat-core v1.7 セッション別DL
 // v2.46 2026-03-12 - app.js switchToGroup修正（togglePeopleMode使用）
 // v2.47 2026-03-12 - app.js switchToSister グループ→1対1自動切替
-const CACHE_NAME = 'cocomitalk-v2.47';
+// v2.48 2026-03-13 - styles.css分割: token-monitor-styles.css新規追加（トークンモニター系CSS分離）
+const CACHE_NAME = 'cocomitalk-v2.48';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -77,6 +78,7 @@ const CACHE_FILES = [
   './memory-ui-styles.css',
   './search-ui.js',
   './search-ui-styles.css',
+  './token-monitor-styles.css',
   './search-caller.js',
   './tool-registry.js',
   './prompt-builder.js',
