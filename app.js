@@ -241,7 +241,8 @@ const App = (() => {
       btnDownload.addEventListener('click', () => {
         if (typeof ChatCore === 'undefined') return;
         const sister = ChatCore.getCurrentSister();
-        const history = ChatCore.getHistory(sister);
+        // v1.5.1修正 - 今のセッション（部屋）の会話だけダウンロード
+        const history = ChatCore.getSessionHistory(sister);
         if (!history || history.length === 0) { alert('まだ会話がないよ！'); return; }
         FileHandler.downloadChat(history, `COCOMITalk_${ChatCore.SISTERS[sister]?.name || sister}`);
       });

@@ -15,6 +15,7 @@ class VoiceUI {
   constructor() {
     this._elements = {};
     this._injectedStyles = false;
+    this._statusProtected = false; // v1.1.2追加 - showStatus表示保護フラグ
   }
 
   /**
@@ -268,6 +269,8 @@ class VoiceUI {
    * interim テキストを表示
    */
   showInterim(text) {
+    // v1.1.2追加 - showStatus保護中はスキップ（5秒間表示を守る）
+    if (this._statusProtected) return;
     const el = this._elements.interim;
     if (!el) return;
     el.style.display = 'block';
@@ -278,6 +281,8 @@ class VoiceUI {
    * interimを非表示
    */
   hideInterim() {
+    // v1.1.2追加 - showStatus保護中はスキップ
+    if (this._statusProtected) return;
     const el = this._elements.interim;
     if (el) el.style.display = 'none';
   }
@@ -353,7 +358,7 @@ class VoiceUI {
    */
   showStatus(message, type = 'info') {
     console.log(`[VoiceUI] ${type}: ${message}`);
-    // v1.1.1修正 - interimバーをステータス表示にも使う（status-barが存在しない問題対策）
+    // v1.1.1修正 - interimバーをステータス表示にも使う
     const bar = document.querySelector('.status-bar')
       || document.querySelector('#cocomi-status')
       || this._elements.interim;
@@ -362,14 +367,16 @@ class VoiceUI {
       bar.textContent = message;
       const colors = { info: '#74b9ff', error: '#e74c3c', success: '#00b894', warning: '#fdcb6e' };
       bar.style.color = colors[type] || '#74b9ff';
-      // success/warningは3秒後に自動で消す
+      // v1.1.2追加 - success/warningは5秒間保護（showInterimで上書きされない）
       if (type === 'success' || type === 'warning') {
+        this._statusProtected = true;
         setTimeout(() => {
+          this._statusProtected = false;
           if (bar.textContent === message) {
             bar.textContent = '🎤 話しかけてね...';
             bar.style.color = '#74b9ff';
           }
-        }, 3000);
+        }, 5000);
       }
     }
   }

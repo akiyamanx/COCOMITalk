@@ -42,7 +42,8 @@
 // v2.42 2026-03-12 - 二重送信バグ修正（api-gemini/openai/claude全3社）+ voice-ui v1.1.1 showStatus修正
 // v2.43 2026-03-12 - voice-input v1.9.2 showStatus順序修正＋無音タイマー延長（息継ぎ対策）
 // v2.44 2026-03-12 - 常時リスニング無音ディレイ7秒に延長（考えながら喋る対応）
-const CACHE_NAME = 'cocomitalk-v2.44';
+// v2.45 2026-03-12 - voice-ui v1.1.2 showStatus5秒保護 + chat-core v1.7 セッション別DL
+const CACHE_NAME = 'cocomitalk-v2.45';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

@@ -4,6 +4,7 @@
 // v1.3 2026-03-10 - 1対1チャットにもKVメモリー注入（Step 4強化）
 // v1.5 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
 // v1.6 2026-03-12 - Step 6 Phase 1: チャット記憶自動保存フック＋姉妹切替時リセット
+// v1.7 2026-03-12 - セッション開始位置記録＋getSessionHistory追加（今の部屋の会話だけDL）
 'use strict';
 
 /** チャットコアモジュール */
@@ -62,6 +63,9 @@ const ChatCore = (() => {
     claude: []
   };
 
+  // v1.7追加 - セッション開始時の履歴長を記録（ダウンロード時に今回分だけ取得用）
+  const sessionStartIndex = { koko: 0, gpt: 0, claude: 0 };
+
   let currentSister = 'koko';
 
   // 初期化
@@ -87,7 +91,12 @@ const ChatCore = (() => {
 
     await _loadAllHistories();
 
-    console.log('[ChatCore] 初期化完了 v1.5');
+    // v1.7追加 - セッション開始位置を記録（今回の会話の開始位置）
+    for (const key of ['koko', 'gpt', 'claude']) {
+      sessionStartIndex[key] = chatHistories[key].length;
+    }
+
+    console.log('[ChatCore] 初期化完了 v1.7');
   }
 
   /** 入力欄のイベント設定 */
@@ -417,6 +426,12 @@ const ChatCore = (() => {
     init, addMessage, showTyping, hideTyping,
     switchSister, getCurrentSister, clearHistory, SISTERS,
     getHistory: (sister) => chatHistories[sister || currentSister] || [],
+    // v1.7追加 - 今回のセッション（部屋）の会話だけ取得
+    getSessionHistory: (sister) => {
+      const key = sister || currentSister;
+      const start = sessionStartIndex[key] || 0;
+      return (chatHistories[key] || []).slice(start);
+    },
     getGroupContext: () => ({ currentSister, chatHistories, addMessage, hideTyping, chatArea, SISTERS, SISTER_API }),
   };
 })();
