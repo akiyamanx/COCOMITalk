@@ -1,4 +1,4 @@
-// voice-input.js v1.8
+// voice-input.js v1.8.3
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
@@ -10,6 +10,7 @@
 // v1.5 追加 - Step 5e: 音声コマンド対応（ストップ・姉妹切替・スピード調整）
 // v1.7 修正 - コマンド処理を内蔵に戻し確実に動作。部分一致＋正規化強化＋try-catch
 // v1.8 修正 - 3バグ全修正: コマンド→VoiceCommand分離 / 送信→VoiceSend分離 / STT即終了リトライ
+// v1.8.3 追加 - 常時リスニング: 無音でSTT終了しても自動リスタート。明示的停止でenabled=false
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
@@ -54,6 +55,7 @@ class VoiceController {
     this._voiceCmd = new VoiceCommand({
       onStop: () => {
         this._playback.stop();
+        this._enabled = false; // v1.8.3: 音声コマンド停止 → 自動リスタート防止
         this._forceIdleState();
       },
       onResume: () => {
@@ -156,9 +158,20 @@ class VoiceController {
         this._clearSilenceTimer();
         this._resetSilenceTimer();
       } else {
-        this._ui.updateMicState('idle');
-        this._updateMeetingMicState('idle');
-        this._ui.hideInterim();
+        // v1.8.3: 音声モード中は自動リスタート（常時リスニング）
+        if (this._enabled) {
+          console.log('[Voice] 無音終了 → 自動リスタート待機');
+          this._ui.showInterim('🎤 話しかけてね...');
+          setTimeout(() => {
+            if (this._enabled && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
+              this._stt.start({ language: 'ja-JP' });
+            }
+          }, 500);
+        } else {
+          this._ui.updateMicState('idle');
+          this._updateMeetingMicState('idle');
+          this._ui.hideInterim();
+        }
       }
     };
 
@@ -270,7 +283,7 @@ class VoiceController {
     if (!this._playback._ttsProvider.isAvailable()) {
       console.warn('[Voice] TTS未設定（Worker URL/認証トークンが必要）');
     }
-    console.log(`[Voice] 音声モード初期化完了（v1.8） cmd=${!!this._voiceCmd} sender=${!!this._sender}`);
+    console.log(`[Voice] 音声モード初期化完了（v1.8.3） cmd=${!!this._voiceCmd}`);
   }
 
   /** マイクボタン押下時の処理 */
@@ -279,15 +292,18 @@ class VoiceController {
     if (this._stt.isListening() || this._silenceTimer !== null) {
       this._clearSilenceTimer();
       const text = (this._lastText || '').trim();
+      this._enabled = false; // v1.8.3: 明示的停止 → 自動リスタート防止
       this._stt.stop();
       this._lastText = '';
       if (text) {
+        this._enabled = true; // テキストありなら送信後に音声モード継続
         this._sendVoiceMessage(text);
       } else {
         this._forceIdleState();
       }
     } else if (this._playback.isPlaying() || this._playback.isQueuePlaying()) {
       this._playback.stop();
+      this._enabled = false; // v1.8.3: TTS停止も明示的停止
       this._forceIdleState();
     } else {
       this.startListening();

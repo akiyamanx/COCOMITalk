@@ -30,7 +30,8 @@
 // v2.23 2026-03-11 - voice-input v1.6.1 VoiceCommand未定義でもマイクボタン表示される防御
 // v2.25 2026-03-11 - 3バグ全修正: voice-input v1.8 + voice-command v1.1 + voice-send v1.0新規
 // v2.32 2026-03-12 - voice-input v1.8.2 送信ロジックをv1.7実績版に戻し（VoiceSend一時停止）
-const CACHE_NAME = 'cocomitalk-v2.32';
+// v2.33 2026-03-12 - voice-input v1.8.3 常時リスニング（無音STT終了→自動リスタート）
+const CACHE_NAME = 'cocomitalk-v2.33';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
