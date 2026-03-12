@@ -271,6 +271,10 @@ const App = (() => {
 
 // v1.5追加 - 音声コマンド用グローバル関数（Step 5e）
 window.switchToSister = (sisterKey) => {
+  // v1.5.3追加 - グループモード中なら1対1に戻す
+  if (typeof ModeSwitcher !== 'undefined' && ModeSwitcher.isGroupMode()) {
+    ModeSwitcher.togglePeopleMode();
+  }
   const tab = document.querySelector(`.tab[data-sister="${sisterKey}"]`);
   if (tab) tab.click();
 };

@@ -44,7 +44,8 @@
 // v2.44 2026-03-12 - 常時リスニング無音ディレイ7秒に延長（考えながら喋る対応）
 // v2.45 2026-03-12 - voice-ui v1.1.2 showStatus5秒保護 + chat-core v1.7 セッション別DL
 // v2.46 2026-03-12 - app.js switchToGroup修正（togglePeopleMode使用）
-const CACHE_NAME = 'cocomitalk-v2.46';
+// v2.47 2026-03-12 - app.js switchToSister グループ→1対1自動切替
+const CACHE_NAME = 'cocomitalk-v2.47';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
