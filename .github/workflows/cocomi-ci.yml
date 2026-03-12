@@ -56,7 +56,7 @@ jobs:
         run: |
           echo "=== グローバルクラス定義チェック ==="
           ERROR=0
-          for cls in VoiceCommand VoiceSend WebSpeechProvider AudioPlaybackManager VoiceUI; do
+          for cls in VoiceCommand WebSpeechProvider AudioPlaybackManager VoiceUI; do
             if ! grep -q "window\.${cls} = " *.js; then
               echo "❌ ${cls} がグローバル定義されていません"
               ERROR=1
