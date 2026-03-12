@@ -5,6 +5,7 @@
 // v1.5 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
 // v1.6 2026-03-12 - Step 6 Phase 1: チャット記憶自動保存フック＋姉妹切替時リセット
 // v1.7 2026-03-12 - セッション開始位置記録＋getSessionHistory追加（今の部屋の会話だけDL）
+// v1.8 2026-03-13 - AI自発的記憶保存マーカー検知（💾SAVE:対応）
 'use strict';
 
 /** チャットコアモジュール */
@@ -247,7 +248,12 @@ const ChatCore = (() => {
       const mode = (typeof ModeSwitcher !== 'undefined') ? ModeSwitcher.getMode() : 'normal';
       if (mode !== 'normal') opts.maxTokens = 2048;
 
-      const reply = await apiModule.sendMessage(userText, fullPrompt, history, opts);
+      let reply = await apiModule.sendMessage(userText, fullPrompt, history, opts);
+
+      // v1.8追加 - AI自発的記憶保存マーカー検知（表示前に処理）
+      if (typeof ChatMemory !== 'undefined' && reply.includes('💾SAVE:')) {
+        reply = await ChatMemory.detectAndSave(reply, currentSister, chatHistories[currentSister]);
+      }
 
       hideTyping();
       addMessage('ai', reply);

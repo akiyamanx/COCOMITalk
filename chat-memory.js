@@ -1,8 +1,9 @@
-// chat-memory.js v1.0
+// chat-memory.js v1.1
 // このファイルは1対1チャットの記憶をKVに保存・取得する
 // meeting-memory.jsと同じパターンでWorker /memory エンドポイントを使う
 // Worker memory.js v1.5 の type="chat" 対応と連携
 // v1.0 2026-03-12 - Step 6 Phase 1 新規作成
+// v1.1 2026-03-13 - AI自発的記憶保存（detectAndSave）追加
 'use strict';
 
 /**
@@ -21,10 +22,12 @@ const ChatMemory = (() => {
   const AUTO_SAVE_INTERVAL = 5;  // 5往復ごとに自動保存
   const MEMORY_TYPE = 'chat';    // KVキープレフィックス: "chat:TIMESTAMP"
   const MAX_RAW_TURNS = 10;      // rawHistoryに含める最大往復数（直近10メッセージ）
+  const MIN_TURNS_BETWEEN_AI_SAVE = 2; // v1.1追加 - AI自発保存の最低間隔（往復数）
 
   // --- 状態 ---
   let _turnCount = 0;       // 現在の往復カウント
   let _lastSaveTurn = 0;    // 最後に保存した時の往復数
+  let _lastAiSaveTurn = 0;  // v1.1追加 - 最後にAI自発保存した時の往復数
   let _isSaving = false;    // 保存中フラグ（二重保存防止）
 
   // --- キャッシュ ---
@@ -275,6 +278,48 @@ const ChatMemory = (() => {
   }
 
   // ═══════════════════════════════════════════
+  // v1.1追加 - AI自発的記憶保存（マーカー検知）
+  // ═══════════════════════════════════════════
+
+  /** マーカー検知用の正規表現 */
+  const AI_SAVE_MARKER_RE = /💾SAVE:(.+?)(?:\n|$)/g;
+
+  /**
+   * AI応答テキストから💾SAVEマーカーを検知し、あれば記憶保存する
+   * マーカーはテキストから除去して返す（ユーザーには見せない）
+   * @param {string} replyText - AIの応答テキスト（生）
+   * @param {string} sisterId - 応答した姉妹ID
+   * @param {Array} history - チャット履歴
+   * @returns {Promise<string>} マーカー除去後の表示テキスト
+   */
+  async function detectAndSave(replyText, sisterId, history) {
+    const matches = [...replyText.matchAll(AI_SAVE_MARKER_RE)];
+    if (matches.length === 0) return replyText;
+
+    // マーカーをテキストから除去（保存成否に関わらず常に除去）
+    let cleanText = replyText.replace(AI_SAVE_MARKER_RE, '').trim();
+    cleanText = cleanText.replace(/\n{3,}/g, '\n\n');
+
+    // 過剰保存防止: 前回のAI自発保存から2往復以内ならスキップ
+    if (_turnCount - _lastAiSaveTurn < MIN_TURNS_BETWEEN_AI_SAVE) {
+      console.log('[ChatMemory] AI自発保存スキップ（間隔不足）');
+      return cleanText;
+    }
+
+    // 1応答につき最初のマーカーのみ処理
+    const reason = matches[0][1].trim();
+    console.log(`[ChatMemory] AI自発保存検知: "${reason}" by ${sisterId}`);
+
+    const result = await manualSave(sisterId, history);
+    if (result && result.success) {
+      _lastAiSaveTurn = _turnCount;
+      _showNotify(`💾 覚えたよ — ${reason.substring(0, 30)}`);
+    }
+
+    return cleanText;
+  }
+
+  // ═══════════════════════════════════════════
   // 公開API
   // ═══════════════════════════════════════════
 
@@ -282,6 +327,7 @@ const ChatMemory = (() => {
     countTurn,
     autoSave,
     manualSave,
+    detectAndSave,
     getChatMemoryPrompt,
     resetTurnCount,
   };

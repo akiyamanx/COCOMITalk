@@ -46,7 +46,8 @@
 // v2.46 2026-03-12 - app.js switchToGroup修正（togglePeopleMode使用）
 // v2.47 2026-03-12 - app.js switchToSister グループ→1対1自動切替
 // v2.48 2026-03-13 - styles.css分割: token-monitor-styles.css新規追加（トークンモニター系CSS分離）
-const CACHE_NAME = 'cocomitalk-v2.48';
+// v2.49 2026-03-13 - AI自発的記憶保存（chat-memory v1.1 + chat-core v1.8 + prompts💾SAVE指示）
+const CACHE_NAME = 'cocomitalk-v2.49';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
