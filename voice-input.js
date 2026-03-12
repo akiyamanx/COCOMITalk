@@ -55,7 +55,7 @@ class VoiceController {
     this._voiceCmd = new VoiceCommand({
       onStop: () => {
         this._playback.stop();
-        this._enabled = false; // v1.8.3: 音声コマンド停止 → 自動リスタート防止
+        this._enabled = false; // v1.8.3: ストップだけは明示的停止
         this._forceIdleState();
       },
       onResume: () => {
@@ -68,7 +68,8 @@ class VoiceController {
           this._currentSisterId = key;
           this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
           this._forceIdleState();
-          if (this._autoListen) setTimeout(() => this.startListening(), 800);
+          // v1.8.3: enabled中は常にリスタート
+          if (this._enabled) setTimeout(() => this.startListening(), 800);
         }
       },
       onSwitchGroup: () => {
@@ -76,15 +77,20 @@ class VoiceController {
           window.switchToGroup();
           this._ui.showStatus('👥 グループモードに切り替えました', 'success');
           this._forceIdleState();
-          if (this._autoListen) setTimeout(() => this.startListening(), 800);
+          // v1.8.3: enabled中は常にリスタート
+          if (this._enabled) setTimeout(() => this.startListening(), 800);
         }
       },
       onSpeedChange: (newSpeed) => {
         this._speed = newSpeed;
+        // v1.8.3: スピード変更後もリスニング継続
+        if (this._enabled) setTimeout(() => this.startListening(), 500);
       },
       onStatus: (msg, type) => {
         this._ui.showStatus(msg, type);
         this._forceIdleState();
+        // v1.8.3: ステータス表示後もリスニング継続
+        if (this._enabled) setTimeout(() => this.startListening(), 800);
       }
     });
   }
