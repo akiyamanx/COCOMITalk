@@ -38,7 +38,8 @@
 // v2.38 2026-03-12 - voice-send.js（旧）削除、voice-sender.js（mixin方式）に統一
 // v2.39 2026-03-12 - Step 6 Phase 1: chat-memory.js追加＋voice-command v1.2＋voice-input v1.9.1
 // v2.40 2026-03-12 - voice-command v1.2.1 覚えてコマンドパターン拡張
-const CACHE_NAME = 'cocomitalk-v2.40';
+// v2.41 2026-03-12 - chat-memory v1.0.1 保存通知トースト + voice-command v1.2.2 STT揺れ対策
+const CACHE_NAME = 'cocomitalk-v2.41';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

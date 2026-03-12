@@ -95,7 +95,10 @@ const ChatMemory = (() => {
     if (!history || history.length < 4) return;
 
     console.log(`[ChatMemory] 自動保存トリガー（${_turnCount}往復目）`);
-    await _save(sisterId, history);
+    const result = await _save(sisterId, history);
+    if (result && result.success) {
+      _showNotify(`💾 会話を記憶したよ（${_turnCount}往復目）`);
+    }
     _lastSaveTurn = _turnCount;
   }
 
@@ -248,6 +251,27 @@ const ChatMemory = (() => {
   function _getSisterName(sisterId) {
     const names = { koko: 'ここちゃん', gpt: 'お姉ちゃん', claude: 'クロちゃん' };
     return names[sisterId] || sisterId || '不明';
+  }
+
+  /** 画面上にトースト通知を表示（3秒で自動消去） */
+  function _showNotify(message) {
+    // 既存のVoiceUI.showStatusがあればそれを使う
+    if (window.voiceController && window.voiceController._ui) {
+      try {
+        window.voiceController._ui.showStatus(message, 'success');
+        return;
+      } catch (_) { /* フォールバックへ */ }
+    }
+    // フォールバック: 独自トースト
+    const el = document.createElement('div');
+    el.textContent = message;
+    el.style.cssText = 'position:fixed;top:80px;left:50%;transform:translateX(-50%);' +
+      'background:linear-gradient(135deg,#ff69b4,#9b59b6);color:#fff;padding:10px 20px;' +
+      'border-radius:20px;font-size:14px;z-index:99999;box-shadow:0 2px 10px rgba(0,0,0,0.3);' +
+      'transition:opacity 0.5s;';
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; }, 2500);
+    setTimeout(() => { el.remove(); }, 3000);
   }
 
   // ═══════════════════════════════════════════
