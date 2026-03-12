@@ -251,6 +251,10 @@ class VoiceController {
       this._silenceTimer = null;
       const finalText = this._lastText.trim();
       if (finalText) {
+        // v1.8.3: 送信前にクリア（stt.stop()→onEnd再発火での二重送信防止）
+        this._lastText = '';
+        this._hasFinalText = false;
+        this._finalText = '';
         console.log(`[Voice] ${delay}ms無音 → 自動送信: "${finalText}"`);
         this._stt.stop();
         this._sendVoiceMessage(finalText);

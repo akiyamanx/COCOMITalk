@@ -32,7 +32,8 @@
 // v2.32 2026-03-12 - voice-input v1.8.2 送信ロジックをv1.7実績版に戻し（VoiceSend一時停止）
 // v2.33 2026-03-12 - voice-input v1.8.3 常時リスニング（無音STT終了→自動リスタート）
 // v2.34 2026-03-12 - voice-input v1.8.3 コマンド実行後もリスニング継続
-const CACHE_NAME = 'cocomitalk-v2.34';
+// v2.35 2026-03-12 - voice-input v1.8.3 無音タイマー送信時の二重送信防止
+const CACHE_NAME = 'cocomitalk-v2.35';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
