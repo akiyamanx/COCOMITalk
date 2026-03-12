@@ -43,7 +43,8 @@
 // v2.43 2026-03-12 - voice-input v1.9.2 showStatus順序修正＋無音タイマー延長（息継ぎ対策）
 // v2.44 2026-03-12 - 常時リスニング無音ディレイ7秒に延長（考えながら喋る対応）
 // v2.45 2026-03-12 - voice-ui v1.1.2 showStatus5秒保護 + chat-core v1.7 セッション別DL
-const CACHE_NAME = 'cocomitalk-v2.45';
+// v2.46 2026-03-12 - app.js switchToGroup修正（togglePeopleMode使用）
+const CACHE_NAME = 'cocomitalk-v2.46';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

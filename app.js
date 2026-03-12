@@ -275,12 +275,10 @@ window.switchToSister = (sisterKey) => {
   if (tab) tab.click();
 };
 window.switchToGroup = () => {
-  const modeBtn = document.getElementById('btn-mode');
-  if (modeBtn && typeof ModeSwitcher !== 'undefined') {
-    // グループモードになるまでサイクル（最大3回）
-    for (let i = 0; i < 3; i++) {
-      if (ModeSwitcher.isGroupMode()) break;
-      modeBtn.click();
+  // v1.5.2修正 - グループモード切替はtogglePeopleMode（btn-modeではなくbtn-people）
+  if (typeof ModeSwitcher !== 'undefined') {
+    if (!ModeSwitcher.isGroupMode()) {
+      ModeSwitcher.togglePeopleMode();
     }
   }
 };
