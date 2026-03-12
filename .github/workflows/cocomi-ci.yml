@@ -1,5 +1,5 @@
 # COCOMI CI - COCOMITalk品質チェック
-# v1.4 - 2026-03-08 YAML構文エラー修正（MESSAGE複数行をjqで組み立て）
+# v1.5 - 2026-03-12 JS構文チェック(node --check)＋グローバルクラス定義チェック(grep)追加
 
 name: COCOMI CI
 
@@ -35,7 +35,40 @@ jobs:
           fi
           echo "✅ 全ファイル500行以内"
 
-      # 2. 先頭コメントチェック
+      # 2. JS構文チェック（node --check）
+      - name: JS構文チェック
+        run: |
+          echo "=== JS構文チェック ==="
+          ERROR=0
+          for f in *.js prompts/*.js; do
+            if ! node --check "$f" 2>&1; then
+              ERROR=1
+            fi
+          done
+          if [ "$ERROR" -ne 0 ]; then
+            echo "❌ JS構文エラーが見つかりました"
+            exit 1
+          fi
+          echo "✅ 全JSファイル構文OK"
+
+      # 3. グローバルクラス定義チェック（grep）
+      - name: グローバルクラス定義チェック
+        run: |
+          echo "=== グローバルクラス定義チェック ==="
+          ERROR=0
+          for cls in VoiceCommand VoiceSend WebSpeechProvider AudioPlaybackManager VoiceUI; do
+            if ! grep -q "window\.${cls} = " *.js; then
+              echo "❌ ${cls} がグローバル定義されていません"
+              ERROR=1
+            fi
+          done
+          if [ "$ERROR" -ne 0 ]; then
+            echo "❌ 必須クラスの定義が不足しています"
+            exit 1
+          fi
+          echo "✅ 全クラス定義OK"
+
+      # 4. 先頭コメントチェック
       - name: 先頭コメントチェック
         run: |
           echo "=== 先頭コメントチェック ==="
@@ -48,7 +81,7 @@ jobs:
             fi
           done
 
-      # 3. バージョン番号チェック
+      # 5. バージョン番号チェック
       - name: バージョン番号チェック
         run: |
           echo "=== バージョン番号チェック ==="
@@ -61,7 +94,7 @@ jobs:
             fi
           done
 
-      # 4. console.log検出（警告のみ・CIは落とさない）
+      # 6. console.log検出（警告のみ・CIは落とさない）
       - name: console.log検出
         run: |
           echo "=== console.log検出（情報のみ） ==="
@@ -75,13 +108,13 @@ jobs:
           done
           echo "合計: ${COUNT}件（開発中のため警告のみ）"
 
-      # 5. TODO/FIXME検出
+      # 7. TODO/FIXME検出
       - name: TODO/FIXME検出
         run: |
           echo "=== TODO/FIXME検出 ==="
           grep -rn "TODO\|FIXME\|HACK\|XXX" --include="*.js" --include="*.html" --include="*.css" . --exclude-dir=node_modules --exclude-dir=.github || echo "✅ TODO/FIXMEなし"
 
-      # 6. ファイル行数サマリー
+      # 8. ファイル行数サマリー
       - name: ファイル行数サマリー
         run: |
           echo "=== ファイル行数サマリー ==="
@@ -93,7 +126,7 @@ jobs:
           done
           echo "合計: ${TOTAL}行"
 
-      # 7. LINE通知（成功時）
+      # 9. LINE通知（成功時）
       - name: LINE通知（成功）
         if: success()
         env:
@@ -110,7 +143,7 @@ jobs:
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -d "{\"to\":\"${LINE_USER_ID}\",\"messages\":[{\"type\":\"text\",\"text\":\"${TEXT}\"}]}"
 
-      # 8. LINE通知（失敗時）
+      # 10. LINE通知（失敗時）
       - name: LINE通知（失敗）
         if: failure()
         env:
