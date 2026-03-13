@@ -1,9 +1,10 @@
-// chat-memory.js v1.1
+// chat-memory.js v1.2
 // このファイルは1対1チャットの記憶をKVに保存・取得する
 // meeting-memory.jsと同じパターンでWorker /memory エンドポイントを使う
-// Worker memory.js v1.5 の type="chat" 対応と連携
+// Worker memory.js v1.6 の type/sister/categoryフィルタ対応と連携
 // v1.0 2026-03-12 - Step 6 Phase 1 新規作成
 // v1.1 2026-03-13 - AI自発的記憶保存（detectAndSave）追加
+// v1.2 2026-03-13 - Worker側フィルタ対応（全件取得→type=chat&sister指定に変更）
 'use strict';
 
 /**
@@ -32,6 +33,7 @@ const ChatMemory = (() => {
 
   // --- キャッシュ ---
   let _cachedMemories = null;
+  let _cachedCacheKey = null; // v1.2追加 - 姉妹別キャッシュ判定用
   let _cacheTime = 0;
   const CACHE_TTL_MS = 60000; // 1分キャッシュ
 
@@ -40,6 +42,7 @@ const ChatMemory = (() => {
   // ═══════════════════════════════════════════
 
   /** Worker /memory にリクエストを送る共通関数 */
+  // v1.2改修 - GETのクエリパラメータを汎用化（type/sister/category対応）
   async function _request(method, body) {
     if (typeof ApiCommon === 'undefined' || !ApiCommon.hasAuthToken()) {
       console.warn('[ChatMemory] Worker未設定のためスキップ');
@@ -53,12 +56,17 @@ const ChatMemory = (() => {
         'X-COCOMI-AUTH': ApiCommon.getAuthToken(),
       },
     };
-    if (body) opts.body = JSON.stringify(body);
-    // GETの場合はURLパラメータ
     let fetchUrl = url;
-    if (method === 'GET' && body && body.limit) {
-      fetchUrl = `${url}?limit=${body.limit}`;
-      delete opts.body;
+    if (method === 'GET' && body) {
+      // v1.2改修 - bodyの全プロパティをクエリパラメータに変換
+      const params = new URLSearchParams();
+      for (const [k, v] of Object.entries(body)) {
+        if (v != null) params.set(k, v);
+      }
+      const qs = params.toString();
+      if (qs) fetchUrl = `${url}?${qs}`;
+    } else if (body) {
+      opts.body = JSON.stringify(body);
     }
     try {
       const res = await fetch(fetchUrl, opts);
@@ -174,6 +182,7 @@ const ChatMemory = (() => {
 
       if (result && result.success) {
         _cachedMemories = null; // キャッシュ無効化
+        _cachedCacheKey = null;
         console.log(`[ChatMemory] 保存成功: ${result.key}`);
       }
       return result;
@@ -214,36 +223,30 @@ const ChatMemory = (() => {
   }
 
   /**
-   * KVからチャット記憶を取得（chat:プレフィックスのみフィルタ）
+   * KVからチャット記憶を取得
+   * v1.2改修 - Worker側のtype/sisterフィルタを使用（全件取得→フロントフィルタ廃止）
    * @param {number} limit - 件数
+   * @param {string} [sisterId] - 姉妹ID（指定時はその姉妹との記憶のみ取得）
    * @returns {Promise<Array>}
    */
-  async function _getChatMemories(limit) {
-    // キャッシュが有効ならそれを返す
+  async function _getChatMemories(limit, sisterId) {
     const now = Date.now();
-    if (_cachedMemories && (now - _cacheTime) < CACHE_TTL_MS) {
-      return _filterChatMemories(_cachedMemories, limit);
+    // キャッシュキーは姉妹IDを含める（姉妹切替時にキャッシュが混ざらない）
+    const cacheKey = sisterId || '_all';
+    if (_cachedMemories && _cachedCacheKey === cacheKey && (now - _cacheTime) < CACHE_TTL_MS) {
+      return _cachedMemories;
     }
-    // Worker GET /memory で全記憶取得（Phase 1はフロント側フィルタ）
-    const result = await _request('GET', { limit: 100 });
+    // v1.2改修 - Worker側でtype=chatフィルタ（＋姉妹フィルタ）
+    const query = { type: 'chat', limit };
+    if (sisterId) query.sister = sisterId;
+    const result = await _request('GET', query);
     if (result && result.memories) {
       _cachedMemories = result.memories;
+      _cachedCacheKey = cacheKey;
       _cacheTime = now;
-      return _filterChatMemories(result.memories, limit);
+      return result.memories;
     }
     return [];
-  }
-
-  /**
-   * 記憶配列からchat:プレフィックスのもののみ抽出
-   * @param {Array} memories - 全記憶
-   * @param {number} limit - 件数
-   * @returns {Array}
-   */
-  function _filterChatMemories(memories, limit) {
-    return memories
-      .filter(m => m.key && m.key.startsWith('chat:'))
-      .slice(-limit);
   }
 
   // ═══════════════════════════════════════════
