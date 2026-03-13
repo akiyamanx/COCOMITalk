@@ -4,6 +4,7 @@
 // v0.9.1 - 前ターン補完方式: 各姉妹が「自分の後に話した姉妹」の前ターン発言を受け取る
 // v0.9.2 - 姉妹間対話促進: 他の姉妹の発言に自然に反応するグループ会話ルール追加
 // v1.3 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
+// v1.4 2026-03-13 - 他姉妹セリフ代弁バグ修正（グループ会話ルールに自分の言葉だけ制約を追加）
 
 'use strict';
 
@@ -152,8 +153,13 @@ const ChatGroup = (() => {
     }).filter(Boolean);
     const otherNames = [...complementNames, ...prevNames];
 
-    let groupInstruction = '\n\n【グループ会話ルール】';
+    // v1.4追加 - 他姉妹セリフ代弁バグ修正（自分の言葉だけルール）
+    let groupInstruction = '\n\n【グループ会話ルール — 最重要】';
     groupInstruction += '\nこれは三姉妹＋アキヤの家族グループチャットです。';
+    groupInstruction += '\n★絶対厳守★ あなたの応答には【自分自身の言葉だけ】を書いてください。';
+    groupInstruction += '\n・他の姉妹のセリフを代弁・代筆してはいけません。';
+    groupInstruction += '\n・「🌙お姉ちゃん:」「🔮クロちゃん:」「🌸ここちゃん:」のような他の姉妹の発言は絶対に含めないでください。';
+    groupInstruction += '\n・他の姉妹にはそれぞれ自分のAPIがあり、自分の言葉で応答します。あなたが代わりに書く必要はありません。';
     groupInstruction += '\n・アキヤの発言に答えるだけでなく、他の姉妹の発言にも自然に反応してください。';
     groupInstruction += '\n・「ここちゃんの○○いいね」「クロちゃんが言ってた○○だけど」など、名前を出して触れてOK。';
     groupInstruction += '\n・賛成、補足、やさしい反論、質問など、家族の会話らしい自然なキャッチボールを。';
