@@ -49,7 +49,8 @@
 // v2.49 2026-03-13 - AI自発的記憶保存（chat-memory v1.1 + chat-core v1.8 + prompts💾SAVE指示）
 // v2.50 2026-03-13 - chat-memory v1.2 Worker側フィルタ対応（type/sister/category）
 // v2.51 2026-03-13 - グループモード他姉妹セリフ代弁バグ修正（chat-group v1.4 + prompts更新）
-const CACHE_NAME = 'cocomitalk-v2.51';
+// v2.52 2026-03-13 - 期間指定削除サーバーサイド化（meeting-memory v1.5 + memory-ui v1.3）
+const CACHE_NAME = 'cocomitalk-v2.52';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

@@ -5,6 +5,7 @@
 // v1.2 2026-03-11 - フォールバック要約/決定事項の品質改善
 // v1.3 2026-03-11 - マークダウン記法除去（見出し・太字・リスト・テーブル）
 // v1.4 2026-03-11 - getMemoriesWithTotal追加＋deleteAllMemories追加（メモリー管理UI改善）
+// v1.5 2026-03-13 - deleteByPeriod追加（期間指定削除サーバーサイド化）
 'use strict';
 
 /** 会議メモリーモジュール */
@@ -213,12 +214,29 @@ const MeetingMemory = (() => {
     return result;
   }
 
+  /**
+   * v1.5追加 - 期間指定削除（サーバーサイド）
+   * Worker DELETE /memory に { action: "deleteByPeriod", before: ISO日時 } を送信
+   * D1のSQL一発で削除（フロント側ループ不要）
+   * @param {string} beforeISO - この日時より前の記憶を削除（ISO 8601形式）
+   * @returns {Promise<object|null>}
+   */
+  async function deleteByPeriod(beforeISO) {
+    const result = await _request('DELETE', { action: 'deleteByPeriod', before: beforeISO });
+    if (result && result.success) {
+      _cachedMemories = null;
+      console.log(`[Memory] 期間指定削除成功: ${result.deleted}件（${beforeISO}以前）`);
+    }
+    return result;
+  }
+
   return {
     getMemories,
     getMemoriesWithTotal,
     saveMemory,
     deleteMemory,
     deleteAllMemories,
+    deleteByPeriod,
     getMemoryPrompt,
     autoSaveFromMeeting,
   };

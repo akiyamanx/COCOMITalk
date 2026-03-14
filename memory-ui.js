@@ -5,6 +5,7 @@
 // v1.0 2026-03-12 - Step 4補完: 新規作成
 // v1.1 2026-03-11 - メモリー管理UI改善（件数正確化・検索フィルタ・一括削除）
 // v1.2 2026-03-11 - 期間指定削除機能追加＋CSS整備
+// v1.3 2026-03-13 - 期間指定削除サーバーサイド化（1件ずつループ→Worker SQL一発）
 'use strict';
 
 /** メモリー管理UIモジュール */
@@ -164,6 +165,7 @@ const MemoryUI = (() => {
 
   // =========================================
   // v1.2追加 - 期間指定削除
+  // v1.3改修 - サーバーサイド化（1件ずつループ→SQL一発）
   // =========================================
 
   /** 指定期間より古い記憶を削除 */
@@ -182,7 +184,7 @@ const MemoryUI = (() => {
     cutoff.setDate(cutoff.getDate() - days);
     const cutoffISO = cutoff.toISOString();
 
-    // 対象件数を先にカウント
+    // 対象件数を先にカウント（UI表示用）
     const targets = _allMemories.filter(m => m.createdAt && m.createdAt < cutoffISO);
     if (targets.length === 0) {
       alert(`${days}日以上前の記憶はありません。`);
@@ -191,23 +193,24 @@ const MemoryUI = (() => {
 
     if (!confirm(`${days}日以上前の記憶を${targets.length}件削除しますか？\nこの操作は取り消せません。`)) return;
 
-    // 1件ずつ削除（Worker側に期間指定APIがないため）
-    let deleted = 0;
-    for (const m of targets) {
-      try {
-        const result = await MeetingMemory.deleteMemory(m.key);
-        if (result && result.success) deleted++;
-      } catch (e) {
-        console.warn(`[MemoryUI] 期間削除中エラー: ${m.key}`, e);
+    try {
+      // v1.3改修 - Worker側でSQL一発削除（1件ずつループ不要に）
+      const result = await MeetingMemory.deleteByPeriod(cutoffISO);
+      if (result && result.success) {
+        const deleted = result.deleted || 0;
+        // UIを更新
+        _allMemories = _allMemories.filter(m => !(m.createdAt && m.createdAt < cutoffISO));
+        _totalCount = Math.max(0, _totalCount - deleted);
+        _renderList(_allMemories);
+        _updateCount(_allMemories.length, _totalCount);
+        alert(`${deleted}件の記憶を削除しました。`);
+      } else {
+        alert('期間指定削除に失敗しました。もう一度お試しください。');
       }
+    } catch (e) {
+      console.error('[MemoryUI] 期間指定削除エラー:', e);
+      alert(`期間指定削除エラー: ${e.message}`);
     }
-
-    // UIを更新
-    _allMemories = _allMemories.filter(m => !targets.includes(m));
-    _totalCount = Math.max(0, _totalCount - deleted);
-    _renderList(_allMemories);
-    _updateCount(_allMemories.length, _totalCount);
-    alert(`${deleted}件の記憶を削除しました。`);
   }
 
   // =========================================
