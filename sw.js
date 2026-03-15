@@ -53,7 +53,8 @@
 // v2.53 2026-03-15 - Step 6 Phase 2: Vectorize RAG（meeting-memory v1.6 + prompt-builder v1.2 + chat-core/group userText渡し）
 // v2.54 2026-03-15 - TTS再生速度デフォルト1.25xに変更（voice-input v1.9.3 + voice-command v1.2.3）
 // v2.55 2026-03-15 - app-settings v1.1 TTSスピードフォールバック1.25x + 感情温度UI
-const CACHE_NAME = 'cocomitalk-v2.55';
+// v2.56 2026-03-16 - memory-ui v1.5 JST表示対応
+const CACHE_NAME = 'cocomitalk-v2.56';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

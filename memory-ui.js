@@ -7,6 +7,7 @@
 // v1.2 2026-03-11 - 期間指定削除機能追加＋CSS整備
 // v1.3 2026-03-13 - 期間指定削除サーバーサイド化（1件ずつループ→Worker SQL一発）
 // v1.4 2026-03-15 - 感情の温度表示（一覧に絵文字＋詳細に感情セクション追加）
+// v1.5 2026-03-16 - 日時表示をJST変換（UTCで保存→表示時にAsia/Tokyo変換）
 'use strict';
 
 /** メモリー管理UIモジュール */
@@ -24,6 +25,23 @@ const MemoryUI = (() => {
   function _emotionBadge(val) {
     if (!val) return '';
     return (EMOTION_EMOJI[val] || '😐') + val;
+  }
+
+  // v1.5追加 - UTC→JST変換ヘルパー（データはUTC保持、表示のみJST）
+  function _toJSTDate(isoStr) {
+    if (!isoStr) return '不明';
+    const d = new Date(isoStr);
+    return d.toLocaleDateString('ja-JP', { timeZone: 'Asia/Tokyo', year: 'numeric', month: '2-digit', day: '2-digit' });
+  }
+  function _toJSTTime(isoStr) {
+    if (!isoStr) return '';
+    const d = new Date(isoStr);
+    return d.toLocaleTimeString('ja-JP', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hour12: false });
+  }
+  function _toJSTFull(isoStr) {
+    if (!isoStr) return '不明';
+    const d = new Date(isoStr);
+    return d.toLocaleString('ja-JP', { timeZone: 'Asia/Tokyo' });
   }
 
   // 全記憶データ（検索フィルタ用にキャッシュ）
@@ -258,8 +276,9 @@ const MemoryUI = (() => {
 
   /** 一覧アイテムのHTML生成 */
   function _renderItem(m) {
-    const date = m.createdAt ? m.createdAt.slice(0, 10) : '不明';
-    const time = m.createdAt ? m.createdAt.slice(11, 16) : '';
+    // v1.5変更 - JST変換表示（UTCスライスから変換関数に差し替え）
+    const date = _toJSTDate(m.createdAt);
+    const time = _toJSTTime(m.createdAt);
     const leadName = SISTER_DISPLAY[m.lead]?.name || m.lead || '—';
     const leadEmoji = SISTER_DISPLAY[m.lead]?.emoji || '👤';
     const aiIcon = m.aiSummary ? '🤖' : '📝';
@@ -301,7 +320,8 @@ const MemoryUI = (() => {
     const detailDiv = document.getElementById('memory-detail');
     if (!detailDiv) return;
 
-    const date = m.createdAt || '不明';
+    // v1.5変更 - JST変換表示
+    const date = _toJSTFull(m.createdAt);
     const leadName = SISTER_DISPLAY[m.lead]?.name || m.lead || '—';
     const decisions = (m.decisions && m.decisions.length > 0)
       ? m.decisions.map(d => `<li>${_escapeHtml(d)}</li>`).join('')
