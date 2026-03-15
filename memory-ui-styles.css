@@ -117,6 +117,8 @@
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+  gap: 6px;
+  flex-wrap: wrap;
 }
 .memory-date {
   font-size: 0.8rem;
@@ -136,6 +138,15 @@
 .memory-ai-badge.fallback {
   background: #fff3e0;
   color: #e65100;
+}
+/* v1.4追加 - 感情温度バッジ */
+.memory-emotion-badge {
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  border-radius: 10px;
+  background: #fce4ec;
+  color: #c62828;
+  font-weight: 600;
 }
 
 /* 議題 */

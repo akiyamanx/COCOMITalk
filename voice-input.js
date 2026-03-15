@@ -27,7 +27,8 @@ class VoiceController {
     // 現在の姉妹ID
     this._currentSisterId = 'koko';
     // 音声設定
-    this._speed = 1.0;
+    // v1.9.3変更 - デフォルト速度を1.25xに（アキヤの普段使いに合わせて一段階アップ）
+    this._speed = 1.25;
     this._autoListen = false;
     // 息継ぎ対策: 無音タイマー
     this._silenceTimer = null;

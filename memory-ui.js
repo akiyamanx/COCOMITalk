@@ -6,6 +6,7 @@
 // v1.1 2026-03-11 - メモリー管理UI改善（件数正確化・検索フィルタ・一括削除）
 // v1.2 2026-03-11 - 期間指定削除機能追加＋CSS整備
 // v1.3 2026-03-13 - 期間指定削除サーバーサイド化（1件ずつループ→Worker SQL一発）
+// v1.4 2026-03-15 - 感情の温度表示（一覧に絵文字＋詳細に感情セクション追加）
 'use strict';
 
 /** メモリー管理UIモジュール */
@@ -17,6 +18,13 @@ const MemoryUI = (() => {
     gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#6B5CE7' },
     claude: { name: 'クロちゃん', emoji: '🔮', color: '#E6783E' },
   };
+
+  // v1.4追加 - 感情温度→絵文字変換
+  const EMOTION_EMOJI = { 1: '💧', 2: '😢', 3: '😐', 4: '😊', 5: '🔥' };
+  function _emotionBadge(val) {
+    if (!val) return '';
+    return (EMOTION_EMOJI[val] || '😐') + val;
+  }
 
   // 全記憶データ（検索フィルタ用にキャッシュ）
   let _allMemories = [];
@@ -259,10 +267,16 @@ const MemoryUI = (() => {
     const decStr = (m.decisions && m.decisions.length > 0)
       ? m.decisions.slice(0, 2).map(d => _escapeHtml(d)).join(' / ')
       : '（決定事項なし）';
+    // v1.4追加 - 感情温度バッジ
+    const emoUser = _emotionBadge(m.emotionUser);
+    const emoAi = _emotionBadge(m.emotionAi);
+    const emoHtml = (emoUser || emoAi)
+      ? `<span class="memory-emotion-badge">🌡️ ${emoUser || '—'}/${emoAi || '—'}</span>` : '';
 
     return `<div class="memory-item">
       <div class="memory-item-header">
         <span class="memory-date">${date} ${time}</span>
+        ${emoHtml}
         <span class="memory-ai-badge ${m.aiSummary ? 'ai' : 'fallback'}">${aiIcon} ${aiLabel}</span>
       </div>
       <div class="memory-topic">${_escapeHtml(m.topic || '（議題なし）')}</div>
@@ -292,6 +306,21 @@ const MemoryUI = (() => {
     const decisions = (m.decisions && m.decisions.length > 0)
       ? m.decisions.map(d => `<li>${_escapeHtml(d)}</li>`).join('')
       : '<li>（決定事項なし）</li>';
+    // v1.4追加 - 感情セクションHTML
+    const hasEmotion = m.emotionUser || m.emotionAi;
+    const emotionHtml = hasEmotion ? `
+          <div class="detail-section">
+            <span class="detail-label">🌡️ 感情の温度</span>
+            <div class="detail-row" style="margin-top:4px">
+              <span>👤 アキヤ</span>
+              <span>${_emotionBadge(m.emotionUser) || '—'}</span>
+            </div>
+            <div class="detail-row">
+              <span>🤖 AI</span>
+              <span>${_emotionBadge(m.emotionAi) || '—'}</span>
+            </div>
+            ${m.emotionComment ? `<p class="detail-text" style="margin-top:4px">💬 ${_escapeHtml(m.emotionComment)}</p>` : ''}
+          </div>` : '';
 
     detailDiv.innerHTML = `
       <div class="memory-detail-card">
@@ -321,6 +350,7 @@ const MemoryUI = (() => {
             <span class="detail-label">📝 要約</span>
             <p class="detail-text">${_escapeHtml(m.summary || '—')}</p>
           </div>
+          ${emotionHtml}
           <div class="detail-section">
             <span class="detail-label">✅ 決定事項</span>
             <ul class="detail-decisions">${decisions}</ul>

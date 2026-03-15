@@ -27,7 +27,8 @@ class VoiceCommand {
    */
   constructor(callbacks = {}) {
     this._cb = callbacks;
-    this._speed = 1.0;
+    // v1.2.3変更 - デフォルト速度を1.25xに（アキヤの普段使いに合わせて一段階アップ）
+    this._speed = 1.25;
   }
 
   /** 現在の速度を外部から設定（voice-input.jsと同期用） */
