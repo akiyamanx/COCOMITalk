@@ -197,7 +197,7 @@ const ChatGroup = (() => {
     // v1.3改修 - PromptBuilderでメモリー＋検索結果を一括注入（グループは全姉妹参照用にクリアしない）
     let extraPrompt = '';
     if (typeof PromptBuilder !== 'undefined') {
-      extraPrompt = await PromptBuilder.build({ mode: 'group' });
+      extraPrompt = await PromptBuilder.build({ mode: 'group', userText });
     }
 
     return await apiModule.sendMessage(

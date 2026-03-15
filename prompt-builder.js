@@ -4,6 +4,7 @@
 // chat-core.js / chat-group.js / meeting-relay.js が共通で使う
 // v1.0 2026-03-11 - 新規作成（共通化リファクタ）
 // v1.1 2026-03-12 - Step 6 Phase 1: チャット記憶注入（_getChatMemoryText追加）
+// v1.2 2026-03-15 - Step 6 Phase 2: Vectorize RAG意味検索結果注入（_getVectorSearchText追加）
 'use strict';
 
 /**
@@ -67,8 +68,10 @@ const PromptBuilder = (() => {
       extra += _getSearchText(clearSearch);
     }
 
-    // --- 3. 将来拡張: Vectorize RAG結果（Step 6で追加予定） ---
-    // if (!skipVector) { extra += await _getVectorText(query); }
+    // --- 3. Vectorize RAG意味検索結果（Step 6 Phase 2） ---
+    if (!options.skipVector && options.userText) {
+      extra += await _getVectorSearchText(options.userText);
+    }
 
     // --- 4. 1対1チャット記憶注入（Step 6 Phase 1） ---
     if (!options.skipChatMemory && mode === 'chat') {
@@ -132,6 +135,32 @@ const PromptBuilder = (() => {
       console.warn('[PromptBuilder] チャット記憶取得スキップ:', e.message);
     }
     return '';
+  }
+
+  /**
+   * v1.2追加 - Vectorize意味検索結果テキストを取得（Step 6 Phase 2）
+   * ユーザーの発言に関連する過去の記憶をVectorize検索して注入
+   * @param {string} userText - ユーザーの発言テキスト
+   * @returns {Promise<string>}
+   */
+  async function _getVectorSearchText(userText) {
+    if (typeof MeetingMemory === 'undefined' || !MeetingMemory.searchMemories) return '';
+    try {
+      const relevant = await MeetingMemory.searchMemories(userText, 2);
+      if (!relevant || relevant.length === 0) return '';
+
+      let prompt = '\n\n【関連する過去の記憶】\n';
+      for (const m of relevant) {
+        const date = m.createdAt ? m.createdAt.slice(0, 10) : '';
+        prompt += `📌 ${date} ${m.topic}: ${m.summary}\n`;
+      }
+      prompt += '上記の過去の記憶に自然に触れて会話してね。\n';
+      console.log(`[PromptBuilder] Vectorize検索注入OK（${relevant.length}件）`);
+      return prompt;
+    } catch (e) {
+      console.warn('[PromptBuilder] Vectorize検索スキップ:', e.message);
+      return '';
+    }
   }
 
   /**

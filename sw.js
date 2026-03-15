@@ -50,7 +50,8 @@
 // v2.50 2026-03-13 - chat-memory v1.2 Worker側フィルタ対応（type/sister/category）
 // v2.51 2026-03-13 - グループモード他姉妹セリフ代弁バグ修正（chat-group v1.4 + prompts更新）
 // v2.52 2026-03-13 - 期間指定削除サーバーサイド化（meeting-memory v1.5 + memory-ui v1.3）
-const CACHE_NAME = 'cocomitalk-v2.52';
+// v2.53 2026-03-15 - Step 6 Phase 2: Vectorize RAG（meeting-memory v1.6 + prompt-builder v1.2 + chat-core/group userText渡し）
+const CACHE_NAME = 'cocomitalk-v2.53';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

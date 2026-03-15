@@ -230,6 +230,38 @@ const MeetingMemory = (() => {
     return result;
   }
 
+  /**
+   * v1.6追加 - 意味検索（Vectorize RAG）
+   * テキストで関連する記憶を検索（Step 6 Phase 2）
+   * @param {string} query - 検索テキスト（ユーザーの発言）
+   * @param {number} limit - 取得件数（デフォルト3、最大10）
+   * @returns {Promise<Array>} - 関連する記憶の配列（relevanceScore付き）
+   */
+  async function searchMemories(query, limit = 3) {
+    // 短すぎるクエリはスキップ（ノイズ防止）
+    if (!query || query.length < 3) return [];
+    if (typeof ApiCommon === 'undefined' || !ApiCommon.hasAuthToken()) return [];
+
+    try {
+      const url = `${ApiCommon.getWorkerURL()}/memory-search`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-COCOMI-AUTH': ApiCommon.getAuthToken(),
+        },
+        body: JSON.stringify({ query, limit }),
+      });
+      if (!res.ok) return [];
+      const data = await res.json();
+      console.log(`[Memory] 意味検索: ${data.memories?.length || 0}件ヒット`);
+      return data.memories || [];
+    } catch (e) {
+      console.warn('[Memory] 意味検索エラー:', e.message);
+      return [];
+    }
+  }
+
   return {
     getMemories,
     getMemoriesWithTotal,
@@ -239,5 +271,6 @@ const MeetingMemory = (() => {
     deleteByPeriod,
     getMemoryPrompt,
     autoSaveFromMeeting,
+    searchMemories,
   };
 })();

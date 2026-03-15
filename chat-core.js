@@ -235,7 +235,7 @@ const ChatCore = (() => {
       // v1.5改修 - PromptBuilderでメモリー＋検索結果を一括注入
       let fullPrompt = systemPrompt;
       if (typeof PromptBuilder !== 'undefined') {
-        const extra = await PromptBuilder.build({ mode: 'chat' });
+        const extra = await PromptBuilder.build({ mode: 'chat', userText });
         fullPrompt = systemPrompt + extra;
       }
 
