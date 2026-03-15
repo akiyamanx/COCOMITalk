@@ -1,7 +1,8 @@
-// app-settings.js v1.0
+// app-settings.js v1.1
 // このファイルは設定モーダルの制御を担当する（app.jsから分離）
 // 認証トークン/モデル選択/音声設定/TTS切替/話すスピード調整
 // v1.0 2026-03-10 新規作成 - app.jsの設定関連10関数を分離＋スピード調整追加
+// v1.1 2026-03-15 - TTSスピードデフォルト1.25x（フォールバック値変更）
 'use strict';
 
 /** 設定モジュール（app.jsのinit()から呼ばれる） */
@@ -77,7 +78,7 @@ const AppSettings = (() => {
       if (window.voiceController) {
         window.voiceController.setAutoListen(!!settings.handsfree);
         window.voiceController.setDebugVisible(!!settings.sttDebug);
-        // v1.0追加 - スピード設定反映
+        // v1.0追加 - スピード設定反映 / v1.1変更 - デフォルト1.25x
         if (settings.ttsSpeed) window.voiceController.setSpeed(parseFloat(settings.ttsSpeed));
       }
       _applyTTSProvider(settings.ttsProvider || 'openai', settings.vvApiKey || '');
@@ -100,11 +101,11 @@ const AppSettings = (() => {
         if (selTTS) { selTTS.value = s.ttsProvider || 'openai'; _toggleVVKeyUI(selTTS.value); }
         const vvKey = document.getElementById('vv-api-key-main');
         if (vvKey && s.vvApiKey) vvKey.value = s.vvApiKey;
-        // v1.0追加 - スピードスライダー反映
+        // v1.0追加 - スピードスライダー反映 / v1.1変更 - デフォルト1.25x
         const spdSlider = document.getElementById('range-tts-speed');
         const spdLabel = document.getElementById('tts-speed-label');
-        if (spdSlider) { spdSlider.value = s.ttsSpeed || '1.0'; }
-        if (spdLabel) { spdLabel.textContent = `${s.ttsSpeed || '1.0'}x`; }
+        if (spdSlider) { spdSlider.value = s.ttsSpeed || '1.25'; }
+        if (spdLabel) { spdLabel.textContent = `${s.ttsSpeed || '1.25'}x`; }
       }
       _buildModelSettingsUI();
     } catch (e) { console.warn('[Settings] フォーム反映エラー:', e); }
@@ -124,7 +125,7 @@ const AppSettings = (() => {
         sttDebug: chkD ? chkD.checked : false,
         ttsProvider: selTTS ? selTTS.value : 'openai',
         vvApiKey: vvKey ? vvKey.value.trim() : '',
-        ttsSpeed: spdSlider ? spdSlider.value : '1.0',
+        ttsSpeed: spdSlider ? spdSlider.value : '1.25',
       };
       localStorage.setItem('cocomitalk-settings', JSON.stringify(settings));
       if (window.voiceController) {
