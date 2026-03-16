@@ -1,9 +1,10 @@
-// voice-command.js v1.2
+// voice-command.js v1.3
 // このファイルは音声コマンドの認識・実行を担当する
 // voice-input.js から分離（500行制限対策＋責務分離）
 // v1.0 新規作成 - Step 5e 音声コマンド対応（バグ修正版）
 // v1.1 修正 - ひらがな/カタカナ揺れ対応強化＋部分一致緩和＋コマンド成功ログ改善
 // v1.2 2026-03-12 - Step 6 Phase 1: 「覚えて」記憶保存コマンド追加
+// v1.3 2026-03-16 - 「キャンセル」「取り消し」送信キャンセルコマンド追加
 
 'use strict';
 
@@ -98,6 +99,13 @@ class VoiceCommand {
     if (this._matchSaveMemory(t)) {
       console.log('[VoiceCmd] 💾 記憶保存コマンド発動');
       this._cb.onSaveMemory?.();
+      return true;
+    }
+
+    // --- v1.3追加: 送信キャンセルコマンド ---
+    if (this._matchCancel(t)) {
+      console.log('[VoiceCmd] ⏹ キャンセルコマンド発動');
+      this._cb.onCancel?.();
       return true;
     }
 
@@ -202,6 +210,14 @@ class VoiceCommand {
     // 「覚えてる」「覚えてない」等の質問/否定は除外
     if (/覚えてる|覚えてない|おぼえてる|おぼえてない/.test(t)) return false;
     return /覚えて|覚えとい|おぼえて|おぼえとい|記憶して|きおくして|セーブ|せーぶ|save|メモして|めもして/.test(t);
+  }
+
+  /**
+   * v1.3追加: 送信キャンセルコマンド
+   * 「キャンセル」「取り消し」「とりけし」「中止」「やめて送信」等
+   */
+  _matchCancel(t) {
+    return /^(キャンセル|きゃんせる|cancel|取り消し|とりけし|取消|中止|ちゅうし|送信キャンセル|送信取り消し|送信中止)$/.test(t);
   }
 }
 

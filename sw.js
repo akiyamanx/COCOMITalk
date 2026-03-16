@@ -55,7 +55,8 @@
 // v2.55 2026-03-15 - app-settings v1.1 TTSスピードフォールバック1.25x + 感情温度UI
 // v2.56 2026-03-16 - memory-ui v1.5 JST表示対応
 // v2.57 2026-03-16 - グループモードファイル添付対応（chat-core v1.9 + chat-group v1.5）
-const CACHE_NAME = 'cocomitalk-v2.57';
+// v2.58 2026-03-16 - ピコンピコン対策＋送信キャンセル音声コマンド＋無音タイマー延長
+const CACHE_NAME = 'cocomitalk-v2.58';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

@@ -1,4 +1,4 @@
-// voice-input.js v1.9.1
+// voice-input.js v1.9.3
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
@@ -15,6 +15,7 @@
 // v1.9 リファクタ - 送信処理をvoice-sender.js v1.0にmixin分離（行数削減: 490→395行）
 // v1.9.1 追加 - Step 6 Phase 1: 「覚えて」コマンドでチャット記憶手動保存
 // v1.9.2 修正 - 全コマンドコールバック: _forceIdleState→showStatusの順に統一（表示即消え防止）
+// v1.9.3 改善 - ピコンピコン対策＋無音タイマー延長＋送信キャンセル音声コマンド対応
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
@@ -34,8 +35,9 @@ class VoiceController {
     this._silenceTimer = null;
     // v1.5改善: ハンズフリー時は長め（運転中は考えながら話す）
     // v1.9.2改善 - 常時リスニング中もゆったり待つ＋息継ぎ・考え中に対応
-    this._SILENCE_DELAY = 4000;           // 通常: 4秒
-    this._SILENCE_DELAY_HANDSFREE = 7000; // ハンズフリー/常時リスニング: 7秒
+    // v1.9.3改善 - さらに延長（息継ぎで途切れて誤送信する対策）
+    this._SILENCE_DELAY = 15000;           // 通常: 15秒
+    this._SILENCE_DELAY_HANDSFREE = 20000; // ハンズフリー/常時リスニング: 20秒
     // 最後に受け取ったテキスト（タイマー用）
     this._lastText = '';
     // v1.8追加: STT即終了リトライ用
@@ -43,6 +45,9 @@ class VoiceController {
     this._sttRetryCount = 0;
     this._STT_MIN_DURATION = 500; // STTが500ms未満で終了したら誤終了と判断
     this._STT_MAX_RETRY = 2;     // リトライは最大2回まで
+    // v1.9.3追加: 無音リスタート連鎖防止（ピコンピコン対策）
+    this._silentRestartCount = 0;
+    this._SILENT_RESTART_MAX = 3; // 3回連続無音 → リスニング一時停止
 
     this._setupVoiceCommand(); // v1.8: VoiceCommandモジュール初期化
     this._setupCallbacks();
@@ -105,6 +110,17 @@ class VoiceController {
           this._ui.showStatus('💾 覚えたよ！', 'success');
         } else {
           this._ui.showStatus('💾 記憶機能が未準備です', 'warning');
+        }
+        if (this._enabled) setTimeout(() => this.startListening(), 800);
+      },
+      // v1.9.3追加: 「キャンセル」「取り消し」で送信キャンセル
+      onCancel: () => {
+        this._forceIdleState();
+        if (typeof ChatCore !== 'undefined' && ChatCore._handleCancel) {
+          ChatCore._handleCancel();
+          this._ui.showStatus('⏹ 送信をキャンセルしました', 'info');
+        } else {
+          this._ui.showStatus('⏹ キャンセル対象がありません', 'info');
         }
         if (this._enabled) setTimeout(() => this.startListening(), 800);
       }
@@ -175,14 +191,25 @@ class VoiceController {
       console.log(`[Voice] onEnd: hasFinal=${this._hasFinalText} text="${text}" duration=${duration}ms`);
 
       if (text && text.trim().length > 0) {
+        this._silentRestartCount = 0; // v1.9.3: テキストありならカウントリセット
         this._lastText = text;
         this._ui.showInterim(text + ' ⏳ 送信中...');
         this._clearSilenceTimer();
         this._resetSilenceTimer();
       } else {
         // v1.8.3: 音声モード中は自動リスタート（常時リスニング）
+        // v1.9.3改善: 連続無音リスタート制限（ピコンピコン対策）
         if (this._enabled) {
-          console.log('[Voice] 無音終了 → 自動リスタート待機');
+          this._silentRestartCount++;
+          if (this._silentRestartCount >= this._SILENT_RESTART_MAX) {
+            // 3回連続無音 → リスニング一時停止（ピコンピコン防止）
+            console.log(`[Voice] 無音${this._silentRestartCount}回連続 → リスニング一時停止`);
+            this._silentRestartCount = 0;
+            this._ui.showStatus('🎤 タップしてもう一度話してね', 'info');
+            this._forceIdleState();
+            return;
+          }
+          console.log(`[Voice] 無音終了(${this._silentRestartCount}/${this._SILENT_RESTART_MAX}) → リスタート待機`);
           this._ui.showInterim('🎤 話しかけてね...');
           setTimeout(() => {
             if (this._enabled && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
@@ -228,16 +255,20 @@ class VoiceController {
       if (this._playback.isQueuePlaying()) return;
       this._ui.updateMicState('idle');
       this._updateMeetingMicState('idle');
+      // v1.9.3改善: 1200ms→2500ms（TTS残響・エコーがマイクに入る対策）
       if (this._autoListen && this._enabled) {
-        setTimeout(() => this.startListening(), 1200);
+        this._silentRestartCount = 0; // TTS後のリスタートはカウントリセット
+        setTimeout(() => this.startListening(), 2500);
       }
     };
 
     this._playback.onQueueEnd = () => {
       this._ui.updateMicState('idle');
       this._updateMeetingMicState('idle');
+      // v1.9.3改善: 1200ms→2500ms（グループTTS全完了後の残響対策）
       if (this._autoListen && this._enabled) {
-        setTimeout(() => this.startListening(), 1200);
+        this._silentRestartCount = 0; // TTS後のリスタートはカウントリセット
+        setTimeout(() => this.startListening(), 2500);
       }
     };
 
@@ -356,6 +387,7 @@ class VoiceController {
     this._enabled = true;
     this._lastText = '';
     this._sttRetryCount = 0; // v1.8: リトライカウントリセット
+    this._silentRestartCount = 0; // v1.9.3: 無音カウントリセット
     this._clearSilenceTimer();
     this._stt.start({ language: 'ja-JP' });
   }
