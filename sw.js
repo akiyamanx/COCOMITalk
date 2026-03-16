@@ -54,7 +54,8 @@
 // v2.54 2026-03-15 - TTS再生速度デフォルト1.25xに変更（voice-input v1.9.3 + voice-command v1.2.3）
 // v2.55 2026-03-15 - app-settings v1.1 TTSスピードフォールバック1.25x + 感情温度UI
 // v2.56 2026-03-16 - memory-ui v1.5 JST表示対応
-const CACHE_NAME = 'cocomitalk-v2.56';
+// v2.57 2026-03-16 - グループモードファイル添付対応（chat-core v1.9 + chat-group v1.5）
+const CACHE_NAME = 'cocomitalk-v2.57';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

@@ -6,6 +6,7 @@
 // v1.6 2026-03-12 - Step 6 Phase 1: チャット記憶自動保存フック＋姉妹切替時リセット
 // v1.7 2026-03-12 - セッション開始位置記録＋getSessionHistory追加（今の部屋の会話だけDL）
 // v1.8 2026-03-13 - AI自発的記憶保存マーカー検知（💾SAVE:対応）
+// v1.9 2026-03-16 - グループモードにattachment引数を追加（方針C: テキスト全員・画像リードのみ）
 'use strict';
 
 /** チャットコアモジュール */
@@ -214,7 +215,7 @@ const ChatCore = (() => {
     const isGroup = (typeof ModeSwitcher !== 'undefined') && ModeSwitcher.isGroupMode();
 
     if (isGroup) {
-      _groupReply(text);
+      _groupReply(text, attachment);
     } else {
       const sisterAPI = SISTER_API[currentSister];
       const apiModule = sisterAPI ? sisterAPI.module() : null;
@@ -290,7 +291,7 @@ const ChatCore = (() => {
   }
 
   // グループモード
-  async function _groupReply(userText) {
+  async function _groupReply(userText, attachment) {
     if (typeof ChatGroup === 'undefined') {
       console.error('[ChatCore] ChatGroupモジュールが見つかりません');
       isProcessing = false;
@@ -305,6 +306,7 @@ const ChatCore = (() => {
         chatArea,
         SISTERS,
         SISTER_API,
+        attachment,
       });
     } finally {
       isProcessing = false;

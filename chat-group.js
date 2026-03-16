@@ -5,6 +5,7 @@
 // v0.9.2 - 姉妹間対話促進: 他の姉妹の発言に自然に反応するグループ会話ルール追加
 // v1.3 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
 // v1.4 2026-03-13 - 他姉妹セリフ代弁バグ修正（グループ会話ルールに自分の言葉だけ制約を追加）
+// v1.5 2026-03-16 - グループモードファイル添付対応（方針C: テキスト全員・画像リードのみ）
 
 'use strict';
 
@@ -27,7 +28,7 @@ const ChatGroup = (() => {
    */
   async function handleGroupReply(userText, ctx) {
     const { currentSister, chatHistories, addMessage, hideTyping,
-            chatArea, SISTERS, SISTER_API } = ctx;
+            chatArea, SISTERS, SISTER_API, attachment } = ctx;
 
     // 動的ルーティングで発言順を決定
     let order = ['koko', 'gpt', 'claude'];
@@ -60,9 +61,20 @@ const ChatGroup = (() => {
           // v0.9.1 - 前ターン補完分を計算
           const complement = _getPrevTurnComplement(i, order, SISTERS);
 
+          // v1.5追加 - 添付ファイル振り分け（テキスト:全員、画像:リードのみ）
+          let sisterAttachment = null;
+          if (attachment) {
+            if (attachment.type === 'text') {
+              sisterAttachment = attachment;
+            } else if (attachment.type === 'image' && i === 0) {
+              sisterAttachment = attachment;
+            }
+          }
+
           const reply = await _callSisterInGroup(
             userText, sisterKey, isLead, sisterAPI,
-            chatHistories, relayContext, complement, SISTERS
+            chatHistories, relayContext, complement, SISTERS,
+            undefined, sisterAttachment
           );
 
           hideTyping();
@@ -140,7 +152,7 @@ const ChatGroup = (() => {
    * 個別の姉妹APIを呼び出す（グループモード用）
    * v0.9.1変更 - 前ターン補完分（complement）を履歴に追加
    */
-  async function _callSisterInGroup(userText, sisterKey, isLead, sisterAPI, chatHistories, relayContext, complement, SISTERS, extraInstruction) {
+  async function _callSisterInGroup(userText, sisterKey, isLead, sisterAPI, chatHistories, relayContext, complement, SISTERS, extraInstruction, attachment) {
     const apiModule = sisterAPI.module();
     const systemPrompt = sisterAPI.prompt();
 
@@ -200,8 +212,10 @@ const ChatGroup = (() => {
       extraPrompt = await PromptBuilder.build({ mode: 'group', userText });
     }
 
+    const opts = { model: modelKey };
+    if (attachment) opts.attachment = attachment;
     return await apiModule.sendMessage(
-      userText, systemPrompt + leadNote + (extraInstruction || '') + extraPrompt, history, { model: modelKey }
+      userText, systemPrompt + leadNote + (extraInstruction || '') + extraPrompt, history, opts
     );
   }
 
