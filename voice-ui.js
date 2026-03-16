@@ -1,11 +1,8 @@
-// voice-ui.js v1.1.1
-// このファイルは音声会話のUI部品（DOM操作）を担当する
-// マイクボタン、interim表示、送信確認UI、姉妹アイコン発光を管理
-// voice-input.jsのVoiceControllerから呼ばれる
-
-// v1.0 新規作成 - Step 5b voice-input.jsからUI部分を分離
-// v1.1 追加 - リングウェーブ＋呼吸グロー マイクボタンデザイン
-// v1.1.1 修正 - showStatusがinterimバーにフォールバック（status-bar未定義問題修正）
+// voice-ui.js v1.2
+// 音声会話のUI部品（DOM操作）を担当する
+// マイクボタン、interim表示、送信確認UI、送信カウントダウン、姉妹アイコン発光
+// v1.0〜v1.1.1: 履歴省略（セッションカプセル参照）
+// v1.2 追加 - 送信カウントダウンアニメ（方針F対応: 0.5秒光って自動送信、タップでキャンセル）
 
 /**
  * VoiceUI
@@ -213,6 +210,16 @@ class VoiceUI {
         0%, 100% { box-shadow: 0 0 4px rgba(108, 92, 231, 0.3); }
         50% { box-shadow: 0 0 16px rgba(108, 92, 231, 0.8); }
       }
+      /* v1.2: 送信カウントダウンアニメ */
+      @keyframes cocomi-send-pulse {
+        0% { background: rgba(108, 92, 231, 0.15); }
+        50% { background: rgba(108, 92, 231, 0.35); }
+        100% { background: rgba(108, 92, 231, 0.15); }
+      }
+      .cocomi-send-countdown {
+        animation: cocomi-send-pulse 0.5s ease-in-out;
+        border-left: 3px solid #a855f7 !important;
+      }
     `;
     document.head.appendChild(style);
   }
@@ -335,6 +342,26 @@ class VoiceUI {
   hideConfirm() {
     const el = this._elements.confirm;
     if (el) el.style.display = 'none';
+  }
+
+  /**
+   * v1.2: 送信カウントダウン表示（interimバーを紫に光らせる）
+   * タップでキャンセル可能 — voice-input.jsのtoggleListeningで処理
+   */
+  showSendCountdown(text) {
+    const el = this._elements.interim;
+    if (!el) return;
+    this._statusProtected = false; // 保護を解除して書き込み可能に
+    el.style.display = 'block';
+    el.textContent = `📤 「${text}」 送信するよ...`;
+    el.classList.add('cocomi-send-countdown');
+  }
+
+  /** v1.2: 送信カウントダウン非表示 */
+  hideSendCountdown() {
+    const el = this._elements.interim;
+    if (!el) return;
+    el.classList.remove('cocomi-send-countdown');
   }
 
   /**

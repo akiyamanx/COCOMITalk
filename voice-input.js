@@ -1,23 +1,9 @@
-// voice-input.js v1.9.6
-// このファイルは音声会話の全体フロー制御を担当する
-// マイクボタン→STT→自動送信→TTS再生のフローを管理
-// UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
-// 送信処理はvoice-sender.js v1.0にmixin分離
+// voice-input.js v2.0
+// 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
+// UI→voice-ui.js / 送信→voice-sender.js（mixin）
+// v2.0 方針F: バッファ蓄積＋2.5秒待機＋ノイズフィルタ＋確認アニメ
 
-// v1.0 新規作成 - Step 5b 音声会話フロー制御
-// v1.1 修正 - 自動送信＋息継ぎ1.5秒待機＋セレクタバグ修正
-// v1.2 修正 - STT繰り返し問題対策: finalText優先＋interim蓄積防止
-// v1.3 追加 - Step 5c: 会議モード音声入力対応（マイクボタン＋会議入力欄送信）
-// v1.5 追加 - Step 5e: 音声コマンド対応（ストップ・姉妹切替・スピード調整）
-// v1.7 修正 - コマンド処理を内蔵に戻し確実に動作。部分一致＋正規化強化＋try-catch
-// v1.8 修正 - 3バグ全修正: コマンド→VoiceCommand分離 / 送信→VoiceSend分離 / STT即終了リトライ
-// v1.8.3 追加 - 常時リスニング: 無音でSTT終了しても自動リスタート。明示的停止でenabled=false
-// v1.9 リファクタ - 送信処理をvoice-sender.js v1.0にmixin分離（行数削減: 490→395行）
-// v1.9.1 追加 - Step 6 Phase 1: 「覚えて」コマンドでチャット記憶手動保存
-// v1.9.2 修正 - 全コマンドコールバック: _forceIdleState→showStatusの順に統一（表示即消え防止）
-// v1.9.6 改善 - 息継ぎ対策: 無音タイマー延長（5秒/9秒）でSTTの自然な息継ぎ吸収を活用
-
-/** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
+/** VoiceController - 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS） */
 class VoiceController {
   constructor() {
     this._stt = new WebSpeechProvider();
@@ -28,25 +14,26 @@ class VoiceController {
     // 現在の姉妹ID
     this._currentSisterId = 'koko';
     // 音声設定
-    // v1.9.3変更 - デフォルト速度を1.25xに（アキヤの普段使いに合わせて一段階アップ）
     this._speed = 1.25;
     this._autoListen = false;
-    // 息継ぎ対策: 無音タイマー
-    this._silenceTimer = null;
-    // v1.5改善: ハンズフリー時は長め（運転中は考えながら話す）
-    // v1.9.2改善 - 常時リスニング中もゆったり待つ＋息継ぎ・考え中に対応
-    // v1.9.6改善 - STTの息継ぎ吸収を活用するため少し延長
-    this._SILENCE_DELAY = 5000;           // 通常: 5秒
-    this._SILENCE_DELAY_HANDSFREE = 9000; // ハンズフリー/常時リスニング: 9秒
-    // 最後に受け取ったテキスト（タイマー用）
+    // v2.0: バッファ方式 — STTのonEndで即送信せずバッファに蓄積
+    this._buffer = '';           // 蓄積中のテキスト
+    this._bufferTimer = null;    // バッファ送信タイマー
+    this._confirmTimer = null;   // 確認アニメタイマー
+    this._lastBufferText = '';   // ノイズフィルタ: 直前のバッファ追加テキスト
+    this._BUFFER_DELAY = 2500;   // 新テキストが来なければ送信までの待機（2.5秒）
+    this._CONFIRM_DELAY = 500;   // 確認アニメ表示時間（0.5秒）
+    // v2.0: ノイズフィルタ設定
+    this._NOISE_MIN_LENGTH = 2;  // これ以下の文字数は無視（ピコン「あ」「ん」対策）
+    // 最後に受け取ったテキスト（interim表示用）
     this._lastText = '';
-    // v1.8追加: STT即終了リトライ用
+    // STT即終了リトライ用
     this._sttStartTime = 0;
     this._sttRetryCount = 0;
-    this._STT_MIN_DURATION = 500; // STTが500ms未満で終了したら誤終了と判断
-    this._STT_MAX_RETRY = 2;     // リトライは最大2回まで
+    this._STT_MIN_DURATION = 500;
+    this._STT_MAX_RETRY = 2;
 
-    this._setupVoiceCommand(); // v1.8: VoiceCommandモジュール初期化
+    this._setupVoiceCommand();
     this._setupCallbacks();
   }
 
@@ -109,6 +96,16 @@ class VoiceController {
           this._ui.showStatus('💾 記憶機能が未準備です', 'warning');
         }
         if (this._enabled) setTimeout(() => this.startListening(), 800);
+      },
+      // v2.0追加: キャンセルコマンドでバッファもクリア
+      onCancel: () => {
+        this._clearAllTimers();
+        this._buffer = '';
+        this._lastBufferText = '';
+        this._ui.hideConfirm();
+        this._forceIdleState();
+        this._ui.showStatus('⏹ キャンセルしました', 'info');
+        if (this._enabled) setTimeout(() => this.startListening(), 800);
       }
     });
   }
@@ -124,20 +121,26 @@ class VoiceController {
     this._stt.onStart = () => {
       this._ui.updateMicState('listening');
       this._updateMeetingMicState('listening');
-      this._ui.showInterim('🎤 聞いてるよ...');
+      // v2.0: バッファ中は「続けて聞いてるよ」表示
+      if (this._buffer) {
+        this._ui.showInterim(this._buffer + ' 🎤...');
+      } else {
+        this._ui.showInterim('🎤 聞いてるよ...');
+      }
       this._lastText = '';
       this._finalText = '';
       this._hasFinalText = false;
-      this._clearSilenceTimer();
-      this._sttStartTime = Date.now(); // v1.8: STT開始時刻を記録
+      this._sttStartTime = Date.now();
     };
 
     this._stt.onInterim = (text) => {
       if (this._hasFinalText) return;
-      this._ui.showInterim(text);
+      // v2.0: バッファ＋現在のinterimを合わせて表示
+      const display = this._buffer ? this._buffer + ' ' + text : text;
+      this._ui.showInterim(display);
       this._lastText = text;
-      // v1.5追加: interimが来てる=まだ話し中。タイマーリセットして延長
-      if (this._silenceTimer) { this._clearSilenceTimer(); this._resetSilenceTimer(); }
+      // v2.0: interimが来てる=まだ話し中。バッファタイマーをリセット
+      if (this._bufferTimer) this._resetBufferTimer();
     };
 
     this._stt.onFinal = (text) => {
@@ -149,48 +152,49 @@ class VoiceController {
       this._finalText = text;
       this._hasFinalText = true;
       this._lastText = text;
-      this._ui.showInterim(text);
+      const display = this._buffer ? this._buffer + ' ' + text : text;
+      this._ui.showInterim(display);
     };
 
+    // v2.0: onEnd — 即送信せずバッファに蓄積＋STT自動リスタート
     this._stt.onEnd = () => {
-
-      // v1.8追加: STT即終了リトライ判定
       const duration = Date.now() - this._sttStartTime;
       const hasText = this._hasFinalText || (this._lastText && this._lastText.trim().length > 0);
 
+      // STT即終了リトライ（テキストなし＋短時間で終了）
       if (duration < this._STT_MIN_DURATION && !hasText && this._sttRetryCount < this._STT_MAX_RETRY) {
         this._sttRetryCount++;
         console.log(`[Voice] STT即終了(${duration}ms) → リトライ ${this._sttRetryCount}/${this._STT_MAX_RETRY}`);
         setTimeout(() => {
-          if (this._enabled) {
-            this._stt.start({ language: 'ja-JP' });
-          }
+          if (this._enabled) this._stt.start({ language: 'ja-JP' });
         }, 300);
         return;
       }
-      // リトライカウントをリセット（正常終了 or リトライ上限）
       this._sttRetryCount = 0;
 
       const text = this._hasFinalText
         ? this._finalText
         : (this._stt.stopAndGetText() || this._lastText);
-      console.log(`[Voice] onEnd: hasFinal=${this._hasFinalText} text="${text}" duration=${duration}ms`);
+      console.log(`[Voice] onEnd: hasFinal=${this._hasFinalText} text="${text}" dur=${duration}ms buf="${this._buffer}"`);
 
       if (text && text.trim().length > 0) {
-        this._lastText = text;
-        this._ui.showInterim(text + ' ⏳ 送信中...');
-        this._clearSilenceTimer();
-        this._resetSilenceTimer();
+        // v2.0: ノイズフィルタ — ピコン音対策
+        if (!this._isNoise(text.trim())) {
+          this._appendBuffer(text.trim());
+        } else {
+          console.log(`[Voice] ノイズフィルタ除外: "${text.trim()}"`);
+        }
+        // v2.0: STT自動リスタート（息継ぎ吸収の核心）
+        this._restartSTT();
       } else {
-        // v1.8.3: 音声モード中は自動リスタート（常時リスニング）
-        if (this._enabled) {
+        // テキストなし — 無音終了
+        if (this._buffer) {
+          // バッファにテキストがある→タイマー継続（STTリスタートだけする）
+          this._restartSTT();
+        } else if (this._enabled) {
           console.log('[Voice] 無音終了 → 自動リスタート待機');
           this._ui.showInterim('🎤 話しかけてね...');
-          setTimeout(() => {
-            if (this._enabled && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
-              this._stt.start({ language: 'ja-JP' });
-            }
-          }, 500);
+          this._restartSTT();
         } else {
           this._ui.updateMicState('idle');
           this._updateMeetingMicState('idle');
@@ -200,8 +204,8 @@ class VoiceController {
     };
 
     this._stt.onError = (error) => {
-      this._sttRetryCount = 0; // v1.8: エラー時はリトライカウントをリセット
-      this._clearSilenceTimer();
+      this._sttRetryCount = 0;
+      this._clearAllTimers();
       this._ui.updateMicState('error');
       this._updateMeetingMicState('error');
       this._ui.showStatus(error, 'error');
@@ -216,9 +220,9 @@ class VoiceController {
       this._ui.highlightSister(sisterId, true);
       this._ui.updateMicState('speaking');
       this._updateMeetingMicState('speaking');
-      // ハウリング防止 — TTS再生開始時にSTTを強制停止
+      // ハウリング防止 — TTS再生開始時にSTTとバッファタイマーを強制停止
       if (this._stt.isListening()) {
-        this._clearSilenceTimer();
+        this._clearAllTimers();
         this._stt.stop();
         this._lastText = '';
         console.log('[Voice] ハウリング防止: TTS再生中にSTT停止');
@@ -230,7 +234,8 @@ class VoiceController {
       if (this._playback.isQueuePlaying()) return;
       this._ui.updateMicState('idle');
       this._updateMeetingMicState('idle');
-      if (this._autoListen && this._enabled) {
+      // v2.0: TTS終了後は常にSTT自動リスタート（ハンズフリー体験）
+      if (this._enabled) {
         setTimeout(() => this.startListening(), 1200);
       }
     };
@@ -238,7 +243,8 @@ class VoiceController {
     this._playback.onQueueEnd = () => {
       this._ui.updateMicState('idle');
       this._updateMeetingMicState('idle');
-      if (this._autoListen && this._enabled) {
+      // v2.0: キュー全終了後もSTT自動リスタート
+      if (this._enabled) {
         setTimeout(() => this.startListening(), 1200);
       }
     };
@@ -256,44 +262,83 @@ class VoiceController {
   }
 
   // ═══════════════════════════════════════════
-  // 息継ぎ対策タイマー
+  // v2.0: バッファ方式＋ノイズフィルタ＋確認送信
   // ═══════════════════════════════════════════
 
-  /** 無音タイマーをリセット v1.5改修 - ハンズフリー時は長めに待つ */
-  _resetSilenceTimer() {
-    this._clearSilenceTimer();
-    const text = (this._lastText || '').trim();
-    // v1.9.2改善 - 常時リスニング中（_enabled）もハンズフリー同等の余裕を持たせる
-    const isRelaxed = this._autoListen || this._enabled;
-    const baseDelay = isRelaxed ? this._SILENCE_DELAY_HANDSFREE : this._SILENCE_DELAY;
-    // 短い発言（5文字未満）→ +1.5秒、長い発言（30文字以上）→ +2秒（考えながら喋ってる）
-    let delay = baseDelay;
-    if (text.length < 5) {
-      delay = baseDelay + 1500;
-    } else if (text.length >= 30) {
-      delay = baseDelay + 2000;
-    }
-    this._silenceTimer = setTimeout(() => {
-      this._silenceTimer = null;
-      const finalText = this._lastText.trim();
-      if (finalText) {
-        // v1.8.3: 送信前にクリア（stt.stop()→onEnd再発火での二重送信防止）
-        this._lastText = '';
-        this._hasFinalText = false;
-        this._finalText = '';
-        console.log(`[Voice] ${delay}ms無音 → 自動送信: "${finalText}"`);
-        this._stt.stop();
-        this._sendVoiceMessage(finalText);
-      }
-    }, delay);
+  /** バッファにテキストを追記＋バッファタイマーをリセット */
+  _appendBuffer(text) {
+    this._buffer = this._buffer ? this._buffer + ' ' + text : text;
+    this._lastBufferText = text;
+    this._ui.showInterim(this._buffer + ' 🎤...');
+    console.log(`[Voice] バッファ追記: "${text}" → 全体: "${this._buffer}"`);
+    this._resetBufferTimer();
   }
 
-  /** 無音タイマーをクリア */
-  _clearSilenceTimer() {
-    if (this._silenceTimer) {
-      clearTimeout(this._silenceTimer);
-      this._silenceTimer = null;
+  /** バッファタイマーをリセット（2.5秒後に確認→送信） */
+  _resetBufferTimer() {
+    if (this._bufferTimer) { clearTimeout(this._bufferTimer); this._bufferTimer = null; }
+    this._bufferTimer = setTimeout(() => {
+      this._bufferTimer = null;
+      if (!this._buffer) return;
+      // STTが動いてたら止める
+      if (this._stt.isListening()) this._stt.stop();
+      console.log(`[Voice] ${this._BUFFER_DELAY}ms無音 → 確認アニメ開始: "${this._buffer}"`);
+      this._startConfirmAndSend();
+    }, this._BUFFER_DELAY);
+  }
+
+  /** 確認アニメ（0.5秒光る）→ 送信 */
+  _startConfirmAndSend() {
+    const text = this._buffer.trim();
+    if (!text) return;
+    // 確認アニメ表示
+    this._ui.showSendCountdown(text);
+    this._confirmTimer = setTimeout(() => {
+      this._confirmTimer = null;
+      this._ui.hideSendCountdown();
+      // バッファクリアして送信
+      const sendText = this._buffer.trim();
+      this._buffer = '';
+      this._lastBufferText = '';
+      this._lastText = '';
+      this._hasFinalText = false;
+      this._finalText = '';
+      if (sendText) {
+        console.log(`[Voice] 確認完了 → 送信: "${sendText}"`);
+        this._sendVoiceMessage(sendText);
+      }
+    }, this._CONFIRM_DELAY);
+  }
+
+  /** v2.0: ノイズフィルタ — ピコン音のテキスト誤認識を除外 */
+  _isNoise(text) {
+    // 2文字以下は無視（ピコン「あ」「ん」「は」等）
+    if (text.length <= this._NOISE_MIN_LENGTH) {
+      console.log(`[Voice] ノイズ判定: "${text}" (${text.length}文字≦${this._NOISE_MIN_LENGTH})`);
+      return true;
     }
+    // 直前のバッファ追加テキストと完全一致は無視（ピコン繰り返し対策）
+    if (this._lastBufferText && text === this._lastBufferText) {
+      console.log(`[Voice] ノイズ判定: 直前と同じ "${text}"`);
+      return true;
+    }
+    return false;
+  }
+
+  /** v2.0: STT自動リスタート（TTS再生中でなければ） */
+  _restartSTT() {
+    setTimeout(() => {
+      if (this._enabled && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
+        this._stt.start({ language: 'ja-JP' });
+      }
+    }, 400);
+  }
+
+  /** 全タイマーをクリア */
+  _clearAllTimers() {
+    if (this._bufferTimer) { clearTimeout(this._bufferTimer); this._bufferTimer = null; }
+    if (this._confirmTimer) { clearTimeout(this._confirmTimer); this._confirmTimer = null; }
+    this._ui.hideSendCountdown();
   }
 
   // ═══════════════════════════════════════════
@@ -319,27 +364,42 @@ class VoiceController {
     if (!this._playback._ttsProvider.isAvailable()) {
       console.warn('[Voice] TTS未設定（Worker URL/認証トークンが必要）');
     }
-    console.log(`[Voice] 音声モード初期化完了（v1.8.3） cmd=${!!this._voiceCmd}`);
+    console.log(`[Voice] 音声モード初期化完了（v2.0 方針F） cmd=${!!this._voiceCmd}`);
   }
 
-  /** マイクボタン押下時の処理 */
+  /** マイクボタン押下時の処理 v2.0対応 */
   toggleListening() {
+    // v2.0: 確認アニメ中にタップ → キャンセル
+    if (this._confirmTimer) {
+      console.log('[Voice] 確認中にタップ → キャンセル');
+      this._clearAllTimers();
+      this._buffer = '';
+      this._lastBufferText = '';
+      this._forceIdleState();
+      this._ui.showStatus('⏹ キャンセルしました', 'info');
+      if (this._enabled) setTimeout(() => this.startListening(), 800);
+      return;
+    }
 
-    if (this._stt.isListening() || this._silenceTimer !== null) {
-      this._clearSilenceTimer();
-      const text = (this._lastText || '').trim();
-      this._enabled = false; // v1.8.3: 明示的停止 → 自動リスタート防止
+    if (this._stt.isListening() || this._bufferTimer !== null) {
+      this._clearAllTimers();
+      const bufText = this._buffer.trim();
+      const curText = (this._lastText || '').trim();
+      const allText = bufText ? bufText + (curText ? ' ' + curText : '') : curText;
+      this._enabled = false;
       this._stt.stop();
+      this._buffer = '';
+      this._lastBufferText = '';
       this._lastText = '';
-      if (text) {
-        this._enabled = true; // テキストありなら送信後に音声モード継続
-        this._sendVoiceMessage(text);
+      if (allText) {
+        this._enabled = true;
+        this._sendVoiceMessage(allText);
       } else {
         this._forceIdleState();
       }
     } else if (this._playback.isPlaying() || this._playback.isQueuePlaying()) {
       this._playback.stop();
-      this._enabled = false; // v1.8.3: TTS停止も明示的停止
+      this._enabled = false;
       this._forceIdleState();
     } else {
       this.startListening();
@@ -351,20 +411,20 @@ class VoiceController {
     this._ui.updateMicState('idle');
     this._updateMeetingMicState('idle');
     this._ui.hideInterim();
+    this._ui.hideSendCountdown();
   }
 
-  /** 音声認識を開始 */
+  /** 音声認識を開始 v2.0: バッファクリアはしない（継続蓄積を許可） */
   startListening() {
     this._enabled = true;
     this._lastText = '';
-    this._sttRetryCount = 0; // v1.8: リトライカウントリセット
-    this._clearSilenceTimer();
+    this._sttRetryCount = 0;
     this._stt.start({ language: 'ja-JP' });
   }
 
   /** 音声認識を停止 */
   stopListening() {
-    this._clearSilenceTimer();
+    this._clearAllTimers();
     this._stt.stop();
   }
 
@@ -408,10 +468,13 @@ class VoiceController {
   /** 音声モードを完全停止 */
   destroy() {
     this._enabled = false;
-    this._clearSilenceTimer();
+    this._clearAllTimers();
+    this._buffer = '';
+    this._lastBufferText = '';
     this._stt.stop();
     this._playback.stop();
     this._ui.hideInterim();
+    this._ui.hideSendCountdown();
   }
 
   // ═══════════════════════════════════════════
