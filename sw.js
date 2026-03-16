@@ -60,7 +60,8 @@
 // v2.60 2026-03-16 - 蓄積中のSTT再スタートでテキスト・タイマーが消える問題修正
 // v2.61 2026-03-16 - continuous:trueでピコンピコン根本解決＋コード大幅簡素化
 // v2.62 2026-03-16 - voice-input/web-speech-providerをv2.57時点に復元＋voice-command v1.3のみ維持
-const CACHE_NAME = 'cocomitalk-v2.62';
+// v2.63 2026-03-16 - 息継ぎ対策v2: onEnd蓄積＋STT再スタート（web-speech-providerは変更なし）
+const CACHE_NAME = 'cocomitalk-v2.63';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
