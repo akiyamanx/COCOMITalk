@@ -154,8 +154,10 @@ const MemoryImportUI = (() => {
     _showStatus(`📤 ${memories.length}件を投入中...`, 'loading');
     const result = await _callImportAPI({ memories });
     if (result.success) {
-      _showStatus(`✅ ${result.imported}件投入成功！` +
-        (result.errors > 0 ? ` （${result.errors}件エラー）` : ''), 'success');
+      let msg = `✅ ${result.imported}件投入成功！`;
+      if (result.skipped > 0) msg += `（${result.skipped}件重複スキップ）`;
+      if (result.errors > 0) msg += `（${result.errors}件エラー）`;
+      _showStatus(msg, 'success');
     } else {
       _showStatus(`❌ ${result.error || '投入失敗'}`, 'error');
     }
@@ -254,8 +256,10 @@ const MemoryImportUI = (() => {
     _showStatus(`📤 ${selected.length}件を投入中...`, 'loading');
     const result = await _callImportAPI({ memories: selected });
     if (result.success) {
-      _showStatus(`✅ ${result.imported}件投入成功！` +
-        (result.errors > 0 ? ` （${result.errors}件エラー）` : ''), 'success');
+      let msg = `✅ ${result.imported}件投入成功！`;
+      if (result.skipped > 0) msg += `（${result.skipped}件重複スキップ）`;
+      if (result.errors > 0) msg += `（${result.errors}件エラー）`;
+      _showStatus(msg, 'success');
     } else {
       _showStatus(`❌ ${result.error || '投入失敗'}`, 'error');
     }
@@ -266,17 +270,8 @@ const MemoryImportUI = (() => {
   // ============================================================
   async function _callImportAPI(body) {
     try {
-      const url = ApiCommon.getWorkerURL() + '/memory-import';
-      const token = ApiCommon.getAuthToken();
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-COCOMI-AUTH': token,
-        },
-        body: JSON.stringify(body),
-      });
-      return await res.json();
+      // ApiCommon.callAPIを使って認証ヘッダーを自動付与
+      return await ApiCommon.callAPI('memory-import', body);
     } catch (e) {
       return { success: false, error: e.message };
     }
