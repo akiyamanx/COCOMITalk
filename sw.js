@@ -65,7 +65,8 @@
 // v2.66 2026-03-16 - 方針F: voice-input v2.0バッファ方式＋voice-ui v1.2送信カウントダウン
 // v2.67 2026-03-16 - continuous:true復活＋ノイズフィルタ（ピコン音は起動時1回のみに）
 // v2.68 2026-03-16 - continuous:false復帰（v2.0バッファ方式）＋web-speech-provider v1.2復元
-const CACHE_NAME = 'cocomitalk-v2.68';
+// v2.69 2026-03-16 - バッファ待機時間2.5秒→3.5秒（息継ぎ余裕拡大）
+const CACHE_NAME = 'cocomitalk-v2.69';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

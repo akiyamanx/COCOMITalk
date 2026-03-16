@@ -18,7 +18,7 @@ class VoiceController {
     this._bufferTimer = null;
     this._confirmTimer = null;
     this._lastBufferText = '';
-    this._BUFFER_DELAY = 2500;
+    this._BUFFER_DELAY = 3500;   // v2.0: 3.5秒待機（息継ぎ吸収）
     this._CONFIRM_DELAY = 500;
     this._NOISE_MIN_LENGTH = 2;
     this._lastText = '';
