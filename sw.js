@@ -63,7 +63,8 @@
 // v2.63 2026-03-16 - 息継ぎ対策v2: onEnd蓄積＋STT再スタート（web-speech-providerは変更なし）
 // v2.64 2026-03-16 - v2.57ベースに復元＋無音タイマー延長のみ（5秒/9秒）蓄積・再スタートなし
 // v2.66 2026-03-16 - 方針F: voice-input v2.0バッファ方式＋voice-ui v1.2送信カウントダウン
-const CACHE_NAME = 'cocomitalk-v2.66';
+// v2.67 2026-03-16 - continuous:true復活＋ノイズフィルタ（ピコン音は起動時1回のみに）
+const CACHE_NAME = 'cocomitalk-v2.67';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

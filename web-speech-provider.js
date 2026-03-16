@@ -1,11 +1,10 @@
-// web-speech-provider.js v1.2
+// web-speech-provider.js v1.3
 // このファイルはWeb Speech API（ブラウザ内蔵・無料）によるSTT実装
 // SpeechProviderインターフェースに準拠
-// Galaxy S22 UltraのChrome/Samsung Browserで動作確認想定
-
 // v1.0 新規作成 - Step 5b Web Speech API STT実装
-// v1.1 修正 - continuous:false + 上書き方式（繰り返し問題の修正試行）
+// v1.1 修正 - continuous:false + 上書き方式
 // v1.2 修正 - デバッグログ大量追加＋画面表示＋onresult重複防止強化
+// v1.3 改修 - continuous:true（ピコン音削減）＋finalを毎回コールバック
 
 /**
  * Web Speech APIプロバイダー
@@ -19,7 +18,6 @@ class WebSpeechProvider extends SpeechProvider {
     this._finalTranscript = '';
     // v1.2追加 - デバッグ用カウンター
     this._resultCount = 0;
-    this._finalReceived = false;
     // v1.2追加 - 画面デバッグログ（デフォルト非表示）
     this._debugEl = null;
     this._debugLogs = [];
@@ -68,8 +66,10 @@ class WebSpeechProvider extends SpeechProvider {
 
     // 設定
     recognition.lang = 'ja-JP';
-    recognition.continuous = false;       // 1発話で停止
-    recognition.interimResults = true;    // 途中経過あり
+    // v1.3変更: continuous:true — STTを止めずに複数発話を受け取る
+    // ピコン音はstart()時に1回だけ鳴る（再スタート不要なので以降鳴らない）
+    recognition.continuous = true;
+    recognition.interimResults = true;
     recognition.maxAlternatives = 1;
 
     // --- イベントハンドラ ---
@@ -77,8 +77,7 @@ class WebSpeechProvider extends SpeechProvider {
       this._listening = true;
       this._finalTranscript = '';
       this._resultCount = 0;
-      this._finalReceived = false;
-      this._debugLog('=== 認識開始 ===');
+      this._debugLog('=== 認識開始 (continuous:true) ===');
       if (this.onStart) this.onStart();
     };
 
@@ -90,10 +89,13 @@ class WebSpeechProvider extends SpeechProvider {
 
     recognition.onerror = (event) => {
       this._debugLog(`ERROR: ${event.error}`);
+      // v1.3: no-speechはcontinuous:trueでも発生しうる — 致命的ではない
+      if (event.error === 'no-speech') {
+        this._debugLog('no-speech — 継続中');
+        return;
+      }
       this._listening = false;
-
       const errorMessages = {
-        'no-speech': 'マイクに声が入りませんでした',
         'audio-capture': 'マイクが使えません。ブラウザの設定を確認してください',
         'not-allowed': 'マイクの使用が許可されていません',
         'network': 'ネットワークエラーが発生しました',
@@ -104,14 +106,13 @@ class WebSpeechProvider extends SpeechProvider {
       if (this.onError) this.onError(message);
     };
 
+    // v1.3改修: continuous:trueではfinalが複数回来る — 毎回コールバック
     recognition.onresult = (event) => {
       this._resultCount++;
-
-      // v1.2 デバッグ: イベント全体の構造をログ
       this._debugLog(`--- onresult #${this._resultCount} ---`);
       this._debugLog(`  resultIndex=${event.resultIndex} results.length=${event.results.length}`);
 
-      // v1.2 デバッグ: 全resultの中身を表示
+      // デバッグ: 全resultの中身を表示
       for (let i = 0; i < event.results.length; i++) {
         const r = event.results[i];
         const txt = r[0].transcript;
@@ -119,20 +120,13 @@ class WebSpeechProvider extends SpeechProvider {
         this._debugLog(`  [${i}] isFinal=${r.isFinal} conf=${conf} "${txt}"`);
       }
 
-      // v1.2 重要: finalが既に受信済みなら無視（モバイルChromeの二重発火対策）
-      if (this._finalReceived) {
-        this._debugLog('  >>> final既受信 → スキップ');
-        return;
-      }
-
       let interimTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
-          // v1.2: finalは最初の1回だけ採用
+          // v1.3: finalは毎回採用（continuous:trueでは発話区切りごとに来る）
           this._finalTranscript = result[0].transcript;
-          this._finalReceived = true;
           this._debugLog(`  >>> FINAL採用: "${this._finalTranscript}"`);
           if (this.onFinal) this.onFinal(this._finalTranscript);
         } else {
@@ -141,7 +135,7 @@ class WebSpeechProvider extends SpeechProvider {
       }
 
       // 途中経過コールバック
-      if (!this._finalReceived && interimTranscript && this.onInterim) {
+      if (interimTranscript && this.onInterim) {
         this.onInterim(interimTranscript);
       }
     };
@@ -181,7 +175,6 @@ class WebSpeechProvider extends SpeechProvider {
 
     this._finalTranscript = '';
     this._resultCount = 0;
-    this._finalReceived = false;
 
     try {
       this._recognition.start();

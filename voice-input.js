@@ -1,7 +1,8 @@
-// voice-input.js v2.0
+// voice-input.js v2.1
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
 // UI→voice-ui.js / 送信→voice-sender.js（mixin）
 // v2.0 方針F: バッファ蓄積＋2.5秒待機＋ノイズフィルタ＋確認アニメ
+// v2.1 改修: continuous:true対応（STT再スタート不要→ピコン音は起動時の1回だけ）
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS） */
 class VoiceController {
@@ -27,11 +28,7 @@ class VoiceController {
     this._NOISE_MIN_LENGTH = 2;  // これ以下の文字数は無視（ピコン「あ」「ん」対策）
     // 最後に受け取ったテキスト（interim表示用）
     this._lastText = '';
-    // STT即終了リトライ用
     this._sttStartTime = 0;
-    this._sttRetryCount = 0;
-    this._STT_MIN_DURATION = 500;
-    this._STT_MAX_RETRY = 2;
 
     this._setupVoiceCommand();
     this._setupCallbacks();
@@ -114,87 +111,55 @@ class VoiceController {
    * STT/TTSのコールバック設定
    */
   _setupCallbacks() {
-    // --- STTコールバック ---
-    this._hasFinalText = false;
-    this._finalText = '';
+    // --- STTコールバック（v2.1: continuous:true対応） ---
 
     this._stt.onStart = () => {
       this._ui.updateMicState('listening');
       this._updateMeetingMicState('listening');
-      // v2.0: バッファ中は「続けて聞いてるよ」表示
       if (this._buffer) {
         this._ui.showInterim(this._buffer + ' 🎤...');
       } else {
         this._ui.showInterim('🎤 聞いてるよ...');
       }
       this._lastText = '';
-      this._finalText = '';
-      this._hasFinalText = false;
       this._sttStartTime = Date.now();
     };
 
     this._stt.onInterim = (text) => {
-      if (this._hasFinalText) return;
-      // v2.0: バッファ＋現在のinterimを合わせて表示
+      // v2.1: continuous:trueではinterimが常に来る。バッファ＋interimを表示
       const display = this._buffer ? this._buffer + ' ' + text : text;
       this._ui.showInterim(display);
       this._lastText = text;
-      // v2.0: interimが来てる=まだ話し中。バッファタイマーをリセット
+      // interimが来てる=まだ話し中。バッファタイマーをリセット
       if (this._bufferTimer) this._resetBufferTimer();
     };
 
+    // v2.1: continuous:trueではonFinalが発話区切りごとに来る（核心部分）
     this._stt.onFinal = (text) => {
-      if (this._hasFinalText) {
-        console.log(`[Voice] final重複無視: "${text}"`);
+      console.log(`[Voice] 確定テキスト: "${text}"`);
+      // ノイズフィルタ
+      if (this._isNoise(text.trim())) {
+        console.log(`[Voice] ノイズフィルタ除外: "${text.trim()}"`);
         return;
       }
-      console.log(`[Voice] 確定テキスト: "${text}"`);
-      this._finalText = text;
-      this._hasFinalText = true;
-      this._lastText = text;
-      const display = this._buffer ? this._buffer + ' ' + text : text;
-      this._ui.showInterim(display);
+      // バッファに追記＋タイマーリセット
+      this._appendBuffer(text.trim());
     };
 
-    // v2.0: onEnd — 即送信せずバッファに蓄積＋STT自動リスタート
+    // v2.1: continuous:trueではonEndは明示的stop()時のみ発火
     this._stt.onEnd = () => {
-      const duration = Date.now() - this._sttStartTime;
-      const hasText = this._hasFinalText || (this._lastText && this._lastText.trim().length > 0);
-
-      // STT即終了リトライ（テキストなし＋短時間で終了）
-      if (duration < this._STT_MIN_DURATION && !hasText && this._sttRetryCount < this._STT_MAX_RETRY) {
-        this._sttRetryCount++;
-        console.log(`[Voice] STT即終了(${duration}ms) → リトライ ${this._sttRetryCount}/${this._STT_MAX_RETRY}`);
-        setTimeout(() => {
-          if (this._enabled) this._stt.start({ language: 'ja-JP' });
-        }, 300);
-        return;
-      }
-      this._sttRetryCount = 0;
-
-      const text = this._hasFinalText
-        ? this._finalText
-        : (this._stt.stopAndGetText() || this._lastText);
-      console.log(`[Voice] onEnd: hasFinal=${this._hasFinalText} text="${text}" dur=${duration}ms buf="${this._buffer}"`);
-
-      if (text && text.trim().length > 0) {
-        // v2.0: ノイズフィルタ — ピコン音対策
-        if (!this._isNoise(text.trim())) {
-          this._appendBuffer(text.trim());
-        } else {
-          console.log(`[Voice] ノイズフィルタ除外: "${text.trim()}"`);
-        }
-        // v2.0: STT自動リスタート（息継ぎ吸収の核心）
-        this._restartSTT();
-      } else {
-        // テキストなし — 無音終了
-        if (this._buffer) {
-          // バッファにテキストがある→タイマー継続（STTリスタートだけする）
-          this._restartSTT();
-        } else if (this._enabled) {
-          console.log('[Voice] 無音終了 → 自動リスタート待機');
+      console.log(`[Voice] onEnd: buf="${this._buffer}" enabled=${this._enabled}`);
+      // バッファにテキストがあれば送信タイマーは既に動いてるのでそのまま
+      if (!this._buffer && !this._bufferTimer) {
+        if (this._enabled) {
+          // v2.1: 予期せぬSTT終了（ネットワーク切断等）→ 再スタート
+          console.log('[Voice] 予期せぬSTT終了 → 再スタート');
           this._ui.showInterim('🎤 話しかけてね...');
-          this._restartSTT();
+          setTimeout(() => {
+            if (this._enabled && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
+              this._stt.start({ language: 'ja-JP' });
+            }
+          }, 500);
         } else {
           this._ui.updateMicState('idle');
           this._updateMeetingMicState('idle');
@@ -291,6 +256,8 @@ class VoiceController {
   _startConfirmAndSend() {
     const text = this._buffer.trim();
     if (!text) return;
+    // v2.1: 送信前にSTTを停止（送信中に新テキストが入るのを防ぐ）
+    if (this._stt.isListening()) this._stt.stop();
     // 確認アニメ表示
     this._ui.showSendCountdown(text);
     this._confirmTimer = setTimeout(() => {
@@ -301,8 +268,6 @@ class VoiceController {
       this._buffer = '';
       this._lastBufferText = '';
       this._lastText = '';
-      this._hasFinalText = false;
-      this._finalText = '';
       if (sendText) {
         console.log(`[Voice] 確認完了 → 送信: "${sendText}"`);
         this._sendVoiceMessage(sendText);
@@ -323,15 +288,6 @@ class VoiceController {
       return true;
     }
     return false;
-  }
-
-  /** v2.0: STT自動リスタート（TTS再生中でなければ） */
-  _restartSTT() {
-    setTimeout(() => {
-      if (this._enabled && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
-        this._stt.start({ language: 'ja-JP' });
-      }
-    }, 400);
   }
 
   /** 全タイマーをクリア */
@@ -364,7 +320,7 @@ class VoiceController {
     if (!this._playback._ttsProvider.isAvailable()) {
       console.warn('[Voice] TTS未設定（Worker URL/認証トークンが必要）');
     }
-    console.log(`[Voice] 音声モード初期化完了（v2.0 方針F） cmd=${!!this._voiceCmd}`);
+    console.log(`[Voice] 音声モード初期化完了（v2.1 continuous:true） cmd=${!!this._voiceCmd}`);
   }
 
   /** マイクボタン押下時の処理 v2.0対応 */
