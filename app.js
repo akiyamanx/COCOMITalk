@@ -36,6 +36,8 @@ const App = (() => {
     if (typeof MeetingArchiveUI !== 'undefined') MeetingArchiveUI.init();
     // v1.7追加 - メモリー管理UI初期化（Step 4補完）
     if (typeof MemoryUI !== 'undefined') MemoryUI.init();
+    // v2.5追加 - 記憶インポートUI初期化
+    if (typeof MemoryImportUI !== 'undefined') MemoryImportUI.init();
     // v1.8追加 - 検索UI初期化（Phase 2a）
     if (typeof SearchUI !== 'undefined') SearchUI.init();
     // v1.3追加 - 音声コントローラー初期化（Step 5b）

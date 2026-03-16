@@ -66,7 +66,8 @@
 // v2.67 2026-03-16 - continuous:true復活＋ノイズフィルタ（ピコン音は起動時1回のみに）
 // v2.68 2026-03-16 - continuous:false復帰（v2.0バッファ方式）＋web-speech-provider v1.2復元
 // v2.69 2026-03-16 - バッファ待機時間2.5秒→3.5秒（息継ぎ余裕拡大）
-const CACHE_NAME = 'cocomitalk-v2.69';
+// v2.70 2026-03-16 - 記憶インポートUI追加（memory-import-ui.js + import.js v1.1）
+const CACHE_NAME = 'cocomitalk-v2.70';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -95,6 +96,7 @@ const CACHE_FILES = [
   './meeting-ui.js',
   './meeting-archive-ui.js',
   './memory-ui.js',
+  './memory-import-ui.js',
   './memory-ui-styles.css',
   './search-ui.js',
   './search-ui-styles.css',
