@@ -1,4 +1,4 @@
-// web-speech-provider.js v1.3
+// web-speech-provider.js v1.2
 // このファイルはWeb Speech API（ブラウザ内蔵・無料）によるSTT実装
 // SpeechProviderインターフェースに準拠
 // Galaxy S22 UltraのChrome/Samsung Browserで動作確認想定
@@ -6,7 +6,6 @@
 // v1.0 新規作成 - Step 5b Web Speech API STT実装
 // v1.1 修正 - continuous:false + 上書き方式（繰り返し問題の修正試行）
 // v1.2 修正 - デバッグログ大量追加＋画面表示＋onresult重複防止強化
-// v1.3 修正 - continuous:trueに変更（ピコンピコン対策 — STT再スタート不要化）
 
 /**
  * Web Speech APIプロバイダー
@@ -69,8 +68,7 @@ class WebSpeechProvider extends SpeechProvider {
 
     // 設定
     recognition.lang = 'ja-JP';
-    // v1.3変更: continuous:true（STTが自動終了しない → 再スタート不要 → ピコン音なし）
-    recognition.continuous = true;
+    recognition.continuous = false;       // 1発話で停止
     recognition.interimResults = true;    // 途中経過あり
     recognition.maxAlternatives = 1;
 
@@ -121,15 +119,21 @@ class WebSpeechProvider extends SpeechProvider {
         this._debugLog(`  [${i}] isFinal=${r.isFinal} conf=${conf} "${txt}"`);
       }
 
+      // v1.2 重要: finalが既に受信済みなら無視（モバイルChromeの二重発火対策）
+      if (this._finalReceived) {
+        this._debugLog('  >>> final既受信 → スキップ');
+        return;
+      }
+
       let interimTranscript = '';
 
       for (let i = event.resultIndex; i < event.results.length; i++) {
         const result = event.results[i];
         if (result.isFinal) {
-          // v1.3改善: continuous:trueでは複数finalが順番に来る（息継ぎのたび）
-          // 蓄積ではなく最新のfinalをコールバック通知
+          // v1.2: finalは最初の1回だけ採用
           this._finalTranscript = result[0].transcript;
-          this._debugLog(`  >>> FINAL: "${this._finalTranscript}"`);
+          this._finalReceived = true;
+          this._debugLog(`  >>> FINAL採用: "${this._finalTranscript}"`);
           if (this.onFinal) this.onFinal(this._finalTranscript);
         } else {
           interimTranscript += result[0].transcript;
@@ -137,7 +141,7 @@ class WebSpeechProvider extends SpeechProvider {
       }
 
       // 途中経過コールバック
-      if (interimTranscript && this.onInterim) {
+      if (!this._finalReceived && interimTranscript && this.onInterim) {
         this.onInterim(interimTranscript);
       }
     };
