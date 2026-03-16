@@ -142,11 +142,17 @@ class VoiceController {
     this._stt.onStart = () => {
       this._ui.updateMicState('listening');
       this._updateMeetingMicState('listening');
-      this._ui.showInterim('🎤 聞いてるよ...');
-      this._lastText = '';
+      // v1.9.4改善: 蓄積中はクリアしない（息継ぎ後のSTT再スタートで消えてしまう対策）
+      if (this._accumulatedText) {
+        this._ui.showInterim(this._accumulatedText + ' 🎤...');
+        // _lastText, _finalText, 無音タイマーはそのまま維持
+      } else {
+        this._ui.showInterim('🎤 聞いてるよ...');
+        this._lastText = '';
+        this._clearSilenceTimer();
+      }
       this._finalText = '';
       this._hasFinalText = false;
-      this._clearSilenceTimer();
       this._sttStartTime = Date.now(); // v1.8: STT開始時刻を記録
     };
 
