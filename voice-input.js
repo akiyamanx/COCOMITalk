@@ -1,4 +1,4 @@
-// voice-input.js v1.9.3
+// voice-input.js v1.9.4
 // このファイルは音声会話の全体フロー制御を担当する
 // マイクボタン→STT→自動送信→TTS再生のフローを管理
 // UI操作はvoice-ui.jsのVoiceUIクラスに委譲する
@@ -16,6 +16,7 @@
 // v1.9.1 追加 - Step 6 Phase 1: 「覚えて」コマンドでチャット記憶手動保存
 // v1.9.2 修正 - 全コマンドコールバック: _forceIdleState→showStatusの順に統一（表示即消え防止）
 // v1.9.3 改善 - ピコンピコン対策＋無音タイマー延長＋送信キャンセル音声コマンド対応
+// v1.9.4 改善 - 息継ぎ対策: STTセッション跨ぎテキスト蓄積＋再スタートで途切れ防止
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→送信→TTS→マイク待機） */
 class VoiceController {
@@ -36,8 +37,9 @@ class VoiceController {
     // v1.5改善: ハンズフリー時は長め（運転中は考えながら話す）
     // v1.9.2改善 - 常時リスニング中もゆったり待つ＋息継ぎ・考え中に対応
     // v1.9.3改善 - さらに延長（息継ぎで途切れて誤送信する対策）
-    this._SILENCE_DELAY = 15000;           // 通常: 15秒
-    this._SILENCE_DELAY_HANDSFREE = 20000; // ハンズフリー/常時リスニング: 20秒
+    // v1.9.4改善 - STT蓄積方式に変更したので適正値に調整
+    this._SILENCE_DELAY = 4000;            // 通常: 4秒（息継ぎはSTT蓄積で吸収）
+    this._SILENCE_DELAY_HANDSFREE = 7000;  // ハンズフリー/常時リスニング: 7秒
     // 最後に受け取ったテキスト（タイマー用）
     this._lastText = '';
     // v1.8追加: STT即終了リトライ用
@@ -48,6 +50,8 @@ class VoiceController {
     // v1.9.3追加: 無音リスタート連鎖防止（ピコンピコン対策）
     this._silentRestartCount = 0;
     this._SILENT_RESTART_MAX = 3; // 3回連続無音 → リスニング一時停止
+    // v1.9.4追加: 息継ぎ対策 — STTセッション跨ぎでテキスト蓄積
+    this._accumulatedText = '';
 
     this._setupVoiceCommand(); // v1.8: VoiceCommandモジュール初期化
     this._setupCallbacks();
@@ -192,10 +196,22 @@ class VoiceController {
 
       if (text && text.trim().length > 0) {
         this._silentRestartCount = 0; // v1.9.3: テキストありならカウントリセット
-        this._lastText = text;
-        this._ui.showInterim(text + ' ⏳ 送信中...');
+        // v1.9.4改善: 即送信せず蓄積してSTT再スタート（息継ぎ対策）
+        // 「ねえねえ」→息継ぎ→「ここちゃんさ」を1つの発言として蓄積
+        this._accumulatedText += (this._accumulatedText ? ' ' : '') + text.trim();
+        this._lastText = this._accumulatedText;
+        this._ui.showInterim(this._accumulatedText + ' 🎤...');
+        // 無音タイマーをリセット（蓄積テキスト全体に対して待機）
         this._clearSilenceTimer();
         this._resetSilenceTimer();
+        // STTを再スタートして続きを待つ
+        if (this._enabled) {
+          setTimeout(() => {
+            if (this._enabled && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
+              this._stt.start({ language: 'ja-JP' });
+            }
+          }, 300);
+        }
       } else {
         // v1.8.3: 音声モード中は自動リスタート（常時リスニング）
         // v1.9.3改善: 連続無音リスタート制限（ピコンピコン対策）
@@ -304,12 +320,14 @@ class VoiceController {
     }
     this._silenceTimer = setTimeout(() => {
       this._silenceTimer = null;
-      const finalText = this._lastText.trim();
+      // v1.9.4改善: 蓄積テキスト（_accumulatedText）を送信
+      const finalText = (this._accumulatedText || this._lastText || '').trim();
       if (finalText) {
-        // v1.8.3: 送信前にクリア（stt.stop()→onEnd再発火での二重送信防止）
+        // 送信前にすべてクリア（stt.stop()→onEnd再発火での二重送信防止）
         this._lastText = '';
         this._hasFinalText = false;
         this._finalText = '';
+        this._accumulatedText = '';
         console.log(`[Voice] ${delay}ms無音 → 自動送信: "${finalText}"`);
         this._stt.stop();
         this._sendVoiceMessage(finalText);
@@ -356,10 +374,12 @@ class VoiceController {
 
     if (this._stt.isListening() || this._silenceTimer !== null) {
       this._clearSilenceTimer();
-      const text = (this._lastText || '').trim();
+      // v1.9.4改善: 蓄積テキストも含めて送信
+      const text = (this._accumulatedText || this._lastText || '').trim();
       this._enabled = false; // v1.8.3: 明示的停止 → 自動リスタート防止
       this._stt.stop();
       this._lastText = '';
+      this._accumulatedText = '';
       if (text) {
         this._enabled = true; // テキストありなら送信後に音声モード継続
         this._sendVoiceMessage(text);
@@ -386,6 +406,7 @@ class VoiceController {
   startListening() {
     this._enabled = true;
     this._lastText = '';
+    this._accumulatedText = ''; // v1.9.4: 蓄積テキストもクリア
     this._sttRetryCount = 0; // v1.8: リトライカウントリセット
     this._silentRestartCount = 0; // v1.9.3: 無音カウントリセット
     this._clearSilenceTimer();

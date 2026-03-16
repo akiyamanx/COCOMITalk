@@ -56,7 +56,8 @@
 // v2.56 2026-03-16 - memory-ui v1.5 JST表示対応
 // v2.57 2026-03-16 - グループモードファイル添付対応（chat-core v1.9 + chat-group v1.5）
 // v2.58 2026-03-16 - ピコンピコン対策＋送信キャンセル音声コマンド＋無音タイマー延長
-const CACHE_NAME = 'cocomitalk-v2.58';
+// v2.59 2026-03-16 - 息継ぎ対策: STTセッション跨ぎテキスト蓄積で途切れ送信防止
+const CACHE_NAME = 'cocomitalk-v2.59';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
