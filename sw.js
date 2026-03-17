@@ -70,7 +70,8 @@
 // v2.71 2026-03-17 - TTS途中切れバグ修正（voice-input.js v2.1 TTS待機フラグ）
 // v2.72 2026-03-18 - Whisper onFinal→バッファ直接蓄積修正（自動送信復旧）
 // v2.73 2026-03-18 - Whisper無音検出: 閾値35＋連続3回判定（環境音誤検出対策）
-const CACHE_NAME = 'cocomitalk-v2.73';
+// v2.74 2026-03-18 - Whisperハルシネーション対策（prompt＋定型文フィルタ＋小データスキップ）
+const CACHE_NAME = 'cocomitalk-v2.74';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

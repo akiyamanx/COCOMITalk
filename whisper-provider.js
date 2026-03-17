@@ -296,26 +296,40 @@ class WhisperProvider extends SpeechProvider {
     const mimeType = this._getSupportedMimeType();
     const ext = mimeType.includes('webm') ? 'webm' : 'mp4';
     const blob = new Blob(this._chunks, { type: mimeType });
-    this._chunks = []; // チャンクをクリア
+    this._chunks = [];
     this._debugLog(`API送信: ${(blob.size / 1024).toFixed(1)}KB (${ext})`);
+
+    // 小さすぎる音声データはスキップ（無音に近い→ハルシネーション防止）
+    if (blob.size < 3000) {
+      this._debugLog(`データ小さすぎ（${blob.size}B）→ スキップ`);
+      this._afterWhisperResponse();
+      return;
+    }
 
     try {
       const formData = new FormData();
       formData.append('file', blob, `audio.${ext}`);
       formData.append('model', 'whisper-1');
       formData.append('language', 'ja');
+      // ハルシネーション抑制: promptでコンテキストを与える
+      formData.append('prompt', 'COCOMITalkでの日常会話。');
 
       const result = await ApiCommon.callAPI('whisper', formData, { isFormData: true });
 
       if (result.text && result.text.trim()) {
-        this._debugLog(`認識結果: "${result.text.trim()}"`);
-        if (this.onFinal) this.onFinal(result.text.trim());
+        const text = result.text.trim();
+        // Whisperハルシネーション（無音時に定型文を生成する既知の癖）をフィルタ
+        if (this._isHallucination(text)) {
+          this._debugLog(`ハルシネーション除外: "${text}"`);
+        } else {
+          this._debugLog(`認識結果: "${text}"`);
+          if (this.onFinal) this.onFinal(text);
+        }
       } else {
         this._debugLog('認識結果: 空（無音と判定）');
       }
     } catch (err) {
       this._debugLog(`API送信エラー: ${err.message}`);
-      // エラーでも録音は続行（ネットワーク一時障害を許容）
     }
 
     this._afterWhisperResponse();
@@ -336,6 +350,18 @@ class WhisperProvider extends SpeechProvider {
   // ═══════════════════════════════════════════
   // ユーティリティ
   // ═══════════════════════════════════════════
+
+  /** Whisperのハルシネーション（無音時に勝手に生成される定型文）を判定 */
+  _isHallucination(text) {
+    const patterns = [
+      /ご視聴/, /ご清聴/, /チャンネル登録/, /高評価/,
+      /お願いします/, /ありがとうございました$/,
+      /字幕/, /翻訳/, /エンディング/, /提供/,
+      /BGM/, /Music/, /Subtitles/i,
+      /^\s*\.+\s*$/, /^\s*。+\s*$/, /^\s*…+\s*$/,
+    ];
+    return patterns.some(p => p.test(text));
+  }
 
   /** ブラウザがサポートするMIMEタイプを取得 */
   _getSupportedMimeType() {
