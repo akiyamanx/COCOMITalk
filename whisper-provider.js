@@ -27,8 +27,8 @@ class WhisperProvider extends SpeechProvider {
 
     // 設定値
     this._SILENCE_THRESHOLD = 35;    // 無音判定の音量閾値（0-255、環境音を除外するため高め）
-    this._SILENCE_DURATION = 1500;   // 無音継続でAPI送信（ms）
-    this._MAX_RECORD_TIME = 10000;   // 最大録音時間（ms）— 長話対策
+    this._SILENCE_DURATION = 2500;   // 無音継続でAPI送信（ms）— 息継ぎ1〜2秒を吸収
+    this._MAX_RECORD_TIME = 15000;   // 最大録音時間（ms）— 長話でも余裕
     this._MIN_RECORD_TIME = 800;     // 最小録音時間（ms）— 短すぎる音声を無視
     this._VOLUME_CHECK_MS = 100;     // 音量チェック間隔（ms）
     this._VOICE_START_COUNT = 3;     // 発話開始に必要な連続検出回数（300ms）
@@ -354,11 +354,11 @@ class WhisperProvider extends SpeechProvider {
   /** Whisperのハルシネーション（無音時に勝手に生成される定型文）を判定 */
   _isHallucination(text) {
     const patterns = [
-      /ご視聴/, /ご清聴/, /チャンネル登録/, /高評価/,
-      /お願いします/, /ありがとうございました$/,
-      /字幕/, /翻訳/, /エンディング/, /提供/,
-      /BGM/, /Music/, /Subtitles/i,
-      /^\s*\.+\s*$/, /^\s*。+\s*$/, /^\s*…+\s*$/,
+      /ご視聴/, /ご清聴/, /ご覧いただき/, /チャンネル登録/, /高評価/,
+      /お願いします$/, /ありがとうございました$/, /ありがとうございます$/,
+      /字幕/, /翻訳/, /エンディング/, /提供/, /次回/, /おわり/,
+      /BGM/, /Music/, /Subtitles/i, /Subscribe/i, /Thank you/i,
+      /^\s*[.。…\s]+\s*$/, // ドットや省略記号のみ
     ];
     return patterns.some(p => p.test(text));
   }

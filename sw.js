@@ -71,7 +71,8 @@
 // v2.72 2026-03-18 - Whisper onFinal→バッファ直接蓄積修正（自動送信復旧）
 // v2.73 2026-03-18 - Whisper無音検出: 閾値35＋連続3回判定（環境音誤検出対策）
 // v2.74 2026-03-18 - Whisperハルシネーション対策（prompt＋定型文フィルタ＋小データスキップ）
-const CACHE_NAME = 'cocomitalk-v2.74';
+// v2.75 2026-03-18 - Whisper無音2.5秒＋最大15秒＋ハルシネーションフィルタ拡充
+const CACHE_NAME = 'cocomitalk-v2.75';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
