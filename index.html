@@ -194,6 +194,13 @@
             </label>
           </div>
           <div class="setting-item" style="margin-top:12px;">
+            <label style="font-size:0.85em; color:#888;">STT音声認識エンジン</label>
+            <select id="sel-stt-provider" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
+              <option value="webspeech">Web Speech API（無料・ブラウザ内蔵）</option>
+              <option value="whisper">Whisper API（高精度・ピコン音なし・$0.006/分）</option>
+            </select>
+          </div>
+          <div class="setting-item" style="margin-top:12px;">
             <label style="font-size:0.85em; color:#888;">TTS声エンジン</label>
             <select id="sel-tts-provider" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
               <option value="openai">OpenAI TTS（nova/shimmer/alloy）</option>
@@ -316,6 +323,7 @@
   <script src="voicevox-tts-provider.js"></script>
   <script src="speech-provider.js"></script>
   <script src="web-speech-provider.js"></script>
+  <script src="whisper-provider.js"></script>
   <script src="voice-output.js"></script>
   <script src="voice-ui.js"></script>
   <script src="voice-command.js"></script>

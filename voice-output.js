@@ -2,6 +2,7 @@
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
+// v2.1調査済み: チャンク間の_playing管理は正常。TTS途中切れの原因はvoice-input.js側
 
 // v1.0 新規作成 - Step 5b TTS再生管理
 // v1.1 追加 - キュー再生機能（グループモード3人全員対応）

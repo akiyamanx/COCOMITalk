@@ -67,7 +67,8 @@
 // v2.68 2026-03-16 - continuous:false復帰（v2.0バッファ方式）＋web-speech-provider v1.2復元
 // v2.69 2026-03-16 - バッファ待機時間2.5秒→3.5秒（息継ぎ余裕拡大）
 // v2.70 2026-03-16 - 記憶インポートUI追加（memory-import-ui.js + import.js v1.1）
-const CACHE_NAME = 'cocomitalk-v2.70';
+// v2.71 2026-03-17 - TTS途中切れバグ修正（voice-input.js v2.1 TTS待機フラグ）
+const CACHE_NAME = 'cocomitalk-v2.71';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -112,6 +113,7 @@ const CACHE_FILES = [
   './voicevox-tts-provider.js',
   './speech-provider.js',
   './web-speech-provider.js',
+  './whisper-provider.js',
   './voice-output.js',
   './voice-ui.js',
   './voice-command.js',

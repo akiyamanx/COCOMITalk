@@ -99,6 +99,8 @@ const AppSettings = (() => {
         if (chkD) chkD.checked = !!s.sttDebug;
         const selTTS = document.getElementById('sel-tts-provider');
         if (selTTS) { selTTS.value = s.ttsProvider || 'openai'; _toggleVVKeyUI(selTTS.value); }
+        const selSTT = document.getElementById('sel-stt-provider');
+        if (selSTT) selSTT.value = s.sttProvider || 'webspeech';
         const vvKey = document.getElementById('vv-api-key-main');
         if (vvKey && s.vvApiKey) vvKey.value = s.vvApiKey;
         // v1.0追加 - スピードスライダー反映 / v1.1変更 - デフォルト1.25x
@@ -117,6 +119,7 @@ const AppSettings = (() => {
       const chkH = document.getElementById('chk-handsfree');
       const chkD = document.getElementById('chk-stt-debug');
       const selTTS = document.getElementById('sel-tts-provider');
+      const selSTT = document.getElementById('sel-stt-provider');
       const vvKey = document.getElementById('vv-api-key-main');
       const spdSlider = document.getElementById('range-tts-speed');
       const settings = {
@@ -124,6 +127,7 @@ const AppSettings = (() => {
         handsfree: chkH ? chkH.checked : false,
         sttDebug: chkD ? chkD.checked : false,
         ttsProvider: selTTS ? selTTS.value : 'openai',
+        sttProvider: selSTT ? selSTT.value : 'webspeech',
         vvApiKey: vvKey ? vvKey.value.trim() : '',
         ttsSpeed: spdSlider ? spdSlider.value : '1.25',
       };
@@ -132,6 +136,8 @@ const AppSettings = (() => {
         window.voiceController.setAutoListen(settings.handsfree);
         window.voiceController.setDebugVisible(settings.sttDebug);
         window.voiceController.setSpeed(parseFloat(settings.ttsSpeed));
+        // v2.1追加 - STTプロバイダー切替
+        window.voiceController.switchSTTProvider(settings.sttProvider === 'whisper' ? 'whisper' : 'webspeech');
       }
       _applyTTSProvider(settings.ttsProvider, settings.vvApiKey);
       _saveModelSettings();
