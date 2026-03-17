@@ -26,11 +26,13 @@ class WhisperProvider extends SpeechProvider {
     this._processing = false;      // API送信中フラグ
 
     // 設定値
-    this._SILENCE_THRESHOLD = 15;    // 無音判定の音量閾値（0-255、環境に応じて調整）
+    this._SILENCE_THRESHOLD = 35;    // 無音判定の音量閾値（0-255、環境音を除外するため高め）
     this._SILENCE_DURATION = 1500;   // 無音継続でAPI送信（ms）
     this._MAX_RECORD_TIME = 10000;   // 最大録音時間（ms）— 長話対策
-    this._MIN_RECORD_TIME = 500;     // 最小録音時間（ms）— 短すぎる音声を無視
+    this._MIN_RECORD_TIME = 800;     // 最小録音時間（ms）— 短すぎる音声を無視
     this._VOLUME_CHECK_MS = 100;     // 音量チェック間隔（ms）
+    this._VOICE_START_COUNT = 3;     // 発話開始に必要な連続検出回数（300ms）
+    this._voiceCount = 0;            // 連続発話カウンター
 
     // デバッグ
     this._debugVisible = false;
@@ -152,6 +154,7 @@ class WhisperProvider extends SpeechProvider {
     this._chunks = [];
     this._hasVoiceStarted = false;
     this._processing = false;
+    this._voiceCount = 0;
 
     // MediaRecorder設定（webm/opusが軽量でWhisper対応）
     const mimeType = this._getSupportedMimeType();
@@ -237,17 +240,25 @@ class WhisperProvider extends SpeechProvider {
       for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
       const avgVolume = sum / dataArray.length;
 
-      // 発話検出
+      // 発話検出（連続_VOICE_START_COUNT回で確定 — 環境音の一瞬の音を除外）
       if (avgVolume > this._SILENCE_THRESHOLD) {
-        this._hasVoiceStarted = true;
+        if (!this._hasVoiceStarted) {
+          this._voiceCount++;
+          if (this._voiceCount >= this._VOICE_START_COUNT) {
+            this._hasVoiceStarted = true;
+            this._debugLog(`発話開始検出（${this._voiceCount}回連続, avg=${avgVolume.toFixed(0)}）`);
+          }
+        }
         // 無音タイマーリセット
         if (this._silenceTimer) {
           clearTimeout(this._silenceTimer);
           this._silenceTimer = null;
         }
-        // interim表示（音が入ってることを示す）
-        if (this.onInterim) this.onInterim('🎤 ...');
-      } else if (this._hasVoiceStarted && !this._silenceTimer && !this._processing) {
+        if (this._hasVoiceStarted && this.onInterim) this.onInterim('🎤 ...');
+      } else {
+        // 閾値以下 → 連続カウンターリセット
+        this._voiceCount = 0;
+        if (this._hasVoiceStarted && !this._silenceTimer && !this._processing) {
         // 発話開始後に無音になった → 無音タイマー開始
         this._silenceTimer = setTimeout(() => {
           this._debugLog(`無音${this._SILENCE_DURATION}ms検出 → セグメント送信`);

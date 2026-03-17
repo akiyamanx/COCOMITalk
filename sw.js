@@ -69,7 +69,8 @@
 // v2.70 2026-03-16 - 記憶インポートUI追加（memory-import-ui.js + import.js v1.1）
 // v2.71 2026-03-17 - TTS途中切れバグ修正（voice-input.js v2.1 TTS待機フラグ）
 // v2.72 2026-03-18 - Whisper onFinal→バッファ直接蓄積修正（自動送信復旧）
-const CACHE_NAME = 'cocomitalk-v2.72';
+// v2.73 2026-03-18 - Whisper無音検出: 閾値35＋連続3回判定（環境音誤検出対策）
+const CACHE_NAME = 'cocomitalk-v2.73';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
