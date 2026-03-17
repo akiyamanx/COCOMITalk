@@ -68,7 +68,8 @@
 // v2.69 2026-03-16 - バッファ待機時間2.5秒→3.5秒（息継ぎ余裕拡大）
 // v2.70 2026-03-16 - 記憶インポートUI追加（memory-import-ui.js + import.js v1.1）
 // v2.71 2026-03-17 - TTS途中切れバグ修正（voice-input.js v2.1 TTS待機フラグ）
-const CACHE_NAME = 'cocomitalk-v2.71';
+// v2.72 2026-03-18 - Whisper onFinal→バッファ直接蓄積修正（自動送信復旧）
+const CACHE_NAME = 'cocomitalk-v2.72';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

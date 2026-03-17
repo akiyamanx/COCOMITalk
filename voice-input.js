@@ -137,7 +137,7 @@ class VoiceController {
     };
 
     this._stt.onFinal = (text) => {
-      if (this._hasFinalText) {
+      if (this._hasFinalText && !(this._stt instanceof WhisperProvider)) {
         console.log(`[Voice] final重複無視: "${text}"`);
         return;
       }
@@ -147,6 +147,10 @@ class VoiceController {
       this._lastText = text;
       const display = this._buffer ? this._buffer + ' ' + text : text;
       this._ui.showInterim(display);
+      // v2.1 - WhisperはonEnd不要、onFinalで直接バッファ蓄積
+      if (this._stt instanceof WhisperProvider) {
+        if (text.trim() && !this._isNoise(text.trim())) this._appendBuffer(text.trim());
+      }
     };
 
     // v2.0: onEnd — 即送信せずバッファに蓄積＋STT自動リスタート
@@ -309,11 +313,8 @@ class VoiceController {
 
   _restartSTT() {
     setTimeout(() => {
-      // v2.1修正 - TTS待機中・再生中はSTT再開しない
       if (this._enabled && !this._waitingForTTS && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
         this._stt.start({ language: 'ja-JP' });
-      } else if (this._waitingForTTS) {
-        console.log('[Voice] TTS待機中 → STT再開抑制');
       }
     }, 400);
   }
