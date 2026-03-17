@@ -259,11 +259,12 @@ class WhisperProvider extends SpeechProvider {
         // 閾値以下 → 連続カウンターリセット
         this._voiceCount = 0;
         if (this._hasVoiceStarted && !this._silenceTimer && !this._processing) {
-        // 発話開始後に無音になった → 無音タイマー開始
-        this._silenceTimer = setTimeout(() => {
-          this._debugLog(`無音${this._SILENCE_DURATION}ms検出 → セグメント送信`);
-          this._onSegmentEnd();
-        }, this._SILENCE_DURATION);
+          // 発話開始後に無音になった → 無音タイマー開始
+          this._silenceTimer = setTimeout(() => {
+            this._debugLog(`無音${this._SILENCE_DURATION}ms検出 → セグメント送信`);
+            this._onSegmentEnd();
+          }, this._SILENCE_DURATION);
+        }
       }
     }, this._VOLUME_CHECK_MS);
   }
