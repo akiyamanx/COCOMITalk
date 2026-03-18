@@ -1,4 +1,4 @@
-// whisper-provider.js v1.1
+// whisper-provider.js v1.2
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大10秒で強制送信
@@ -6,6 +6,7 @@
 
 // v1.0 新規作成 - Whisper API STT（パターンCハイブリッド方式）
 // v1.1 追加 - sessionIDガード（三姉妹会議決定: 古い応答を世界から無効にする）
+// v1.2 修正 - resume()にTTS尾音ガード期間追加（300ms待機＋チャンク破棄）
 
 /**
  * Whisper APIプロバイダー
@@ -162,17 +163,24 @@ class WhisperProvider extends SpeechProvider {
     this._stopRecording(false);
   }
 
-  /** 一時停止から再開 */
-  resume() {
+  // v1.2修正 - TTS後の再開にガード期間追加（尾音/残響の誤検出防止）
+  async resume() {
     if (!this._listening || !this._stream) return;
     this._paused = false;
-    this._debugLog('再開');
-    // TTS後は新しい発話待ち（無音をそのまま送らない）
+    this._debugLog('再開（ガード期間付き）');
+    // TTS後は新しい発話待ち
     this._hasVoiceStarted = false;
     this._voiceCount = 0;
+    // ① 録音を開始（この時点からMediaRecorderがマイク音を拾い始める）
     this._startRecording(false);
     // UI更新のためonStartを通知
     if (this.onStart) this.onStart();
+    // ② ガード期間: 300ms待ってから蓄積チャンクを破棄（TTS尾音/スピーカー残響を排除）
+    await new Promise(r => setTimeout(r, 300));
+    this._chunks = [];
+    this._hasVoiceStarted = false;
+    this._voiceCount = 0;
+    this._debugLog('ガード期間完了 — チャンク破棄＋発話検出リセット');
   }
 
   /** 停止して確定テキストを返す（互換用 — Whisperでは空文字を返す） */
