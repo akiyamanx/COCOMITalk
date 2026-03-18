@@ -74,7 +74,8 @@
 // v2.75 2026-03-18 - Whisper無音2.5秒＋最大15秒＋ハルシネーションフィルタ拡充
 // v2.76 2026-03-18 - Whisperセグメント継続時に発話フラグ維持（途中送信防止）
 // v2.77 2026-03-18 - Whisper pause/resume追加（TTS再生中マイク維持で途切れ防止）
-const CACHE_NAME = 'cocomitalk-v2.77';
+// v2.78 2026-03-18 - Whisper resume時onStart通知＋発話フラグリセット（UI＋ハルシネ対策）
+const CACHE_NAME = 'cocomitalk-v2.78';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

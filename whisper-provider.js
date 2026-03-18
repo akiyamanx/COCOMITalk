@@ -151,7 +151,12 @@ class WhisperProvider extends SpeechProvider {
   resume() {
     if (!this._listening || !this._stream) return;
     this._debugLog('再開');
-    this._startRecording(true);
+    // TTS後は新しい発話待ち（無音をそのまま送らない）
+    this._hasVoiceStarted = false;
+    this._voiceCount = 0;
+    this._startRecording(false);
+    // UI更新のためonStartを通知
+    if (this.onStart) this.onStart();
   }
 
   /** 停止して確定テキストを返す（互換用 — Whisperでは空文字を返す） */
