@@ -132,7 +132,8 @@ class VoiceController {
       if (this._hasFinalText) return;
       const display = this._buffer ? this._buffer + ' ' + text : text;
       this._ui.showInterim(display);
-      this._lastText = text;
+      // 表示用マーカー（🎤）は_lastTextに入れない（送信防止）
+      if (!text.startsWith('🎤')) this._lastText = text;
       if (this._bufferTimer) this._resetBufferTimer();
     };
 
