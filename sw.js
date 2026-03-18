@@ -80,7 +80,8 @@
 // v2.81 2026-03-18 - タブ切替時マイク解放＋復帰時再取得（他タブのマイク使用を妨げない）
 // v2.82 2026-03-18 - visibilitychange削除（不安定の原因。タブ切替はマイクOFF運用でカバー）
 // v2.83 2026-03-18 - voice-state.js＋audio-health.js新規追加（三姉妹会議決定: ステートマシン＋自己修復）
-const CACHE_NAME = 'cocomitalk-v2.83';
+// v2.84 2026-03-18 - whisper-provider.js v1.1 sessionIDガード追加（古いWhisper応答を世界から無効にする）
+const CACHE_NAME = 'cocomitalk-v2.84';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

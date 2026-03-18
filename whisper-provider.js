@@ -1,10 +1,11 @@
-// whisper-provider.js v1.0
+// whisper-provider.js v1.1
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大10秒で強制送信
 // ピコン音なし・高精度・ブラウザ非依存
 
 // v1.0 新規作成 - Whisper API STT（パターンCハイブリッド方式）
+// v1.1 追加 - sessionIDガード（三姉妹会議決定: 古い応答を世界から無効にする）
 
 /**
  * Whisper APIプロバイダー
@@ -25,6 +26,8 @@ class WhisperProvider extends SpeechProvider {
     this._hasVoiceStarted = false; // 発話開始検出フラグ
     this._processing = false;      // API送信中フラグ
     this._paused = false;          // TTS再生中の一時停止フラグ
+    // v1.1追加 - sessionIDガード（voice-state.jsから同期される）
+    this._currentSessionId = 0;    // 現在のsessionId
 
     // 設定値
     this._SILENCE_THRESHOLD = 35;    // 無音判定の音量閾値（0-255、環境音を除外するため高め）
@@ -332,6 +335,9 @@ class WhisperProvider extends SpeechProvider {
       return;
     }
 
+    // v1.1追加 - 送信前のsessionIdを保存（await後に一致チェック用）
+    const sentSessionId = this._currentSessionId;
+
     try {
       const formData = new FormData();
       formData.append('file', blob, `audio.${ext}`);
@@ -342,13 +348,20 @@ class WhisperProvider extends SpeechProvider {
 
       const result = await ApiCommon.callAPI('whisper', formData, { isFormData: true });
 
+      // v1.1追加 - sessionIDガード: TTS開始等でsessionが変わっていたら応答を破棄
+      if (sentSessionId !== this._currentSessionId) {
+        this._debugLog(`旧session応答を破棄 (sent=${sentSessionId}, current=${this._currentSessionId})`);
+        this._afterWhisperResponse();
+        return;
+      }
+
       if (result.text && result.text.trim()) {
         const text = result.text.trim();
         // Whisperハルシネーション（無音時に定型文を生成する既知の癖）をフィルタ
         if (this._isHallucination(text)) {
           this._debugLog(`ハルシネーション除外: "${text}"`);
         } else {
-          this._debugLog(`認識結果: "${text}"`);
+          this._debugLog(`認識結果: "${text}" [session=${sentSessionId}]`);
           if (this.onFinal) this.onFinal(text);
         }
       } else {
@@ -369,6 +382,11 @@ class WhisperProvider extends SpeechProvider {
       this._debugLog('pause中 → 録音再開スキップ');
       return;
     }
+    // v1.1追加 - voice-state.jsの状態もチェック（speaking中は録音再開しない）
+    if (window.voiceState && window.voiceState.isSpeaking()) {
+      this._debugLog('speaking中 → 録音再開スキップ（voiceState）');
+      return;
+    }
     if (this._listening && this._stream) {
       this._startRecording(true);
     } else {
@@ -379,6 +397,16 @@ class WhisperProvider extends SpeechProvider {
   // ═══════════════════════════════════════════
   // ユーティリティ
   // ═══════════════════════════════════════════
+
+  /**
+   * v1.1追加 - sessionIdを外部から設定する
+   * voice-input.jsがvoice-state.jsのnewSession()後に呼び出す
+   * @param {number} id - 新しいsessionId
+   */
+  setSessionId(id) {
+    this._currentSessionId = id;
+    this._debugLog(`sessionId更新: ${id}`);
+  }
 
   /** Whisperのハルシネーション（無音時に勝手に生成される定型文）を判定 */
   _isHallucination(text) {
