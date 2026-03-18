@@ -88,7 +88,8 @@
 // v2.89 2026-03-19 - whisper-provider.js v1.2 resume()にTTS尾音ガード期間追加（300ms＋チャンク破棄）
 // v2.90 2026-03-19 - 会議モードにファイル添付対応（#73）meeting-ui.js v1.4 + meeting-relay.js v1.8
 // v2.91 2026-03-19 - 複数ファイル添付対応（上限10件）meeting-ui.js v1.5 + meeting-relay.js v1.9
-const CACHE_NAME = 'cocomitalk-v2.91';
+// v2.92 2026-03-19 - 会議モードClaude tool_useエラー修正（api-claude.js v1.7 skipTools）
+const CACHE_NAME = 'cocomitalk-v2.92';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

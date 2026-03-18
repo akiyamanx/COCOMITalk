@@ -242,6 +242,8 @@ const MeetingRelay = (() => {
     }
     const fullPrompt = systemPrompt + leadInstruction + _memoryPrompt + searchPrompt;
     const opts = { model: modelKey, maxTokens: 6144 };
+    // v1.9追加 - 会議モードではClaude Tool Useをスキップ（tool_use/tool_result不整合エラー防止）
+    opts.skipTools = true;
     // v1.9改修 - 複数ファイル添付対応（テキストは結合、画像は先頭1枚のみ）
     if (_currentAttachments && _currentAttachments.length > 0) {
       const textAtts = _currentAttachments.filter(a => a.type === 'text');

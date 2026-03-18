@@ -5,6 +5,7 @@
 // v1.4 2026-03-11 - Phase 2a+ Tool Use対応（web_search自動検索）
 // v1.5 2026-03-11 - Phase 2c ToolRegistry統合（複数ツール対応）
 // v1.6 2026-03-12 - history末尾のuserMessage二重送信防止
+// v1.7 2026-03-19 - skipToolsオプション追加（会議モードでtool_useエラー防止）
 
 'use strict';
 
@@ -60,7 +61,8 @@ const ApiClaude = (() => {
     }
 
     // v1.5変更 - ToolRegistry経由で全ツール定義を追加（Phase 2c）
-    if (typeof ToolRegistry !== 'undefined') {
+    // v1.7修正 - skipToolsオプションで会議モード等ツール不要時はスキップ
+    if (typeof ToolRegistry !== 'undefined' && !options.skipTools) {
       body.tools = ToolRegistry.getClaudeTools();
     }
 
