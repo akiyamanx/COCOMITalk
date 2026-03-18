@@ -83,7 +83,8 @@
 // v2.84 2026-03-18 - whisper-provider.js v1.1 sessionIDガード追加（古いWhisper応答を世界から無効にする）
 // v2.85 2026-03-18 - voice-input.js v2.2 + voice-ui.js v1.3 全体統合（ステートマシン連携＋自己修復＋UI同期）
 // v2.86 2026-03-18 - whisper-provider.js デバッグパネルON/OFFバグ修正（div重複＋即表示）
-const CACHE_NAME = 'cocomitalk-v2.86';
+// v2.87 2026-03-18 - speaking中の復帰再侵入ガード＋デバッグパネル切替時再適用
+const CACHE_NAME = 'cocomitalk-v2.87';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

@@ -87,7 +87,6 @@ class VoiceController {
     this._finalText = '';
 
     this._stt.onStart = () => {
-      // v2.2: voiceState経由でUI更新（リスナーがupdateMicStateを自動実行）
       this._voiceState.transition('listening');
       if (this._buffer) {
         this._ui.showInterim(this._buffer + ' 🎤...');
@@ -157,11 +156,9 @@ class VoiceController {
         if (this._buffer) {
           this._restartSTT();
         } else if (this._enabled) {
-          console.log('[Voice] 無音終了 → 自動リスタート待機');
           this._ui.showInterim('🎤 話しかけてね...');
           this._restartSTT();
         } else {
-          // v2.2: voiceState経由
           this._voiceState.transition('idle');
         }
       }
@@ -275,17 +272,10 @@ class VoiceController {
   }
 
   _isNoise(text) {
-    if (text.length <= this._NOISE_MIN_LENGTH) {
-      console.log(`[Voice] ノイズ判定: "${text}" (${text.length}文字≦${this._NOISE_MIN_LENGTH})`);
-      return true;
-    }
-    if (this._lastBufferText && text === this._lastBufferText) {
-      console.log(`[Voice] ノイズ判定: 直前と同じ "${text}"`);
-      return true;
-    }
+    if (text.length <= this._NOISE_MIN_LENGTH) return true;
+    if (this._lastBufferText && text === this._lastBufferText) return true;
     return false;
   }
-
   _restartSTT() {
     setTimeout(() => {
       if (this._enabled && !this._voiceState.isSpeaking()) {
@@ -294,10 +284,14 @@ class VoiceController {
     }, 400);
   }
 
-  // v2.2改修 - TTS後のSTT再開（AudioContext健全性チェック＋自己修復付き）
+  // v2.2.1改修 - TTS後のSTT再開（健全性チェック＋自己修復＋speaking再侵入ガード）
   async _resumeSTTAfterTTS() {
     await new Promise(r => setTimeout(r, 1000));
-    // Whisperの場合はAudioContext健全性チェック → 自己修復
+    // await後にspeaking/再生チェック（新しいTTSが始まっていたら復帰中止）
+    if (this._voiceState.isSpeaking() || this._playback.isPlaying() || this._playback.isQueuePlaying()) {
+      console.log('[Voice] _resumeSTTAfterTTS: speaking/再生中 → 復帰中止');
+      return;
+    }
     if (this._stt instanceof WhisperProvider && window.audioHealth) {
       const health = await window.audioHealth.checkHealth(
         this._stt._audioCtx, this._stt._recorder, this._stt._stream, this._stt._analyser
@@ -310,14 +304,15 @@ class VoiceController {
             audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
           })
         );
-        if (!result.success) { return; } // blocked-needs-tapはaudio-health.js内で遷移済み
-        // 修復で再生成されたオブジェクトを反映
+        if (!result.success) { return; }
         if (result.newAudioCtx) this._stt._audioCtx = result.newAudioCtx;
         if (result.newAnalyser) this._stt._analyser = result.newAnalyser;
         if (result.newRecorder) this._stt._recorder = result.newRecorder;
         if (result.newStream) this._stt._stream = result.newStream;
         console.log(`[Voice] 自己修復成功（Level ${result.level}）`);
       }
+      // 自己修復後にも再度チェック（修復中に新TTSが来た場合）
+      if (this._voiceState.isSpeaking()) { return; }
     }
     this._voiceState.transition('listening');
     if (typeof this._stt.resume === 'function') { this._stt.resume(); }
@@ -373,6 +368,11 @@ class VoiceController {
     this._stt = providerName === 'whisper' && typeof WhisperProvider !== 'undefined'
       ? new WhisperProvider() : new WebSpeechProvider();
     this._setupCallbacks();
+    // v2.2.1: 切替後にデバッグ設定を再適用（新インスタンスはデフォルトfalseのため）
+    try {
+      const s = JSON.parse(localStorage.getItem('cocomitalk-settings') || '{}');
+      if (s.sttDebug) this._stt.setDebugVisible(true);
+    } catch (e) { /* ignore */ }
     console.log(`[Voice] STT切替: ${this._stt.name}`);
     if (wasEnabled) setTimeout(() => this.startListening(), 500);
   }
@@ -432,7 +432,6 @@ class VoiceController {
     }
   }
 
-  // v2.2: voiceState経由でidle遷移（リスナーがUI更新を自動実行）
   _forceIdleState() {
     this._voiceState.forceReset();
     this._ui.hideSendCountdown();
