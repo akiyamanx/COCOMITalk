@@ -35,22 +35,6 @@ class WhisperProvider extends SpeechProvider {
     this._VOICE_START_COUNT = 3;     // 発話開始に必要な連続検出回数（300ms）
     this._voiceCount = 0;            // 連続発話カウンター
 
-    // タブ切り替え時にマイクを解放（他タブのマイク使用を妨げない）
-    this._onVisibilityChange = () => {
-      if (document.hidden && this._listening) {
-        this._debugLog('タブ非アクティブ → マイク解放');
-        this._stopRecording(false);
-        if (this._stream) { this._stream.getTracks().forEach(t => t.stop()); this._stream = null; }
-        if (this._audioCtx) { this._audioCtx.close().catch(() => {}); this._audioCtx = null; }
-        this._analyser = null;
-        this._paused = true;
-      } else if (!document.hidden && this._listening && this._paused && !this._stream) {
-        this._debugLog('タブ復帰 → マイク再取得');
-        this._reacquireMic();
-      }
-    };
-    document.addEventListener('visibilitychange', this._onVisibilityChange);
-
     // デバッグ
     this._debugVisible = false;
     this._debugEl = null;
@@ -395,26 +379,6 @@ class WhisperProvider extends SpeechProvider {
   // ═══════════════════════════════════════════
   // ユーティリティ
   // ═══════════════════════════════════════════
-
-  /** タブ復帰時にマイクを再取得して録音再開 */
-  async _reacquireMic() {
-    try {
-      this._stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-      });
-      this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = this._audioCtx.createMediaStreamSource(this._stream);
-      this._analyser = this._audioCtx.createAnalyser();
-      this._analyser.fftSize = 512;
-      source.connect(this._analyser);
-      this._paused = false;
-      this._startRecording(false);
-      if (this.onStart) this.onStart();
-      this._debugLog('マイク再取得完了');
-    } catch (err) {
-      this._debugLog(`マイク再取得エラー: ${err.message}`);
-    }
-  }
 
   /** Whisperのハルシネーション（無音時に勝手に生成される定型文）を判定 */
   _isHallucination(text) {

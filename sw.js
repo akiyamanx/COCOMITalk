@@ -78,7 +78,8 @@
 // v2.79 2026-03-18 - 🎤表示テキストが送信される問題修正（_lastTextフィルタ）
 // v2.80 2026-03-18 - Whisper pausedフラグ追加（TTS中にWhisper応答が録音再開する問題修正）
 // v2.81 2026-03-18 - タブ切替時マイク解放＋復帰時再取得（他タブのマイク使用を妨げない）
-const CACHE_NAME = 'cocomitalk-v2.81';
+// v2.82 2026-03-18 - visibilitychange削除（不安定の原因。タブ切替はマイクOFF運用でカバー）
+const CACHE_NAME = 'cocomitalk-v2.82';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
