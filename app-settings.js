@@ -1,8 +1,9 @@
-// app-settings.js v1.1
+// app-settings.js v1.2
 // このファイルは設定モーダルの制御を担当する（app.jsから分離）
 // 認証トークン/モデル選択/音声設定/TTS切替/話すスピード調整
 // v1.0 2026-03-10 新規作成 - app.jsの設定関連10関数を分離＋スピード調整追加
 // v1.1 2026-03-15 - TTSスピードデフォルト1.25x（フォールバック値変更）
+// v1.2 2026-03-19 - STT切替を条件付きに＋デバッグパネルON/OFF安定化
 'use strict';
 
 /** 設定モジュール（app.jsのinit()から呼ばれる） */
@@ -134,10 +135,16 @@ const AppSettings = (() => {
       localStorage.setItem('cocomitalk-settings', JSON.stringify(settings));
       if (window.voiceController) {
         window.voiceController.setAutoListen(settings.handsfree);
-        window.voiceController.setDebugVisible(settings.sttDebug);
         window.voiceController.setSpeed(parseFloat(settings.ttsSpeed));
-        // v2.1追加 - STTプロバイダー切替
-        window.voiceController.switchSTTProvider(settings.sttProvider === 'whisper' ? 'whisper' : 'webspeech');
+        // v1.2修正 - STTプロバイダーが実際に変更された時だけ切替（不要な再生成を防止）
+        const currentSTT = window.voiceController._stt;
+        const wantWhisper = settings.sttProvider === 'whisper';
+        const isWhisper = typeof WhisperProvider !== 'undefined' && currentSTT instanceof WhisperProvider;
+        if (wantWhisper !== isWhisper) {
+          window.voiceController.switchSTTProvider(wantWhisper ? 'whisper' : 'webspeech');
+        }
+        // v1.2修正 - デバッグ設定はswitchの後に常に適用（切替有無に関わらず確実に反映）
+        window.voiceController.setDebugVisible(settings.sttDebug);
       }
       _applyTTSProvider(settings.ttsProvider, settings.vvApiKey);
       _saveModelSettings();
