@@ -77,7 +77,8 @@
 // v2.78 2026-03-18 - Whisper resume時onStart通知＋発話フラグリセット（UI＋ハルシネ対策）
 // v2.79 2026-03-18 - 🎤表示テキストが送信される問題修正（_lastTextフィルタ）
 // v2.80 2026-03-18 - Whisper pausedフラグ追加（TTS中にWhisper応答が録音再開する問題修正）
-const CACHE_NAME = 'cocomitalk-v2.80';
+// v2.81 2026-03-18 - タブ切替時マイク解放＋復帰時再取得（他タブのマイク使用を妨げない）
+const CACHE_NAME = 'cocomitalk-v2.81';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
