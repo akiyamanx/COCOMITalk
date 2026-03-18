@@ -150,11 +150,14 @@ class WhisperProvider extends SpeechProvider {
   // ═══════════════════════════════════════════
 
   /** MediaRecorderで録音を開始＋無音監視＋最大時間タイマー */
-  _startRecording() {
+  _startRecording(isContinuation = false) {
     this._chunks = [];
-    this._hasVoiceStarted = false;
     this._processing = false;
-    this._voiceCount = 0;
+    // 初回はリセット、セグメント継続時は発話状態を維持
+    if (!isContinuation) {
+      this._hasVoiceStarted = false;
+      this._voiceCount = 0;
+    }
 
     // MediaRecorder設定（webm/opusが軽量でWhisper対応）
     const mimeType = this._getSupportedMimeType();
@@ -339,8 +342,8 @@ class WhisperProvider extends SpeechProvider {
   _afterWhisperResponse() {
     this._processing = false;
     if (this._listening && this._stream) {
-      // 次のセグメントの録音を開始
-      this._startRecording();
+      // 次のセグメント（継続録音 — 発話フラグ維持）
+      this._startRecording(true);
     } else {
       // 停止済み → onEndを発火
       if (this.onEnd) this.onEnd();
