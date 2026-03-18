@@ -153,13 +153,8 @@ class VoiceController {
       }
     };
 
-    // v2.0: onEnd — 即送信せずバッファに蓄積＋STT自動リスタート
     this._stt.onEnd = () => {
-      // v2.1追加 - TTS待機中/再生中ならSTT再開しない
-      if (this._waitingForTTS || this._playback.isPlaying() || this._playback.isQueuePlaying()) {
-        console.log('[Voice] onEnd: TTS待機/再生中 → STT再開抑制');
-        return;
-      }
+      if (this._waitingForTTS || this._playback.isPlaying() || this._playback.isQueuePlaying()) return;
       const duration = Date.now() - this._sttStartTime;
       const hasText = this._hasFinalText || (this._lastText && this._lastText.trim().length > 0);
 
@@ -214,16 +209,15 @@ class VoiceController {
 
     // --- TTS再生コールバック ---
     this._playback.onPlayStart = (sisterId) => {
-      // v2.1追加 - TTS開始したので待機フラグ＋タイマー解除
       this._clearWaitingForTTS();
       this._ui.highlightSister(sisterId, true);
       this._ui.updateMicState('speaking');
       this._updateMeetingMicState('speaking');
       if (this._stt.isListening()) {
         this._clearAllTimers();
-        this._stt.stop();
+        if (typeof this._stt.pause === 'function') { this._stt.pause(); }
+        else { this._stt.stop(); }
         this._lastText = '';
-        console.log('[Voice] ハウリング防止: TTS再生中にSTT停止');
       }
     };
 
@@ -232,17 +226,13 @@ class VoiceController {
       if (this._playback.isQueuePlaying()) return;
       this._ui.updateMicState('idle');
       this._updateMeetingMicState('idle');
-      if (this._enabled) {
-        setTimeout(() => this.startListening(), 1200);
-      }
+      if (this._enabled) this._resumeSTTAfterTTS();
     };
 
     this._playback.onQueueEnd = () => {
       this._ui.updateMicState('idle');
       this._updateMeetingMicState('idle');
-      if (this._enabled) {
-        setTimeout(() => this.startListening(), 1200);
-      }
+      if (this._enabled) this._resumeSTTAfterTTS();
     };
 
     this._playback.onPlayError = (error, sisterId) => {
@@ -336,6 +326,14 @@ class VoiceController {
   _clearWaitingForTTS() {
     this._waitingForTTS = false;
     if (this._waitingForTTSTimer) { clearTimeout(this._waitingForTTSTimer); this._waitingForTTSTimer = null; }
+  }
+
+  // v2.1 - TTS再生完了後にSTTを再開（Whisper=resume / WebSpeech=start）
+  _resumeSTTAfterTTS() {
+    setTimeout(() => {
+      if (typeof this._stt.resume === 'function') { this._stt.resume(); }
+      else { this.startListening(); }
+    }, 1200);
   }
 
   _clearAllTimers() {

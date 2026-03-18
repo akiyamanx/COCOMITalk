@@ -129,14 +129,29 @@ class WhisperProvider extends SpeechProvider {
     }
   }
 
-  /** 音声認識を停止 */
+  /** 音声認識を停止（完全停止 — マイク解放） */
   stop() {
     if (!this._listening) return;
     this._debugLog('停止要求');
-    this._stopRecording(false); // 残りの音声は送信しない（stop=明示的停止）
+    this._stopRecording(false);
     this._cleanup();
     this._listening = false;
     if (this.onEnd) this.onEnd();
+  }
+
+  /** 録音を一時停止（TTS再生中用 — マイクは維持） */
+  pause() {
+    if (!this._listening) return;
+    this._debugLog('一時停止（TTS再生中）');
+    this._stopRecording(false);
+    // _streamと_audioCtxは解放しない → resumeで即再開可能
+  }
+
+  /** 一時停止から再開 */
+  resume() {
+    if (!this._listening || !this._stream) return;
+    this._debugLog('再開');
+    this._startRecording(true);
   }
 
   /** 停止して確定テキストを返す（互換用 — Whisperでは空文字を返す） */
