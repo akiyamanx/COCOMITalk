@@ -50,6 +50,9 @@ class WhisperProvider extends SpeechProvider {
   // ═══════════════════════════════════════════
 
   _initDebugUI() {
+    // v1.1修正: 既存divがあれば再利用（プロバイダー再生成時の重複防止）
+    const existing = document.getElementById('whisper-debug-panel');
+    if (existing) { this._debugEl = existing; return; }
     const el = document.createElement('div');
     el.id = 'whisper-debug-panel';
     el.style.cssText = 'position:fixed;bottom:80px;left:4px;right:4px;' +
@@ -75,8 +78,15 @@ class WhisperProvider extends SpeechProvider {
 
   setDebugVisible(visible) {
     this._debugVisible = !!visible;
-    if (this._debugEl && !visible) {
-      this._debugEl.style.display = 'none';
+    if (this._debugEl) {
+      if (visible) {
+        // v1.1修正: ONにした時に既存ログを即表示
+        this._debugEl.style.display = 'block';
+        this._debugEl.textContent = this._debugLogs.join('\n');
+        this._debugEl.scrollTop = this._debugEl.scrollHeight;
+      } else {
+        this._debugEl.style.display = 'none';
+      }
     }
   }
 
