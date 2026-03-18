@@ -24,6 +24,7 @@ class WhisperProvider extends SpeechProvider {
     this._volumeCheckInterval = null; // 音量監視インターバル
     this._hasVoiceStarted = false; // 発話開始検出フラグ
     this._processing = false;      // API送信中フラグ
+    this._paused = false;          // TTS再生中の一時停止フラグ
 
     // 設定値
     this._SILENCE_THRESHOLD = 35;    // 無音判定の音量閾値（0-255、環境音を除外するため高め）
@@ -99,6 +100,7 @@ class WhisperProvider extends SpeechProvider {
       this._debugLog('既に録音中 → スキップ');
       return;
     }
+    this._paused = false;
 
     try {
       // マイク取得
@@ -142,14 +144,15 @@ class WhisperProvider extends SpeechProvider {
   /** 録音を一時停止（TTS再生中用 — マイクは維持） */
   pause() {
     if (!this._listening) return;
+    this._paused = true;
     this._debugLog('一時停止（TTS再生中）');
     this._stopRecording(false);
-    // _streamと_audioCtxは解放しない → resumeで即再開可能
   }
 
   /** 一時停止から再開 */
   resume() {
     if (!this._listening || !this._stream) return;
+    this._paused = false;
     this._debugLog('再開');
     // TTS後は新しい発話待ち（無音をそのまま送らない）
     this._hasVoiceStarted = false;
@@ -361,11 +364,14 @@ class WhisperProvider extends SpeechProvider {
   /** Whisper応答後 — 録音を継続するなら次のセグメントを開始 */
   _afterWhisperResponse() {
     this._processing = false;
+    // pause中は録音再開しない（TTS再生中にWhisper応答が返ってきた場合）
+    if (this._paused) {
+      this._debugLog('pause中 → 録音再開スキップ');
+      return;
+    }
     if (this._listening && this._stream) {
-      // 次のセグメント（継続録音 — 発話フラグ維持）
       this._startRecording(true);
     } else {
-      // 停止済み → onEndを発火
       if (this.onEnd) this.onEnd();
     }
   }
