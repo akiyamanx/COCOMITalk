@@ -1,12 +1,15 @@
-// voice-input.js v2.1
+// voice-input.js v2.2
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
-// UI→voice-ui.js / 送信→voice-sender.js（mixin）
+// UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
 // v2.0 方針F: バッファ蓄積＋2.5秒待機＋ノイズフィルタ＋確認アニメ
 // v2.1 修正 - TTS途中切れバグ修正（TTS待機フラグ＋STT再開抑制）
+// v2.2 改修 - voice-state.js連携（三姉妹会議決定: ステートマシン＋sessionID＋自己修復）
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS） */
 class VoiceController {
   constructor() {
+    // v2.2追加 - voice-state.jsのシングルトンを参照
+    this._voiceState = window.voiceState;
     // v2.1追加 - STTプロバイダー切替（設定から読み取り）
     this._stt = this._createSTTProvider();
     this._playback = new AudioPlaybackManager();
@@ -28,12 +31,11 @@ class VoiceController {
     this._sttRetryCount = 0;
     this._STT_MIN_DURATION = 500;
     this._STT_MAX_RETRY = 2;
-    // v2.1追加 - TTS待機フラグ（送信→TTS開始の間STTを抑制）
-    this._waitingForTTS = false;
-    this._waitingForTTSTimer = null;
 
     this._setupVoiceCommand();
     this._setupCallbacks();
+    // v2.2追加 - voice-state.jsのリスナーでUI自動同期
+    this._setupStateListener();
   }
 
   // v1.8 VoiceCommandモジュール初期化
@@ -43,65 +45,35 @@ class VoiceController {
       this._voiceCmd = null;
       return;
     }
+    const resumeAfter = (ms = 800) => { if (this._enabled) setTimeout(() => this.startListening(), ms); };
     this._voiceCmd = new VoiceCommand({
-      onStop: () => {
-        this._playback.stop();
-        this._enabled = false; // v1.8.3: ストップだけは明示的停止
-        this._forceIdleState();
-      },
-      onResume: () => {
-        this._forceIdleState();
-        setTimeout(() => this.startListening(), 500);
-      },
+      onStop: () => { this._playback.stop(); this._enabled = false; this._forceIdleState(); },
+      onResume: () => { this._forceIdleState(); resumeAfter(500); },
       onSwitchSister: (key, name) => {
-        if (typeof window.switchToSister === 'function') {
-          window.switchToSister(key);
-          this._currentSisterId = key;
-          // v1.9.2修正: _forceIdleState→showStatusの順（hideInterimで消される対策）
-          this._forceIdleState();
-          this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success');
-          if (this._enabled) setTimeout(() => this.startListening(), 800);
-        }
+        if (typeof window.switchToSister !== 'function') return;
+        window.switchToSister(key); this._currentSisterId = key;
+        this._forceIdleState(); this._ui.showStatus(`🔄 ${name}に切り替えました`, 'success'); resumeAfter();
       },
       onSwitchGroup: () => {
-        if (typeof window.switchToGroup === 'function') {
-          window.switchToGroup();
-          this._forceIdleState();
-          this._ui.showStatus('👥 グループモードに切り替えました', 'success');
-          if (this._enabled) setTimeout(() => this.startListening(), 800);
-        }
+        if (typeof window.switchToGroup !== 'function') return;
+        window.switchToGroup(); this._forceIdleState();
+        this._ui.showStatus('👥 グループモードに切り替えました', 'success'); resumeAfter();
       },
-      onSpeedChange: (newSpeed) => {
-        this._speed = newSpeed;
-        if (this._enabled) setTimeout(() => this.startListening(), 500);
-      },
-      onStatus: (msg, type) => {
-        this._forceIdleState();
-        this._ui.showStatus(msg, type);
-        if (this._enabled) setTimeout(() => this.startListening(), 800);
-      },
-      // v1.9.1追加: 「覚えて」コマンドでチャット記憶を手動保存
+      onSpeedChange: (newSpeed) => { this._speed = newSpeed; resumeAfter(500); },
+      onStatus: (msg, type) => { this._forceIdleState(); this._ui.showStatus(msg, type); resumeAfter(); },
       onSaveMemory: () => {
         this._forceIdleState();
         if (typeof ChatMemory !== 'undefined' && typeof ChatCore !== 'undefined') {
           const ctx = ChatCore.getGroupContext();
-          const history = ctx.chatHistories[ctx.currentSister];
-          ChatMemory.manualSave(ctx.currentSister, history);
+          ChatMemory.manualSave(ctx.currentSister, ctx.chatHistories[ctx.currentSister]);
           this._ui.showStatus('💾 覚えたよ！', 'success');
-        } else {
-          this._ui.showStatus('💾 記憶機能が未準備です', 'warning');
-        }
-        if (this._enabled) setTimeout(() => this.startListening(), 800);
+        } else { this._ui.showStatus('💾 記憶機能が未準備です', 'warning'); }
+        resumeAfter();
       },
-      // v2.0追加: キャンセルコマンドでバッファもクリア
       onCancel: () => {
-        this._clearAllTimers();
-        this._buffer = '';
-        this._lastBufferText = '';
-        this._ui.hideConfirm();
-        this._forceIdleState();
-        this._ui.showStatus('⏹ キャンセルしました', 'info');
-        if (this._enabled) setTimeout(() => this.startListening(), 800);
+        this._clearAllTimers(); this._buffer = ''; this._lastBufferText = '';
+        this._ui.hideConfirm(); this._forceIdleState();
+        this._ui.showStatus('⏹ キャンセルしました', 'info'); resumeAfter();
       }
     });
   }
@@ -115,8 +87,8 @@ class VoiceController {
     this._finalText = '';
 
     this._stt.onStart = () => {
-      this._ui.updateMicState('listening');
-      this._updateMeetingMicState('listening');
+      // v2.2: voiceState経由でUI更新（リスナーがupdateMicStateを自動実行）
+      this._voiceState.transition('listening');
       if (this._buffer) {
         this._ui.showInterim(this._buffer + ' 🎤...');
       } else {
@@ -155,7 +127,7 @@ class VoiceController {
     };
 
     this._stt.onEnd = () => {
-      if (this._waitingForTTS || this._playback.isPlaying() || this._playback.isQueuePlaying()) return;
+      if (this._voiceState.isSpeaking() || this._playback.isPlaying() || this._playback.isQueuePlaying()) return;
       const duration = Date.now() - this._sttStartTime;
       const hasText = this._hasFinalText || (this._lastText && this._lastText.trim().length > 0);
 
@@ -189,9 +161,8 @@ class VoiceController {
           this._ui.showInterim('🎤 話しかけてね...');
           this._restartSTT();
         } else {
-          this._ui.updateMicState('idle');
-          this._updateMeetingMicState('idle');
-          this._ui.hideInterim();
+          // v2.2: voiceState経由
+          this._voiceState.transition('idle');
         }
       }
     };
@@ -199,23 +170,28 @@ class VoiceController {
     this._stt.onError = (error) => {
       this._sttRetryCount = 0;
       this._clearAllTimers();
-      this._ui.updateMicState('error');
-      this._updateMeetingMicState('error');
+      this._voiceState.transition('error');
       this._ui.showStatus(error, 'error');
       setTimeout(() => {
-        this._ui.updateMicState('idle');
-        this._updateMeetingMicState('idle');
+        this._voiceState.forceReset();
       }, 2000);
     };
 
     // --- TTS再生コールバック ---
     this._playback.onPlayStart = (sisterId) => {
-      this._clearWaitingForTTS();
+      // v2.2: sessionIDインクリメント（お姉ちゃん「このターンの入力を世界から無効にする」）
+      const newId = this._voiceState.newSession();
+      this._voiceState.transition('speaking');
+      // whisper-providerにsessionId同期
+      if (this._stt instanceof WhisperProvider) {
+        this._stt.setSessionId(newId);
+      }
       this._ui.highlightSister(sisterId, true);
-      this._ui.updateMicState('speaking');
-      this._updateMeetingMicState('speaking');
+      // v2.2: バッファ＋タイマーもクリア（異常系ガード: 送信→TTS間のWhisper断片を排除）
+      this._buffer = '';
+      this._lastBufferText = '';
+      this._clearAllTimers();
       if (this._stt.isListening()) {
-        this._clearAllTimers();
         if (typeof this._stt.pause === 'function') { this._stt.pause(); }
         else { this._stt.stop(); }
         this._lastText = '';
@@ -225,21 +201,21 @@ class VoiceController {
     this._playback.onPlayEnd = (sisterId) => {
       this._ui.highlightSister(sisterId, false);
       if (this._playback.isQueuePlaying()) return;
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle');
+      // v2.2: TTS終了→まずrecovering_inputへ（idleではなく復帰処理を経由）
+      this._voiceState.transition('recovering_input');
       if (this._enabled) this._resumeSTTAfterTTS();
     };
 
     this._playback.onQueueEnd = () => {
-      this._ui.updateMicState('idle');
-      this._updateMeetingMicState('idle');
+      // v2.2: キュー全完了→recovering_inputへ
+      this._voiceState.transition('recovering_input');
       if (this._enabled) this._resumeSTTAfterTTS();
     };
 
     this._playback.onPlayError = (error, sisterId) => {
       this._ui.highlightSister(sisterId, false);
       this._ui.showStatus(error, 'error');
-      this._ui.updateMicState('idle');
+      this._voiceState.forceReset();
     };
 
     // TTSフォールバック通知
@@ -250,6 +226,11 @@ class VoiceController {
 
   // v2.0: バッファ方式＋ノイズフィルタ＋確認送信
   _appendBuffer(text) {
+    // v2.2: speaking中はバッファ追記禁止（設計書 1-4）
+    if (this._voiceState.isSpeaking()) {
+      console.log(`[Voice] speaking中のバッファ追記を拒否: "${text}"`);
+      return;
+    }
     this._buffer = this._buffer ? this._buffer + ' ' + text : text;
     this._lastBufferText = text;
     this._ui.showInterim(this._buffer + ' 🎤...');
@@ -262,6 +243,11 @@ class VoiceController {
     this._bufferTimer = setTimeout(() => {
       this._bufferTimer = null;
       if (!this._buffer) return;
+      // v2.2: speaking中は送信タイマー発火を無視（設計書 1-5）
+      if (this._voiceState.isSpeaking()) {
+        console.log('[Voice] speaking中 → バッファタイマー発火を無視');
+        return;
+      }
       if (this._stt.isListening()) this._stt.stop();
       console.log(`[Voice] ${this._BUFFER_DELAY}ms無音 → 確認アニメ開始: "${this._buffer}"`);
       this._startConfirmAndSend();
@@ -283,8 +269,6 @@ class VoiceController {
       this._finalText = '';
       if (sendText) {
         console.log(`[Voice] 確認完了 → 送信: "${sendText}"`);
-        // v2.1追加 - 送信→TTS開始までSTT再開を抑制
-        this._setWaitingForTTS();
         this._sendVoiceMessage(sendText);
       }
     }, this._CONFIRM_DELAY);
@@ -304,37 +288,61 @@ class VoiceController {
 
   _restartSTT() {
     setTimeout(() => {
-      if (this._enabled && !this._waitingForTTS && !this._playback.isPlaying() && !this._playback.isQueuePlaying()) {
+      if (this._enabled && !this._voiceState.isSpeaking()) {
         this._stt.start({ language: 'ja-JP' });
       }
     }, 400);
   }
 
-  // v2.1追加 - TTS待機フラグON（15秒安全タイムアウト付き）
-  _setWaitingForTTS() {
-    this._waitingForTTS = true;
-    if (this._waitingForTTSTimer) clearTimeout(this._waitingForTTSTimer);
-    this._waitingForTTSTimer = setTimeout(() => {
-      if (this._waitingForTTS) {
-        console.log('[Voice] TTS待機タイムアウト（15秒）→ フラグ解除');
-        this._waitingForTTS = false;
-        if (this._enabled) this.startListening();
+  // v2.2改修 - TTS後のSTT再開（AudioContext健全性チェック＋自己修復付き）
+  async _resumeSTTAfterTTS() {
+    await new Promise(r => setTimeout(r, 1000));
+    // Whisperの場合はAudioContext健全性チェック → 自己修復
+    if (this._stt instanceof WhisperProvider && window.audioHealth) {
+      const health = await window.audioHealth.checkHealth(
+        this._stt._audioCtx, this._stt._recorder, this._stt._stream, this._stt._analyser
+      );
+      if (!health.allPassed) {
+        console.log('[Voice] AudioContext異常 → 自己修復開始');
+        const result = await window.audioHealth.recover(
+          this._stt._audioCtx, this._stt._recorder, this._stt._stream, this._stt._analyser,
+          () => navigator.mediaDevices.getUserMedia({
+            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+          })
+        );
+        if (!result.success) { return; } // blocked-needs-tapはaudio-health.js内で遷移済み
+        // 修復で再生成されたオブジェクトを反映
+        if (result.newAudioCtx) this._stt._audioCtx = result.newAudioCtx;
+        if (result.newAnalyser) this._stt._analyser = result.newAnalyser;
+        if (result.newRecorder) this._stt._recorder = result.newRecorder;
+        if (result.newStream) this._stt._stream = result.newStream;
+        console.log(`[Voice] 自己修復成功（Level ${result.level}）`);
       }
-    }, 15000);
+    }
+    this._voiceState.transition('listening');
+    if (typeof this._stt.resume === 'function') { this._stt.resume(); }
+    else { this.startListening(); }
   }
 
-  // v2.1追加 - TTS待機フラグ＋タイマーをクリア
-  _clearWaitingForTTS() {
-    this._waitingForTTS = false;
-    if (this._waitingForTTSTimer) { clearTimeout(this._waitingForTTSTimer); this._waitingForTTSTimer = null; }
-  }
-
-  // v2.1 - TTS再生完了後にSTTを再開（Whisper=resume / WebSpeech=start）
-  _resumeSTTAfterTTS() {
-    setTimeout(() => {
-      if (typeof this._stt.resume === 'function') { this._stt.resume(); }
-      else { this.startListening(); }
-    }, 1200);
+  // v2.2追加 - voice-state.jsのリスナーでUI自動同期
+  _setupStateListener() {
+    if (!this._voiceState) return;
+    this._voiceState.onStateChange((newState, prevState, sessionId) => {
+      // 状態→UIマッピング
+      const uiMap = {
+        'idle': 'idle', 'listening': 'listening', 'transcribing': 'listening',
+        'speaking': 'speaking', 'recovering_input': 'recovering',
+        'blocked-needs-tap': 'blocked', 'error': 'error',
+      };
+      const uiState = uiMap[newState] || 'idle';
+      this._ui.updateMicState(uiState);
+      this._updateMeetingMicState(uiState);
+      // idle遷移時にinterimを非表示
+      if (newState === 'idle') this._ui.hideInterim();
+      // recovering時のinterim表示
+      if (newState === 'recovering_input') this._ui.showInterim('🔄 マイク復帰中...');
+      if (newState === 'blocked-needs-tap') this._ui.showInterim('👆 マイクボタンをタップしてね');
+    });
   }
 
   _clearAllTimers() {
@@ -379,10 +387,16 @@ class VoiceController {
       if (meetingMic) { meetingMic.disabled = true; meetingMic.style.opacity = '0.4'; }
       return;
     }
-    console.log(`[Voice] 初期化完了（v2.1） stt=${this._stt.name} cmd=${!!this._voiceCmd}`);
+    console.log(`[Voice] 初期化完了（v2.2） stt=${this._stt.name} cmd=${!!this._voiceCmd}`);
   }
 
   toggleListening() {
+    // v2.2: blocked-needs-tapの場合はタップで復帰試行
+    if (this._voiceState.isBlockedNeedsTap()) {
+      console.log('[Voice] blocked-needs-tap → タップ復帰試行');
+      this._resumeSTTAfterTTS();
+      return;
+    }
     if (this._confirmTimer) {
       console.log('[Voice] 確認中にタップ → キャンセル');
       this._clearAllTimers();
@@ -405,8 +419,6 @@ class VoiceController {
       this._lastText = '';
       if (allText) {
         this._enabled = true;
-        // v2.1追加 - 即送信時もTTS待機フラグON
-        this._setWaitingForTTS();
         this._sendVoiceMessage(allText);
       } else {
         this._forceIdleState();
@@ -420,10 +432,9 @@ class VoiceController {
     }
   }
 
+  // v2.2: voiceState経由でidle遷移（リスナーがUI更新を自動実行）
   _forceIdleState() {
-    this._ui.updateMicState('idle');
-    this._updateMeetingMicState('idle');
-    this._ui.hideInterim();
+    this._voiceState.forceReset();
     this._ui.hideSendCountdown();
   }
 
@@ -442,54 +453,45 @@ class VoiceController {
   /** AI応答を声で再生する */
   async speakResponse(responseText, sisterId) {
     if (!this._enabled) return;
-    this._clearWaitingForTTS();
     await this._playback.speak(responseText, sisterId, { speed: this._speed });
   }
 
   /** 複数の姉妹の応答を順番に再生 */
   async speakQueue(items) {
     if (!this._enabled) return;
-    this._clearWaitingForTTS();
     await this._playback.speakQueue(items, { speed: this._speed });
   }
 
   /** 現在の姉妹IDを設定 */
   setCurrentSister(sisterId) { this._currentSisterId = sisterId; }
-
   /** 音声速度を設定（0.5〜1.5） */
   setSpeed(speed) {
     this._speed = Math.max(0.5, Math.min(1.5, speed));
     if (this._voiceCmd) this._voiceCmd.setSpeed(this._speed);
   }
-
   /** ハンズフリーモード切替 */
   setAutoListen(enabled) {
     this._autoListen = !!enabled;
     console.log(`[Voice] ハンズフリー: ${this._autoListen ? 'ON' : 'OFF'}`);
   }
-
   /** STTデバッグパネル表示切替 */
   setDebugVisible(visible) {
-    if (this._stt && typeof this._stt.setDebugVisible === 'function') {
-      this._stt.setDebugVisible(visible);
-    }
+    if (this._stt && typeof this._stt.setDebugVisible === 'function') this._stt.setDebugVisible(visible);
   }
-
   /** 音声モードが有効かどうか */
   isEnabled() { return this._enabled; }
 
   destroy() {
     this._enabled = false;
     this._clearAllTimers();
-    this._clearWaitingForTTS();
     this._buffer = '';
     this._lastBufferText = '';
     this._stt.stop();
     this._playback.stop();
     this._ui.hideInterim();
     this._ui.hideSendCountdown();
+    if (this._voiceState) this._voiceState.destroy();
   }
-
   // 送信処理はvoice-sender.js v1.0にmixin分離（VoiceController.prototypeに注入）
 }
 

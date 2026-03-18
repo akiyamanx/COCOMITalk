@@ -1,8 +1,9 @@
-// voice-ui.js v1.2
+// voice-ui.js v1.3
 // 音声会話のUI部品（DOM操作）を担当する
 // マイクボタン、interim表示、送信確認UI、送信カウントダウン、姉妹アイコン発光
 // v1.0〜v1.1.1: 履歴省略（セッションカプセル参照）
 // v1.2 追加 - 送信カウントダウンアニメ（方針F対応: 0.5秒光って自動送信、タップでキャンセル）
+// v1.3 追加 - recovering/blocked状態表示（三姉妹会議決定: UI状態同期）
 
 /**
  * VoiceUI
@@ -262,6 +263,20 @@ class VoiceUI {
       btn.style.borderColor = '#e74c3c';
       btn.style.animation = 'none';
       btn.innerHTML = '⚠️';
+    } else if (state === 'recovering') {
+      // v1.3追加: AudioContext復帰処理中（黄色＋回転アイコン）
+      btn.classList.add('cocomi-mic-idle');
+      btn.style.background = '#fdcb6e';
+      btn.style.borderColor = '#fdcb6e';
+      btn.innerHTML = '🔄';
+      btn.style.animation = 'cocomi-breath-scale 1.5s ease-in-out infinite';
+    } else if (state === 'blocked') {
+      // v1.3追加: 自動復旧失敗→タップ待ち（赤＋タップアイコン）
+      btn.classList.add('cocomi-mic-idle');
+      btn.style.background = '#e74c3c';
+      btn.style.borderColor = '#e74c3c';
+      btn.innerHTML = '👆';
+      btn.style.animation = 'none';
     } else {
       // idle
       btn.classList.add('cocomi-mic-idle');
