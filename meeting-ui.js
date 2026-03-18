@@ -2,6 +2,7 @@
 // v0.8 新規作成 / v0.9 Markdown対応 / v1.0 ヘッダー常時表示＋アーカイブ
 // v1.1 restoreDisplay＋topicInput方式 / v1.2 確認ダイアログ＋UX改善
 // v1.3 2026-03-10 - 議事録DL＋指示書生成をMeetingDocActionsに分離（496→413行に軽量化）
+// v1.4 2026-03-19 - 会議モードにファイル添付対応（#73）
 'use strict';
 
 /** 会議UIモジュール */
@@ -18,6 +19,8 @@ const MeetingUI = (() => {
   let topicInput = null;
   let currentRouting = null;
   let isVisible = false;
+  // v1.4追加 - 会議用添付ファイル（meeting-ui.js内で管理）
+  let _meetingAttachment = null;
 
   /** 会議画面を初期化 */
   function init() {
@@ -96,6 +99,9 @@ const MeetingUI = (() => {
     if (btnArchive) {
       btnArchive.addEventListener('click', _handleShowArchive);
     }
+
+    // v1.4追加 - 会議用📎ファイル添付
+    _setupFileAttach();
   }
 
   /** v1.2改修 - 送信ボタン/Enter押下時の処理（会議進行中なら確認ダイアログ） */
@@ -124,20 +130,26 @@ const MeetingUI = (() => {
     if (!topic && topicInput) topic = topicInput.value.trim();
     if (!topic) return;
 
+    // v1.4追加 - 添付ファイルを取り出してクリア
+    const attachment = _meetingAttachment;
+    _meetingAttachment = null;
+    _updateMeetingFilePreview();
+
     if (topicInput) topicInput.value = '';
     if (topicInput) topicInput.disabled = true;
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
     if (btnStart) btnStart.disabled = true;
     _clearChat();
-    addUserMessage(topic);
+    const displayTopic = attachment ? `📎 ${attachment.name}\n${topic}` : topic;
+    addUserMessage(displayTopic);
     addSystemMessage('議題を分析中... 🔍');
 
     try {
       const routing = await MeetingRouter.analyzeTopic(topic);
       currentRouting = routing;
 
-      // リレー開始
-      await MeetingRelay.startMeeting(topic, routing);
+      // リレー開始（v1.4: attachment付き）
+      await MeetingRelay.startMeeting(topic, routing, attachment);
 
       // 完了 → アクションボタン表示
       _showActionButtons();
@@ -164,13 +176,19 @@ const MeetingUI = (() => {
       return;
     }
 
+    // v1.4追加 - 追加ラウンドにも添付対応
+    const attachment = _meetingAttachment;
+    _meetingAttachment = null;
+    _updateMeetingFilePreview();
+
     // 入力をクリア
     if (topicInput) topicInput.value = '';
 
-    addUserMessage(followUp);
+    const displayText = attachment ? `📎 ${attachment.name}\n${followUp}` : followUp;
+    addUserMessage(displayText);
     _hideActionButtons();
 
-    await MeetingRelay.continueRound(followUp, currentRouting);
+    await MeetingRelay.continueRound(followUp, currentRouting, attachment);
     _showActionButtons();
   }
 
@@ -363,6 +381,53 @@ const MeetingUI = (() => {
     // フォールバック: 改行をbrに変換するだけ
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;')
       .replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+  }
+
+  // ═══════════════════════════════════════════
+  // v1.4追加 - 会議用ファイル添付（#73）
+  // ═══════════════════════════════════════════
+
+  /** v1.4追加 - 会議用ファイル添付のイベント設定 */
+  function _setupFileAttach() {
+    if (typeof FileHandler === 'undefined') return;
+    const btnAttach = document.getElementById('btn-meeting-attach');
+    const fileInput = document.getElementById('meeting-file-input');
+    if (!btnAttach || !fileInput) return;
+    btnAttach.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      try {
+        _meetingAttachment = await FileHandler.readFile(file);
+        _updateMeetingFilePreview();
+      } catch (err) { alert(err.message); }
+      fileInput.value = '';
+    });
+  }
+
+  /** v1.4追加 - 会議用ファイルプレビュー更新 */
+  function _updateMeetingFilePreview() {
+    const preview = document.getElementById('meeting-file-preview');
+    if (!preview) return;
+    if (!_meetingAttachment) {
+      preview.classList.add('hidden');
+      preview.innerHTML = '';
+      return;
+    }
+    const att = _meetingAttachment;
+    const sizeStr = att.size < 1024 ? `${att.size}B`
+      : att.size < 1048576 ? `${(att.size / 1024).toFixed(1)}KB`
+      : `${(att.size / 1048576).toFixed(1)}MB`;
+    const html = att.type === 'image'
+      ? `<div class="file-preview-item"><img src="${att.dataUrl}" alt="${att.name}" class="file-preview-thumb"><span class="file-preview-name">${att.name}</span><button class="file-preview-remove">✕</button></div>`
+      : `<div class="file-preview-item"><span class="file-preview-icon">📄</span><span class="file-preview-name">${att.name}（${sizeStr}）</span><button class="file-preview-remove">✕</button></div>`;
+    preview.innerHTML = html;
+    preview.classList.remove('hidden');
+    const removeBtn = preview.querySelector('.file-preview-remove');
+    if (removeBtn) removeBtn.addEventListener('click', () => {
+      _meetingAttachment = null;
+      _updateMeetingFilePreview();
+    });
   }
 
   /** v1.0追加 - 📂過去の会議一覧を表示（MeetingArchiveUIに委譲） */

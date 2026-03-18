@@ -10,6 +10,7 @@
 // v1.4 2026-03-10 - Step 4: ラウンド完了時にMeetingMemory.autoSaveFromMeeting()呼び出し
 // v1.5 2026-03-11 - 他の姉妹の発言をuser roleで渡す（assistant混同＝なりすまし防止）
 // v1.7 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
+// v1.8 2026-03-19 - 会議モードにファイル添付対応（#73 attachment引数追加）
 
 'use strict';
 
@@ -59,14 +60,17 @@ const MeetingRelay = (() => {
   let originalTopic = '';
   // v1.4追加 - Step 4: 会議メモリーのプロンプト注入テキスト
   let _memoryPrompt = '';
+  // v1.8追加 - 会議用添付ファイル（#73）
+  let _currentAttachment = null;
 
   /**
    * 会議を開始する
    * @param {string} topic - アキヤの議題
    * @param {Object} routing - MeetingRouter.analyzeTopic()の結果
+   * @param {Object|null} attachment - v1.8追加: 添付ファイル（#73）
    * @returns {Promise<Object>} 会議結果 { rounds, history, routing }
    */
-  async function startMeeting(topic, routing) {
+  async function startMeeting(topic, routing, attachment) {
     if (isRunning) {
       console.warn('[MeetingRelay] 会議は既に進行中');
       return null;
@@ -77,6 +81,7 @@ const MeetingRelay = (() => {
     currentRound = 0;
     meetingHistory = [];
     originalTopic = topic; // v1.2追加
+    _currentAttachment = attachment || null; // v1.8追加
 
     const order = routing.order;
     const lead = routing.lead;
@@ -235,11 +240,14 @@ const MeetingRelay = (() => {
       });
     }
     const fullPrompt = systemPrompt + leadInstruction + _memoryPrompt + searchPrompt;
+    // v1.8修正 - optsを変数に分離（attachment追加のため）
+    const opts = { model: modelKey, maxTokens: 6144 };
+    if (_currentAttachment) opts.attachment = _currentAttachment;
     const reply = await apiModule.sendMessage(
       `【会議議題】${topic}`,
       fullPrompt,
       history,
-      { model: modelKey, maxTokens: 6144 }
+      opts,
     );
 
     return reply;
@@ -284,10 +292,12 @@ const MeetingRelay = (() => {
    * 追加ラウンドを実行
    * @param {string} followUp - アキヤの追加指示/質問
    * @param {Object} routing - 最初のルーティング結果
+   * @param {Object|null} attachment - v1.8追加: 添付ファイル（#73）
    */
-  async function continueRound(followUp, routing) {
+  async function continueRound(followUp, routing, attachment) {
     if (!isRunning && currentRound > 0) {
       isRunning = true;
+      _currentAttachment = attachment || null; // v1.8追加
       const nextRound = currentRound + 1;
 
       if (nextRound > MAX_ROUNDS) {

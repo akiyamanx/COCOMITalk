@@ -86,7 +86,8 @@
 // v2.87 2026-03-18 - speaking中の復帰再侵入ガード＋デバッグパネル切替時再適用
 // v2.88 2026-03-19 - app-settings.js v1.2 STT切替を条件付きに＋デバッグパネルON/OFF安定化
 // v2.89 2026-03-19 - whisper-provider.js v1.2 resume()にTTS尾音ガード期間追加（300ms＋チャンク破棄）
-const CACHE_NAME = 'cocomitalk-v2.89';
+// v2.90 2026-03-19 - 会議モードにファイル添付対応（#73）meeting-ui.js v1.4 + meeting-relay.js v1.8
+const CACHE_NAME = 'cocomitalk-v2.90';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

@@ -126,7 +126,14 @@
       </div>
     </div>
     <footer class="meeting-input-area">
+      <!-- v2.90追加 - 会議用ファイルプレビュー -->
+      <div id="meeting-file-preview" class="file-preview hidden"></div>
       <div class="input-wrapper">
+        <!-- v2.90追加 - 会議用📎ボタン＋file input -->
+        <button id="btn-meeting-attach" class="btn-attach" aria-label="ファイル添付" title="📎 ファイルを添付">
+          <span>📎</span>
+        </button>
+        <input type="file" id="meeting-file-input" class="hidden" accept=".md,.txt,.js,.json,.css,.html,.csv,.yml,.yaml,.xml,.py,.sh,.toml,.jpg,.jpeg,.png,.webp,.gif">
         <textarea class="meeting-topic-input" placeholder="議題を入力してください..." rows="1" maxlength="2000"></textarea>
         <button id="btn-meeting-start" class="btn-send" aria-label="会議開始">
           <span class="send-arrow">▶</span>
