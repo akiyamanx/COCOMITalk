@@ -11,6 +11,7 @@
 // v1.5 2026-03-11 - 他の姉妹の発言をuser roleで渡す（assistant混同＝なりすまし防止）
 // v1.7 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
 // v1.8 2026-03-19 - 会議モードにファイル添付対応（#73 attachment引数追加）
+// v1.9 2026-03-19 - 複数ファイル添付対応（テキスト結合、上限10件）
 
 'use strict';
 
@@ -60,8 +61,8 @@ const MeetingRelay = (() => {
   let originalTopic = '';
   // v1.4追加 - Step 4: 会議メモリーのプロンプト注入テキスト
   let _memoryPrompt = '';
-  // v1.8追加 - 会議用添付ファイル（#73）
-  let _currentAttachment = null;
+  // v1.8追加 - 会議用添付ファイル（#73）/ v1.9改修 - 複数ファイル対応
+  let _currentAttachments = null;
 
   /**
    * 会議を開始する
@@ -70,7 +71,7 @@ const MeetingRelay = (() => {
    * @param {Object|null} attachment - v1.8追加: 添付ファイル（#73）
    * @returns {Promise<Object>} 会議結果 { rounds, history, routing }
    */
-  async function startMeeting(topic, routing, attachment) {
+  async function startMeeting(topic, routing, attachments) {
     if (isRunning) {
       console.warn('[MeetingRelay] 会議は既に進行中');
       return null;
@@ -81,7 +82,7 @@ const MeetingRelay = (() => {
     currentRound = 0;
     meetingHistory = [];
     originalTopic = topic; // v1.2追加
-    _currentAttachment = attachment || null; // v1.8追加
+    _currentAttachments = attachments || null; // v1.9改修 - 複数ファイル対応
 
     const order = routing.order;
     const lead = routing.lead;
@@ -240,9 +241,21 @@ const MeetingRelay = (() => {
       });
     }
     const fullPrompt = systemPrompt + leadInstruction + _memoryPrompt + searchPrompt;
-    // v1.8修正 - optsを変数に分離（attachment追加のため）
     const opts = { model: modelKey, maxTokens: 6144 };
-    if (_currentAttachment) opts.attachment = _currentAttachment;
+    // v1.9改修 - 複数ファイル添付対応（テキストは結合、画像は先頭1枚のみ）
+    if (_currentAttachments && _currentAttachments.length > 0) {
+      const textAtts = _currentAttachments.filter(a => a.type === 'text');
+      const imageAtts = _currentAttachments.filter(a => a.type === 'image');
+      if (textAtts.length > 0) {
+        // テキストファイルは全て結合して1つのattachmentにする
+        const combined = textAtts.map(a => `【添付ファイル: ${a.name}】\n${a.content}`).join('\n\n---\n\n');
+        opts.attachment = { type: 'text', name: textAtts.map(a => a.name).join(', '), size: combined.length, content: combined, mimeType: 'text/plain' };
+      }
+      if (imageAtts.length > 0 && !opts.attachment) {
+        // 画像のみの場合は先頭1枚を渡す（APIの制約上）
+        opts.attachment = imageAtts[0];
+      }
+    }
     const reply = await apiModule.sendMessage(
       `【会議議題】${topic}`,
       fullPrompt,
@@ -294,10 +307,10 @@ const MeetingRelay = (() => {
    * @param {Object} routing - 最初のルーティング結果
    * @param {Object|null} attachment - v1.8追加: 添付ファイル（#73）
    */
-  async function continueRound(followUp, routing, attachment) {
+  async function continueRound(followUp, routing, attachments) {
     if (!isRunning && currentRound > 0) {
       isRunning = true;
-      _currentAttachment = attachment || null; // v1.8追加
+      _currentAttachments = attachments || null; // v1.9改修 - 複数ファイル対応
       const nextRound = currentRound + 1;
 
       if (nextRound > MAX_ROUNDS) {

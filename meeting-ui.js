@@ -3,6 +3,7 @@
 // v1.1 restoreDisplay＋topicInput方式 / v1.2 確認ダイアログ＋UX改善
 // v1.3 2026-03-10 - 議事録DL＋指示書生成をMeetingDocActionsに分離（496→413行に軽量化）
 // v1.4 2026-03-19 - 会議モードにファイル添付対応（#73）
+// v1.5 2026-03-19 - 複数ファイル添付対応（上限10件、multiple選択）
 'use strict';
 
 /** 会議UIモジュール */
@@ -20,7 +21,9 @@ const MeetingUI = (() => {
   let currentRouting = null;
   let isVisible = false;
   // v1.4追加 - 会議用添付ファイル（meeting-ui.js内で管理）
-  let _meetingAttachment = null;
+  // v1.5改修 - 複数ファイル対応（配列、上限10件）
+  let _meetingAttachments = [];
+  const _MAX_ATTACHMENTS = 10;
 
   /** 会議画面を初期化 */
   function init() {
@@ -130,9 +133,9 @@ const MeetingUI = (() => {
     if (!topic && topicInput) topic = topicInput.value.trim();
     if (!topic) return;
 
-    // v1.4追加 - 添付ファイルを取り出してクリア
-    const attachment = _meetingAttachment;
-    _meetingAttachment = null;
+    // v1.5改修 - 添付ファイルを取り出してクリア（複数対応）
+    const attachments = _meetingAttachments.length > 0 ? [..._meetingAttachments] : null;
+    _meetingAttachments = [];
     _updateMeetingFilePreview();
 
     if (topicInput) topicInput.value = '';
@@ -140,7 +143,8 @@ const MeetingUI = (() => {
     const btnStart = meetingScreen.querySelector('#btn-meeting-start');
     if (btnStart) btnStart.disabled = true;
     _clearChat();
-    const displayTopic = attachment ? `📎 ${attachment.name}\n${topic}` : topic;
+    const fileNames = attachments ? attachments.map(a => a.name).join(', ') : '';
+    const displayTopic = attachments ? `📎 ${fileNames}\n${topic}` : topic;
     addUserMessage(displayTopic);
     addSystemMessage('議題を分析中... 🔍');
 
@@ -149,7 +153,7 @@ const MeetingUI = (() => {
       currentRouting = routing;
 
       // リレー開始（v1.4: attachment付き）
-      await MeetingRelay.startMeeting(topic, routing, attachment);
+      await MeetingRelay.startMeeting(topic, routing, attachments);
 
       // 完了 → アクションボタン表示
       _showActionButtons();
@@ -176,19 +180,20 @@ const MeetingUI = (() => {
       return;
     }
 
-    // v1.4追加 - 追加ラウンドにも添付対応
-    const attachment = _meetingAttachment;
-    _meetingAttachment = null;
+    // v1.5改修 - 追加ラウンドにも複数添付対応
+    const attachments = _meetingAttachments.length > 0 ? [..._meetingAttachments] : null;
+    _meetingAttachments = [];
     _updateMeetingFilePreview();
 
     // 入力をクリア
     if (topicInput) topicInput.value = '';
 
-    const displayText = attachment ? `📎 ${attachment.name}\n${followUp}` : followUp;
+    const fileNames = attachments ? attachments.map(a => a.name).join(', ') : '';
+    const displayText = attachments ? `📎 ${fileNames}\n${followUp}` : followUp;
     addUserMessage(displayText);
     _hideActionButtons();
 
-    await MeetingRelay.continueRound(followUp, currentRouting, attachment);
+    await MeetingRelay.continueRound(followUp, currentRouting, attachments);
     _showActionButtons();
   }
 
@@ -387,7 +392,7 @@ const MeetingUI = (() => {
   // v1.4追加 - 会議用ファイル添付（#73）
   // ═══════════════════════════════════════════
 
-  /** v1.4追加 - 会議用ファイル添付のイベント設定 */
+  /** v1.5改修 - 会議用ファイル添付（複数対応） */
   function _setupFileAttach() {
     if (typeof FileHandler === 'undefined') return;
     const btnAttach = document.getElementById('btn-meeting-attach');
@@ -395,38 +400,49 @@ const MeetingUI = (() => {
     if (!btnAttach || !fileInput) return;
     btnAttach.addEventListener('click', () => fileInput.click());
     fileInput.addEventListener('change', async (e) => {
-      const file = e.target.files[0];
-      if (!file) return;
-      try {
-        _meetingAttachment = await FileHandler.readFile(file);
-        _updateMeetingFilePreview();
-      } catch (err) { alert(err.message); }
+      const files = Array.from(e.target.files);
+      if (!files.length) return;
+      const remaining = _MAX_ATTACHMENTS - _meetingAttachments.length;
+      if (remaining <= 0) { alert(`添付は最大${_MAX_ATTACHMENTS}件までだよ`); fileInput.value = ''; return; }
+      const toAdd = files.slice(0, remaining);
+      if (files.length > remaining) alert(`上限${_MAX_ATTACHMENTS}件のため、${remaining}件だけ追加するよ`);
+      for (const file of toAdd) {
+        try {
+          const att = await FileHandler.readFile(file);
+          _meetingAttachments.push(att);
+        } catch (err) { alert(`${file.name}: ${err.message}`); }
+      }
+      _updateMeetingFilePreview();
       fileInput.value = '';
     });
   }
 
-  /** v1.4追加 - 会議用ファイルプレビュー更新 */
+  /** v1.5改修 - 会議用ファイルプレビュー更新（複数対応） */
   function _updateMeetingFilePreview() {
     const preview = document.getElementById('meeting-file-preview');
     if (!preview) return;
-    if (!_meetingAttachment) {
+    if (_meetingAttachments.length === 0) {
       preview.classList.add('hidden');
       preview.innerHTML = '';
       return;
     }
-    const att = _meetingAttachment;
-    const sizeStr = att.size < 1024 ? `${att.size}B`
-      : att.size < 1048576 ? `${(att.size / 1024).toFixed(1)}KB`
-      : `${(att.size / 1048576).toFixed(1)}MB`;
-    const html = att.type === 'image'
-      ? `<div class="file-preview-item"><img src="${att.dataUrl}" alt="${att.name}" class="file-preview-thumb"><span class="file-preview-name">${att.name}</span><button class="file-preview-remove">✕</button></div>`
-      : `<div class="file-preview-item"><span class="file-preview-icon">📄</span><span class="file-preview-name">${att.name}（${sizeStr}）</span><button class="file-preview-remove">✕</button></div>`;
+    let html = '';
+    _meetingAttachments.forEach((att, idx) => {
+      const sizeStr = att.size < 1024 ? `${att.size}B`
+        : att.size < 1048576 ? `${(att.size / 1024).toFixed(1)}KB`
+        : `${(att.size / 1048576).toFixed(1)}MB`;
+      html += att.type === 'image'
+        ? `<div class="file-preview-item"><img src="${att.dataUrl}" alt="${att.name}" class="file-preview-thumb"><span class="file-preview-name">${att.name}</span><button class="file-preview-remove" data-idx="${idx}">✕</button></div>`
+        : `<div class="file-preview-item"><span class="file-preview-icon">📄</span><span class="file-preview-name">${att.name}（${sizeStr}）</span><button class="file-preview-remove" data-idx="${idx}">✕</button></div>`;
+    });
     preview.innerHTML = html;
     preview.classList.remove('hidden');
-    const removeBtn = preview.querySelector('.file-preview-remove');
-    if (removeBtn) removeBtn.addEventListener('click', () => {
-      _meetingAttachment = null;
-      _updateMeetingFilePreview();
+    preview.querySelectorAll('.file-preview-remove').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        const idx = parseInt(e.target.dataset.idx, 10);
+        _meetingAttachments.splice(idx, 1);
+        _updateMeetingFilePreview();
+      });
     });
   }
 
