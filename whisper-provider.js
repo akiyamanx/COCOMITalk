@@ -167,6 +167,7 @@ class WhisperProvider extends SpeechProvider {
   }
 
   // v1.2修正 - TTS後の再開にガード期間追加（尾音/残響の誤検出防止）
+  // v1.3修正 - ガード期間後にMediaRecorder再起動（webmヘッダー保全）
   async resume() {
     if (!this._listening || !this._stream) return;
     this._paused = false;
@@ -174,16 +175,17 @@ class WhisperProvider extends SpeechProvider {
     // TTS後は新しい発話待ち
     this._hasVoiceStarted = false;
     this._voiceCount = 0;
-    // ① 録音を開始（この時点からMediaRecorderがマイク音を拾い始める）
-    this._startRecording(false);
-    // UI更新のためonStartを通知
-    if (this.onStart) this.onStart();
-    // ② ガード期間: 300ms待ってから蓄積チャンクを破棄（TTS尾音/スピーカー残響を排除）
+    // ① まず300msガード期間を待つ（TTS尾音/スピーカー残響が消えるのを待つ）
     await new Promise(r => setTimeout(r, 300));
+    // ② ガード期間後に新しいMediaRecorderで録音開始
+    // （チャンク破棄ではなく再起動することでwebmヘッダーを確保）
     this._chunks = [];
     this._hasVoiceStarted = false;
     this._voiceCount = 0;
-    this._debugLog('ガード期間完了 — チャンク破棄＋発話検出リセット');
+    this._startRecording(false);
+    // UI更新のためonStartを通知
+    if (this.onStart) this.onStart();
+    this._debugLog('ガード期間完了 — MediaRecorder再起動＋発話検出リセット');
   }
 
   /** 停止して確定テキストを返す（互換用 — Whisperでは空文字を返す） */
