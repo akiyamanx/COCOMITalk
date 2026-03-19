@@ -89,7 +89,8 @@
 // v2.90 2026-03-19 - 会議モードにファイル添付対応（#73）meeting-ui.js v1.4 + meeting-relay.js v1.8
 // v2.91 2026-03-19 - 複数ファイル添付対応（上限10件）meeting-ui.js v1.5 + meeting-relay.js v1.9
 // v2.92 2026-03-19 - 会議モードClaude tool_useエラー修正（api-claude.js v1.7 skipTools）
-const CACHE_NAME = 'cocomitalk-v2.92';
+// v2.93 2026-03-19 - DebugLogger追加（デバッグOFF時にログファイル自動DL）
+const CACHE_NAME = 'cocomitalk-v2.93';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -134,6 +135,7 @@ const CACHE_FILES = [
   './voicevox-tts-provider.js',
   './speech-provider.js',
   './web-speech-provider.js',
+  './debug-logger.js',
   './whisper-provider.js',
   './voice-output.js',
   './voice-ui.js',

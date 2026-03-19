@@ -1,8 +1,9 @@
-// whisper-provider.js v1.2
+// whisper-provider.js v1.3
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大10秒で強制送信
 // ピコン音なし・高精度・ブラウザ非依存
+// v1.3 2026-03-19 - DebugLoggerフック追加（_debugLogからログファイル出力に連携）
 
 // v1.0 新規作成 - Whisper API STT（パターンCハイブリッド方式）
 // v1.1 追加 - sessionIDガード（三姉妹会議決定: 古い応答を世界から無効にする）
@@ -68,6 +69,8 @@ class WhisperProvider extends SpeechProvider {
     const ts = new Date().toLocaleTimeString('ja-JP', { hour12: false });
     const line = `[${ts}] ${msg}`;
     console.log(`[Whisper-DEBUG] ${msg}`);
+    // v1.3追加 - DebugLoggerにもログを送信（ファイル出力用）
+    if (window.DebugLogger) window.DebugLogger.addLog(line);
     this._debugLogs.push(line);
     if (this._debugLogs.length > 30) this._debugLogs.shift();
     if (this._debugEl && this._debugVisible) {

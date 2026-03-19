@@ -4,6 +4,7 @@
 // v1.0 2026-03-10 新規作成 - app.jsの設定関連10関数を分離＋スピード調整追加
 // v1.1 2026-03-15 - TTSスピードデフォルト1.25x（フォールバック値変更）
 // v1.2 2026-03-19 - STT切替を条件付きに＋デバッグパネルON/OFF安定化
+// v1.3 2026-03-19 - DebugLogger連動（デバッグOFF時にログファイル自動ダウンロード）
 'use strict';
 
 /** 設定モジュール（app.jsのinit()から呼ばれる） */
@@ -145,6 +146,14 @@ const AppSettings = (() => {
         }
         // v1.2修正 - デバッグ設定はswitchの後に常に適用（切替有無に関わらず確実に反映）
         window.voiceController.setDebugVisible(settings.sttDebug);
+        // v1.3追加 - DebugLogger連動（ON→記録開始、OFF→ログファイルダウンロード＋クリア）
+        if (window.DebugLogger) {
+          if (settings.sttDebug) {
+            window.DebugLogger.start();
+          } else {
+            window.DebugLogger.stopAndDownload();
+          }
+        }
       }
       _applyTTSProvider(settings.ttsProvider, settings.vvApiKey);
       _saveModelSettings();
