@@ -200,6 +200,15 @@ class WhisperProvider extends SpeechProvider {
 
   /** MediaRecorderで録音を開始＋無音監視＋最大時間タイマー */
   _startRecording(isContinuation = false) {
+    // v1.3追加 - 既存のMediaRecorderが動作中なら先に停止（二重録音防止）
+    if (this._recorder && this._recorder.state !== 'inactive') {
+      try { this._recorder.stop(); } catch (e) { /* ignore */ }
+    }
+    // v1.3追加 - 既存タイマーをクリア（二重タイマー防止）
+    if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
+    if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
+    if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
+
     this._chunks = [];
     this._processing = false;
     // 初回はリセット、セグメント継続時は発話状態を維持
