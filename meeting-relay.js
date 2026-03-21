@@ -1,6 +1,7 @@
 // COCOMITalk - 会議リレー制御（三姉妹が順番にAPIを呼び出すリレー会話のエンジン）
 // v0.8〜v1.5 初期作成〜なりすまし防止 / v1.7 PromptBuilder共通化
 // v1.8-1.9 ファイル添付対応 / v2.0 会議グレード3段階 / v2.1 APIリトライ / v2.2 Vectorize議題検索
+// v2.3 エラー日本語化+致命的エラー判定（B案: クレジット切れ等は即停止）
 
 'use strict';
 
@@ -54,14 +55,7 @@ const MeetingRelay = (() => {
   // v2.0追加 - 現在の会議グレード（meeting-lite/meeting/meeting-full）
   let _meetingGrade = 'meeting';
 
-  /**
-   * 会議を開始する
-   * @param {string} topic - アキヤの議題
-   * @param {Object} routing - MeetingRouter.analyzeTopic()の結果
-   * @param {Object|null} attachments - v1.8追加: 添付ファイル（#73）
-   * @param {string} [meetingGrade] - v2.0追加: 会議グレード（'meeting-lite'/'meeting'/'meeting-full'）
-   * @returns {Promise<Object>} 会議結果 { rounds, history, routing }
-   */
+  /** 会議を開始する（topic=議題, routing=分析結果, attachments=添付, meetingGrade=グレード） */
   async function startMeeting(topic, routing, attachments, meetingGrade) {
     if (isRunning) {
       console.warn('[MeetingRelay] 会議は既に進行中');
@@ -140,9 +134,7 @@ const MeetingRelay = (() => {
     }
   }
 
-  /**
-   * 1ラウンドの実行（三姉妹全員が順に発言）
-   */
+  /** 1ラウンドの実行（三姉妹全員が順に発言） */
   async function _runRound(topic, order, lead, roundNum) {
     if (abortRequested) return;
     currentRound = roundNum;
@@ -174,8 +166,13 @@ const MeetingRelay = (() => {
             break; // 成功したらループ抜ける
           } catch (e) {
             lastError = e;
+            // v2.3追加 - 致命的エラー（クレジット切れ等）はリトライしない
+            if (_isFatalError(e.message)) {
+              console.error(`[MeetingRelay] ${sister.name} 致命的エラー（リトライ不可）:`, e.message);
+              break;
+            }
             if (attempt < MAX_RETRIES) {
-              const wait = 1000 * (attempt + 1); // 1秒→2秒の指数バックオフ
+              const wait = 1000 * (attempt + 1);
               console.warn(`[MeetingRelay] ${sister.name} リトライ${attempt + 1}/${MAX_RETRIES}（${wait}ms待機）:`, e.message);
               if (typeof MeetingUI !== 'undefined') {
                 MeetingUI.addSystemMessage(`${sister.emoji}${sister.name} 通信エラー…リトライ中(${attempt + 1}/${MAX_RETRIES}) 🔄`);
@@ -210,12 +207,20 @@ const MeetingRelay = (() => {
         _saveEntryToHistory(entry);
 
       } catch (error) {
+        const jaMsg = _translateError(error.message);
         if (typeof MeetingUI !== 'undefined') {
           MeetingUI.hideTyping();
           MeetingUI.addSisterMessage(sisterKey,
-            `ごめん、通信エラーだった…💦（${error.message}）`, isLead);
+            `ごめん、通信エラーだった…💦（${jaMsg}）`, isLead);
         }
         console.error(`[MeetingRelay] ${sister.name}のAPI呼び出しエラー:`, error);
+        // v2.3追加 - 致命的エラー時は残りの姉妹もスキップして会議中断
+        if (_isFatalError(error.message)) {
+          if (typeof MeetingUI !== 'undefined') {
+            MeetingUI.addSystemMessage(`⚠️ ${jaMsg}。会議を一時停止します。問題を解決してからやり直してください。`);
+          }
+          break;
+        }
       }
     }
 
@@ -223,9 +228,38 @@ const MeetingRelay = (() => {
     _speakRoundEntries(roundNum);
   }
 
-  /**
-   * 個別の姉妹APIを呼び出す
-   */
+  // v2.3追加 - 致命的エラー判定（リトライしても無意味なエラー）
+  function _isFatalError(msg) {
+    if (!msg) return false;
+    const m = msg.toLowerCase();
+    return m.includes('credit balance') || m.includes('credit') && m.includes('low')
+      || m.includes('invalid api key') || m.includes('invalid x-api-key')
+      || m.includes('authentication') || m.includes('unauthorized')
+      || m.includes('account') && m.includes('deactivated');
+  }
+
+  // v2.3追加 - APIエラーメッセージを日本語に変換
+  function _translateError(msg) {
+    if (!msg) return '不明なエラーが発生しました';
+    const m = msg.toLowerCase();
+    if (m.includes('credit balance') || m.includes('credit') && m.includes('low'))
+      return 'APIクレジット残高が不足しています。Anthropicダッシュボードでクレジットを追加してください';
+    if (m.includes('invalid api key') || m.includes('invalid x-api-key'))
+      return 'APIキーが無効です。設定画面で正しいキーを入力してください';
+    if (m.includes('authentication') || m.includes('unauthorized'))
+      return '認証エラーです。APIキーを確認してください';
+    if (m.includes('rate limit') || m.includes('429'))
+      return 'APIの利用制限に達しました。しばらく待ってからやり直してください';
+    if (m.includes('timeout') || m.includes('timed out'))
+      return '通信がタイムアウトしました。電波状況を確認してやり直してください';
+    if (m.includes('overloaded') || m.includes('503'))
+      return 'APIサーバーが混雑しています。しばらく待ってからやり直してください';
+    if (m.includes('network') || m.includes('fetch'))
+      return 'ネットワーク接続エラーです。通信状況を確認してください';
+    return `エラー: ${msg}`;
+  }
+
+  /** 個別の姉妹APIを呼び出す */
   async function _callSisterAPI(sisterKey, topic, isLead, roundNum) {
     const sister = SISTERS[sisterKey];
     const apiModule = sister.api();
@@ -288,10 +322,7 @@ const MeetingRelay = (() => {
     return reply;
   }
 
-  /**
-   * 会議コンテキストを構築（前の姉妹の発言を履歴として渡す）
-   * v1.1修正 - 全ラウンドの履歴を含める（ラウンド2以降で前の内容が渡るように）
-   */
+  /** 会議コンテキストを構築（v1.1: 全ラウンド履歴含む） */
   function _buildMeetingContext(topic, roundNum) {
     const context = [];
 
@@ -323,12 +354,7 @@ const MeetingRelay = (() => {
     return context;
   }
 
-  /**
-   * 追加ラウンドを実行
-   * @param {string} followUp - アキヤの追加指示/質問
-   * @param {Object} routing - 最初のルーティング結果
-   * @param {Object|null} attachment - v1.8追加: 添付ファイル（#73）
-   */
+  /** 追加ラウンドを実行（followUp=追加指示, routing=ルーティング, attachments=添付） */
   async function continueRound(followUp, routing, attachments) {
     if (!isRunning && currentRound > 0) {
       isRunning = true;
@@ -375,47 +401,19 @@ const MeetingRelay = (() => {
     return null;
   }
 
-  /**
-   * 会議を中断
-   */
-  function abort() {
-    abortRequested = true;
-    console.log('[MeetingRelay] 会議中断リクエスト');
-  }
+  /** 会議を中断 */
+  function abort() { abortRequested = true; }
 
-  /**
-   * 現在の会議履歴を取得
-   */
-  function getHistory() {
-    return [...meetingHistory];
-  }
+  /** 現在の会議履歴を取得 */
+  function getHistory() { return [...meetingHistory]; }
+  /** 進行中かどうか */
+  function getIsRunning() { return isRunning; }
+  /** 現在のラウンド数 */
+  function getCurrentRound() { return currentRound; }
+  /** v1.0追加 - 現在の会議ID */
+  function getCurrentMeetingId() { return currentMeetingId; }
 
-  /**
-   * 進行中かどうか
-   */
-  function getIsRunning() {
-    return isRunning;
-  }
-
-  /**
-   * 現在のラウンド数
-   */
-  function getCurrentRound() {
-    return currentRound;
-  }
-
-  /**
-   * v1.0追加 - 現在の会議ID
-   */
-  function getCurrentMeetingId() {
-    return currentMeetingId;
-  }
-
-  /**
-   * v1.3追加 - ラウンドの全発言をTTSキュー再生（パターンB方式）
-   * 音声モードが有効な場合のみ再生。chat-group.jsと同じspeakQueue()を使用
-   * @param {number} roundNum - 対象ラウンド番号
-   */
+  /** v1.3追加 - ラウンドの全発言をTTSキュー再生 */
   function _speakRoundEntries(roundNum) {
     if (!window.voiceController || !window.voiceController.isEnabled()) return;
     // 今ラウンドの発言を抽出
@@ -429,9 +427,7 @@ const MeetingRelay = (() => {
     window.voiceController.speakQueue(queueItems);
   }
 
-  /**
-   * v1.0追加 - MeetingHistoryに発言を非同期保存（エラーでも会議は止めない）
-   */
+  /** v1.0追加 - MeetingHistoryに発言を非同期保存 */
   function _saveEntryToHistory(entry) {
     if (!currentMeetingId || typeof MeetingHistory === 'undefined') return;
     MeetingHistory.addEntry(currentMeetingId, entry).catch(e => {
@@ -439,9 +435,7 @@ const MeetingRelay = (() => {
     });
   }
 
-  /**
-   * v1.0追加 - 会議ステータスを更新（エラーでも止めない）
-   */
+  /** v1.0追加 - 会議ステータスを更新 */
   function _updateMeetingStatus(status) {
     if (!currentMeetingId || typeof MeetingHistory === 'undefined') return;
     MeetingHistory.updateStatus(currentMeetingId, status).catch(e => {
@@ -449,11 +443,7 @@ const MeetingRelay = (() => {
     });
   }
 
-  /**
-   * v1.1追加 - IndexedDBから会議状態を復元（ページ再読み込み後の再開用）
-   * @param {Object} meeting - MeetingHistory.getMeeting()の結果
-   * @returns {Object|null} 復元されたルーティング情報
-   */
+  /** v1.1追加 - IndexedDBから会議状態を復元 */
   function restoreFromDB(meeting) {
     if (!meeting || !meeting.routing) {
       console.warn('[MeetingRelay] 復元データが不正');
@@ -472,9 +462,7 @@ const MeetingRelay = (() => {
     return meeting.routing;
   }
 
-  /**
-   * v1.1追加 - 履歴から最大ラウンド番号を検出
-   */
+  /** v1.1追加 - 履歴から最大ラウンド番号を検出 */
   function _detectMaxRound(history) {
     if (!history || history.length === 0) return 0;
     return Math.max(...history.map(m => m.round || 1));

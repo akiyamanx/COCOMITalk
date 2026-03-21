@@ -93,7 +93,8 @@
 // v2.94 2026-03-19 - whisper-provider v1.3 resume()のwebmヘッダー保全修正
 // v2.95 2026-03-21 - 会議グレード3段階（lite/standard/full）+ 思考スタイルレイヤー + APIリトライ機構
 // v2.96 2026-03-22 - 会議モードVectorize議題検索注入（prompt-builder v1.3 + meeting-relay v2.2）
-const CACHE_NAME = 'cocomitalk-v2.96';
+// v2.97 2026-03-22 - 会議エラー日本語化+致命的エラー即停止（meeting-relay v2.3）
+const CACHE_NAME = 'cocomitalk-v2.97';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
