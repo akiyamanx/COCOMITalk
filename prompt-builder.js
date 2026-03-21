@@ -5,6 +5,7 @@
 // v1.0 2026-03-11 - 新規作成（共通化リファクタ）
 // v1.1 2026-03-12 - Step 6 Phase 1: チャット記憶注入（_getChatMemoryText追加）
 // v1.2 2026-03-15 - Step 6 Phase 2: Vectorize RAG意味検索結果注入（_getVectorSearchText追加）
+// v1.3 2026-03-22 - 会議モード用Vectorize議題検索（preloadVectorSearch公開、count引数対応）
 'use strict';
 
 /**
@@ -143,10 +144,10 @@ const PromptBuilder = (() => {
    * @param {string} userText - ユーザーの発言テキスト
    * @returns {Promise<string>}
    */
-  async function _getVectorSearchText(userText) {
+  async function _getVectorSearchText(userText, count) {
     if (typeof MeetingMemory === 'undefined' || !MeetingMemory.searchMemories) return '';
     try {
-      const relevant = await MeetingMemory.searchMemories(userText, 2);
+      const relevant = await MeetingMemory.searchMemories(userText, count || 2);
       if (!relevant || relevant.length === 0) return '';
 
       let prompt = '\n\n【関連する過去の記憶】\n';
@@ -184,9 +185,21 @@ const PromptBuilder = (() => {
     return await _getMemoryText(limit);
   }
 
+  /**
+   * v1.3追加 - 会議開始時にVectorize議題検索を事前取得する（meeting-relay用）
+   * 議題テキストに関連する過去の記憶を検索して注入テキストを返す
+   * @param {string} topicText - 議題テキスト
+   * @param {number} [count=3] - 検索件数
+   * @returns {Promise<string>}
+   */
+  async function preloadVectorSearch(topicText, count = 3) {
+    return await _getVectorSearchText(topicText, count);
+  }
+
   return {
     build,
     clearSearch,
     preloadMemory,
+    preloadVectorSearch, // v1.3追加
   };
 })();

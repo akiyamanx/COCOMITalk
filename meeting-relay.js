@@ -1,6 +1,6 @@
 // COCOMITalk - 会議リレー制御（三姉妹が順番にAPIを呼び出すリレー会話のエンジン）
 // v0.8〜v1.5 初期作成〜なりすまし防止 / v1.7 PromptBuilder共通化
-// v1.8-1.9 ファイル添付対応 / v2.0 会議グレード3段階 / v2.1 APIリトライ機構
+// v1.8-1.9 ファイル添付対応 / v2.0 会議グレード3段階 / v2.1 APIリトライ / v2.2 Vectorize議題検索
 
 'use strict';
 
@@ -8,8 +8,7 @@
  * 会議リレーモジュール
  * - 動的ルーティングで決まった順番に三姉妹がリレー発言
  * - 前の姉妹の発言を次に渡す（文脈の積み重ね）
- * - 最大3ラウンド（安全ガイド準拠: 無限ループ防止）
- * - v2.1: API呼び出し失敗時に最大2回リトライ（指数バックオフ）
+ * - 最大3ラウンド（安全ガイド準拠） / v2.1: 失敗時に最大2回リトライ（指数バックオフ）
  */
 const MeetingRelay = (() => {
 
@@ -99,12 +98,15 @@ const MeetingRelay = (() => {
       MeetingUI.showRoutingResult(routing);
     }
 
-    // v1.7改修 - PromptBuilderで事前メモリー取得
+    // v1.7改修 - PromptBuilderで事前メモリー取得 + v2.2追加 - Vectorize議題検索
     _memoryPrompt = '';
     if (typeof PromptBuilder !== 'undefined') {
       try {
         _memoryPrompt = await PromptBuilder.preloadMemory(5);
-        if (_memoryPrompt) console.log('[MeetingRelay] メモリー注入準備OK');
+        // v2.2追加 - 議題テキストでVectorize検索し過去の関連記憶を注入
+        const vectorPrompt = await PromptBuilder.preloadVectorSearch(topic, 3);
+        if (vectorPrompt) _memoryPrompt += vectorPrompt;
+        if (_memoryPrompt) console.log('[MeetingRelay] メモリー+Vectorize注入準備OK');
       } catch (e) {
         console.warn('[MeetingRelay] メモリー取得エラー（続行）:', e);
       }
