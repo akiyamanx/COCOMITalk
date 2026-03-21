@@ -126,6 +126,15 @@
       </div>
     </div>
     <footer class="meeting-input-area">
+      <!-- v2.95追加 - 会議グレード選択 -->
+      <div class="meeting-grade-bar" style="display:flex;align-items:center;gap:6px;padding:4px 12px;font-size:12px;color:#888;">
+        <label for="meeting-grade-select">会議モード:</label>
+        <select id="meeting-grade-select" style="font-size:12px;padding:2px 6px;border:1px solid #ddd;border-radius:6px;background:#fff;color:#555;cursor:pointer;">
+          <option value="meeting-lite">💬 ライト</option>
+          <option value="meeting" selected>📋 スタンダード</option>
+          <option value="meeting-full">🔥 フル会議</option>
+        </select>
+      </div>
       <!-- v2.90追加 - 会議用ファイルプレビュー -->
       <div id="meeting-file-preview" class="file-preview hidden"></div>
       <div class="input-wrapper">

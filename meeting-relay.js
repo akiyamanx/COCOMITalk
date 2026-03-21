@@ -1,17 +1,6 @@
-// COCOMITalk - 会議リレー制御
-// このファイルは三姉妹が順番にAPIを呼び出すリレー会話のエンジン
-// v0.8 Step 3 - 新規作成
-// v1.0 Step 3.5 - MeetingHistory連携（リアルタイムIndexedDB保存）
-// v1.1 2026-03-09 - restoreFromDB()追加（セッション復元用）
-//                  - _buildMeetingContext()全ラウンド対応（ラウンド2以降のコンテキスト引継ぎ）
-// v1.2 2026-03-09 - ラウンド2以降に元議題＋フォローアップを両方渡すように修正
-//                  - originalTopic保持でcontinueRound時のコンテキスト欠落を解消
-// v1.3 2026-03-10 - Step 5c: ラウンド完了後にTTSキュー再生（パターンB方式）
-// v1.4 2026-03-10 - Step 4: ラウンド完了時にMeetingMemory.autoSaveFromMeeting()呼び出し
-// v1.5 2026-03-11 - 他の姉妹の発言をuser roleで渡す（assistant混同＝なりすまし防止）
-// v1.7 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
-// v1.8 2026-03-19 - 会議モードにファイル添付対応（#73 attachment引数追加）
-// v1.9 2026-03-19 - 複数ファイル添付対応（テキスト結合、上限10件）
+// COCOMITalk - 会議リレー制御（三姉妹が順番にAPIを呼び出すリレー会話のエンジン）
+// v0.8〜v1.5 初期作成〜なりすまし防止 / v1.7 PromptBuilder共通化
+// v1.8-1.9 ファイル添付対応 / v2.0 会議グレード3段階 / v2.1 APIリトライ機構
 
 'use strict';
 
@@ -20,8 +9,7 @@
  * - 動的ルーティングで決まった順番に三姉妹がリレー発言
  * - 前の姉妹の発言を次に渡す（文脈の積み重ね）
  * - 最大3ラウンド（安全ガイド準拠: 無限ループ防止）
- * - 各発言ごとにMeetingUIに表示＋トークン記録
- * - v1.0: 各発言ごとにMeetingHistoryにリアルタイム保存
+ * - v2.1: API呼び出し失敗時に最大2回リトライ（指数バックオフ）
  */
 const MeetingRelay = (() => {
 
@@ -29,24 +17,25 @@ const MeetingRelay = (() => {
   const MAX_ROUNDS = 3;
 
   // --- 姉妹情報 ---
+  // v2.0改修 - prompt()に会議グレード引数を追加（meeting-lite/meeting/meeting-full）
   const SISTERS = {
     koko: {
       name: 'ここちゃん',
       emoji: '🌸',
       api: () => (typeof ApiGemini !== 'undefined') ? ApiGemini : null,
-      prompt: () => (typeof KokoSystemPrompt !== 'undefined') ? KokoSystemPrompt.getPrompt('meeting') : '',
+      prompt: (grade) => (typeof KokoSystemPrompt !== 'undefined') ? KokoSystemPrompt.getPrompt(grade || 'meeting') : '',
     },
     gpt: {
       name: 'お姉ちゃん',
       emoji: '🌙',
       api: () => (typeof ApiOpenAI !== 'undefined') ? ApiOpenAI : null,
-      prompt: () => (typeof GptSystemPrompt !== 'undefined') ? GptSystemPrompt.getPrompt('meeting') : '',
+      prompt: (grade) => (typeof GptSystemPrompt !== 'undefined') ? GptSystemPrompt.getPrompt(grade || 'meeting') : '',
     },
     claude: {
       name: 'クロちゃん',
       emoji: '🔮',
       api: () => (typeof ApiClaude !== 'undefined') ? ApiClaude : null,
-      prompt: () => (typeof ClaudeSystemPrompt !== 'undefined') ? ClaudeSystemPrompt.getPrompt('meeting') : '',
+      prompt: (grade) => (typeof ClaudeSystemPrompt !== 'undefined') ? ClaudeSystemPrompt.getPrompt(grade || 'meeting') : '',
     },
   };
 
@@ -63,15 +52,18 @@ const MeetingRelay = (() => {
   let _memoryPrompt = '';
   // v1.8追加 - 会議用添付ファイル（#73）/ v1.9改修 - 複数ファイル対応
   let _currentAttachments = null;
+  // v2.0追加 - 現在の会議グレード（meeting-lite/meeting/meeting-full）
+  let _meetingGrade = 'meeting';
 
   /**
    * 会議を開始する
    * @param {string} topic - アキヤの議題
    * @param {Object} routing - MeetingRouter.analyzeTopic()の結果
-   * @param {Object|null} attachment - v1.8追加: 添付ファイル（#73）
+   * @param {Object|null} attachments - v1.8追加: 添付ファイル（#73）
+   * @param {string} [meetingGrade] - v2.0追加: 会議グレード（'meeting-lite'/'meeting'/'meeting-full'）
    * @returns {Promise<Object>} 会議結果 { rounds, history, routing }
    */
-  async function startMeeting(topic, routing, attachments) {
+  async function startMeeting(topic, routing, attachments, meetingGrade) {
     if (isRunning) {
       console.warn('[MeetingRelay] 会議は既に進行中');
       return null;
@@ -83,6 +75,9 @@ const MeetingRelay = (() => {
     meetingHistory = [];
     originalTopic = topic; // v1.2追加
     _currentAttachments = attachments || null; // v1.9改修 - 複数ファイル対応
+    // v2.0追加 - 会議グレード設定（デフォルトは通常会議）
+    _meetingGrade = meetingGrade || 'meeting';
+    console.log(`[MeetingRelay] 会議グレード: ${_meetingGrade}`);
 
     const order = routing.order;
     const lead = routing.lead;
@@ -167,8 +162,30 @@ const MeetingRelay = (() => {
       }
 
       try {
-        // API呼び出し
-        const reply = await _callSisterAPI(sisterKey, topic, isLead, roundNum);
+        // v2.0追加 - API呼び出し（リトライ機構付き、最大2回リトライ＝計3回試行）
+        const MAX_RETRIES = 2;
+        let reply = null;
+        let lastError = null;
+        for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+          try {
+            reply = await _callSisterAPI(sisterKey, topic, isLead, roundNum);
+            break; // 成功したらループ抜ける
+          } catch (e) {
+            lastError = e;
+            if (attempt < MAX_RETRIES) {
+              const wait = 1000 * (attempt + 1); // 1秒→2秒の指数バックオフ
+              console.warn(`[MeetingRelay] ${sister.name} リトライ${attempt + 1}/${MAX_RETRIES}（${wait}ms待機）:`, e.message);
+              if (typeof MeetingUI !== 'undefined') {
+                MeetingUI.addSystemMessage(`${sister.emoji}${sister.name} 通信エラー…リトライ中(${attempt + 1}/${MAX_RETRIES}) 🔄`);
+              }
+              await new Promise(r => setTimeout(r, wait));
+            }
+          }
+        }
+        // リトライ全滅した場合
+        if (reply === null) {
+          throw lastError || new Error('不明なエラー');
+        }
 
         // タイピング消去＋メッセージ表示
         if (typeof MeetingUI !== 'undefined') {
@@ -216,7 +233,8 @@ const MeetingRelay = (() => {
     }
 
     // 会議用システムプロンプト
-    const systemPrompt = sister.prompt();
+    // v2.0改修 - 会議グレードに応じたプロンプト取得
+    const systemPrompt = sister.prompt(_meetingGrade);
 
     // 主担当の追加指示
     const leadInstruction = isLead
@@ -460,6 +478,11 @@ const MeetingRelay = (() => {
     return Math.max(...history.map(m => m.round || 1));
   }
 
+  // v2.0追加 - 現在の会議グレードを取得
+  function getMeetingGrade() {
+    return _meetingGrade;
+  }
+
   return {
     startMeeting,
     continueRound,
@@ -468,6 +491,7 @@ const MeetingRelay = (() => {
     getIsRunning,
     getCurrentRound,
     getCurrentMeetingId,
+    getMeetingGrade,
     restoreFromDB,
     MAX_ROUNDS,
   };

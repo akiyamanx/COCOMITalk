@@ -91,7 +91,8 @@
 // v2.92 2026-03-19 - 会議モードClaude tool_useエラー修正（api-claude.js v1.7 skipTools）
 // v2.93 2026-03-19 - DebugLogger追加（デバッグOFF時にログファイル自動DL）
 // v2.94 2026-03-19 - whisper-provider v1.3 resume()のwebmヘッダー保全修正
-const CACHE_NAME = 'cocomitalk-v2.94';
+// v2.95 2026-03-21 - 会議グレード3段階（lite/standard/full）+ 思考スタイルレイヤー + APIリトライ機構
+const CACHE_NAME = 'cocomitalk-v2.95';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [

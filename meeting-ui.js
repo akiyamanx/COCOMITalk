@@ -1,9 +1,6 @@
 // COCOMITalk - 会議専用画面UI（メッセージ表示・ラウンド管理・アクションボタン）
-// v0.8 新規作成 / v0.9 Markdown対応 / v1.0 ヘッダー常時表示＋アーカイブ
-// v1.1 restoreDisplay＋topicInput方式 / v1.2 確認ダイアログ＋UX改善
-// v1.3 2026-03-10 - 議事録DL＋指示書生成をMeetingDocActionsに分離（496→413行に軽量化）
-// v1.4 2026-03-19 - 会議モードにファイル添付対応（#73）
-// v1.5 2026-03-19 - 複数ファイル添付対応（上限10件、multiple選択）
+// v0.8〜v1.3 初期作成〜議事録DL分離 / v1.4-1.5 ファイル添付対応
+// v1.6 2026-03-21 - 会議グレード選択対応（meeting-lite/meeting/meeting-full）
 'use strict';
 
 /** 会議UIモジュール */
@@ -152,8 +149,12 @@ const MeetingUI = (() => {
       const routing = await MeetingRouter.analyzeTopic(topic);
       currentRouting = routing;
 
-      // リレー開始（v1.4: attachment付き）
-      await MeetingRelay.startMeeting(topic, routing, attachments);
+      // v1.6追加 - 会議グレード取得
+      const gradeSelect = meetingScreen.querySelector('#meeting-grade-select');
+      const meetingGrade = gradeSelect ? gradeSelect.value : 'meeting';
+
+      // リレー開始（v1.4: attachment付き、v1.6: グレード付き）
+      await MeetingRelay.startMeeting(topic, routing, attachments, meetingGrade);
 
       // 完了 → アクションボタン表示
       _showActionButtons();
