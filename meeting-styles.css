@@ -358,3 +358,36 @@
 .meeting-confirm-msg { font-size: 0.9rem; line-height: 1.5; margin-bottom: 16px; color: #e8e8f0; }
 .meeting-confirm-btns { display: flex; flex-direction: column; gap: 8px; }
 .meeting-confirm-btns .meeting-action-btn { width: 100%; padding: 10px; font-size: 0.85rem; }
+
+/* v1.7追加 - 📋指示書生成ドロップダウンメニュー */
+.doc-gen-dropdown {
+  z-index: 1000;
+  background: #1a1a24;
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 12px;
+  padding: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+  min-width: 180px;
+  animation: docDropIn 0.15s ease-out;
+}
+@keyframes docDropIn {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.doc-gen-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: 10px 14px;
+  background: none;
+  border: none;
+  color: #e8e8f0;
+  font-size: 0.85rem;
+  text-align: left;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.doc-gen-dropdown-item:hover,
+.doc-gen-dropdown-item:active {
+  background: rgba(108,92,231,0.2);
+}

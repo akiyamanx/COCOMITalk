@@ -2,6 +2,7 @@
 // v1.0 2026-03-10 - meeting-ui.jsから分離
 // v1.1 2026-03-23 - 連続ダウンロードに間隔追加（Android Chromeブロック対策）
 // v1.2 2026-03-24 - DL間隔を1500msに拡大＋多ファイル時の案内（上位モデルで7-9ファイル生成時のブロック対策）
+// v1.3 2026-03-24 - 分割ボタン対応（fileType引数でCLAUDE.md/設計書/指示書を個別生成可能に）
 'use strict';
 
 /** 会議ドキュメントアクションモジュール */
@@ -70,8 +71,10 @@ const MeetingDocActions = (() => {
     _sysMsg('📝 議事録をダウンロードしたよ！');
   }
 
-  /** 会議履歴から指示書を生成＋ダウンロード */
-  async function generateDoc() {
+  /** 会議履歴から指示書を生成＋ダウンロード
+   * v1.3 - fileType: 'claude'/'design'/'step'/'all'（デフォルト'all'で後方互換）
+   */
+  async function generateDoc(fileType = 'all') {
     if (typeof MeetingRelay === 'undefined' || typeof DocGenerator === 'undefined') {
       _sysMsg('指示書生成モジュールが未読み込み');
       return;
@@ -91,10 +94,13 @@ const MeetingDocActions = (() => {
       };
     });
 
-    _sysMsg('📋 指示書を生成中... お姉ちゃんが統合→クロちゃんがチェック');
+    // v1.3 - fileTypeに応じたステータスメッセージ
+    const LABEL_MAP = { claude: 'CLAUDE.md', design: '設計書', step: 'ステップ指示書', all: '全指示書' };
+    const label = LABEL_MAP[fileType] || '指示書';
+    _sysMsg(`📋 ${label}を生成中... お姉ちゃんが作成→クロちゃんがチェック`);
 
     try {
-      const result = await DocGenerator.generate(chatMessages);
+      const result = await DocGenerator.generate(chatMessages, fileType);
       if (result.success && result.files.length > 0) {
         // v1.2 - 多ファイル時の案内（上位モデルだと7-9ファイルになることがある）
         if (result.files.length > 3) {

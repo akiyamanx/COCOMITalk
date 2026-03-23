@@ -1,6 +1,7 @@
 // COCOMITalk - 会議専用画面UI（メッセージ表示・ラウンド管理・アクションボタン）
 // v0.8〜v1.3 初期作成〜議事録DL分離 / v1.4-1.5 ファイル添付対応
 // v1.6 2026-03-21 - 会議グレード選択対応（meeting-lite/meeting/meeting-full）
+// v1.7 2026-03-24 - 📋ボタンをドロップダウン化（CLAUDE.md/設計書/指示書を個別生成）
 'use strict';
 
 /** 会議UIモジュール */
@@ -87,10 +88,10 @@ const MeetingUI = (() => {
 
     const btnDoc = meetingScreen.querySelector('#btn-meeting-doc');
     if (btnDoc) {
-      btnDoc.addEventListener('click', () => {
-        if (typeof MeetingDocActions !== 'undefined') {
-          MeetingDocActions.generateDoc();
-        }
+      // v1.7 - 📋ボタンでドロップダウンメニュー表示（分割ボタン方式）
+      btnDoc.addEventListener('click', (e) => {
+        e.stopPropagation();
+        _toggleDocDropdown(btnDoc);
       });
     }
 
@@ -222,35 +223,24 @@ const MeetingUI = (() => {
 
   /** 会議画面を表示 */
   function show() {
-    if (meetingScreen) {
-      meetingScreen.classList.remove('hidden');
-      isVisible = true;
-    }
-    // 通常チャット画面を非表示
+    if (meetingScreen) { meetingScreen.classList.remove('hidden'); isVisible = true; }
     const normalChat = document.getElementById('app');
     if (normalChat) normalChat.classList.add('meeting-active');
   }
-
   /** 会議画面を非表示 */
   function hide() {
-    if (meetingScreen) {
-      meetingScreen.classList.add('hidden');
-      isVisible = false;
-    }
+    if (meetingScreen) { meetingScreen.classList.add('hidden'); isVisible = false; }
     const normalChat = document.getElementById('app');
     if (normalChat) normalChat.classList.remove('meeting-active');
   }
-
   /** 表示中かどうか */
   function getIsVisible() { return isVisible; }
-
   /** ルーティング結果を表示 */
   function showRoutingResult(routing) {
     const leadSister = SISTER_DISPLAY[routing.lead];
     const orderNames = routing.order
       .map(k => `${SISTER_DISPLAY[k].emoji}${SISTER_DISPLAY[k].name}`)
       .join(' → ');
-
     addSystemMessage(
       `📋 議題カテゴリ: ${routing.label}\n` +
       `👑 主担当: ${leadSister.emoji}${leadSister.name}\n` +
@@ -262,21 +252,17 @@ const MeetingUI = (() => {
   /** 姉妹のメッセージを追加 */
   function addSisterMessage(sisterKey, text, isLead) {
     if (!chatArea) return;
-
     const sister = SISTER_DISPLAY[sisterKey];
     const msgDiv = document.createElement('div');
     msgDiv.className = `meeting-msg sister-msg ${sisterKey}`;
-
     const header = document.createElement('div');
     header.className = 'meeting-msg-header';
     header.innerHTML = `<span class="meeting-avatar" style="background:${sister.color}">${sister.emoji}</span>` +
       `<span class="meeting-name" style="color:${sister.color}">${sister.name}</span>` +
       (isLead ? '<span class="meeting-lead-badge">👑主担当</span>' : '');
-
     const body = document.createElement('div');
     body.className = 'meeting-msg-body';
     body.innerHTML = _renderMarkdown(text);
-
     msgDiv.appendChild(header);
     msgDiv.appendChild(body);
     chatArea.appendChild(msgDiv);
@@ -286,19 +272,15 @@ const MeetingUI = (() => {
   /** アキヤのメッセージを追加 */
   function addUserMessage(text) {
     if (!chatArea) return;
-
     const msgDiv = document.createElement('div');
     msgDiv.className = 'meeting-msg user-msg';
-
     const header = document.createElement('div');
     header.className = 'meeting-msg-header';
     header.innerHTML = '<span class="meeting-avatar" style="background:#4CAF50">👤</span>' +
       '<span class="meeting-name" style="color:#4CAF50">アキヤ</span>';
-
     const body = document.createElement('div');
     body.className = 'meeting-msg-body';
     body.textContent = text;
-
     msgDiv.appendChild(header);
     msgDiv.appendChild(body);
     chatArea.appendChild(msgDiv);
@@ -308,7 +290,6 @@ const MeetingUI = (() => {
   /** システムメッセージを追加 */
   function addSystemMessage(text) {
     if (!chatArea) return;
-
     const msgDiv = document.createElement('div');
     msgDiv.className = 'meeting-msg system-msg';
     msgDiv.innerHTML = text.replace(/\n/g, '<br>');
@@ -320,58 +301,44 @@ const MeetingUI = (() => {
   function showTyping(sisterKey) {
     hideTyping();
     if (!chatArea) return;
-
     const sister = SISTER_DISPLAY[sisterKey];
     const msgDiv = document.createElement('div');
     msgDiv.className = 'meeting-msg sister-msg';
     msgDiv.id = 'meeting-typing';
-
     msgDiv.innerHTML = `<div class="meeting-msg-header">
       <span class="meeting-avatar" style="background:${sister.color}">${sister.emoji}</span>
       <span class="meeting-name" style="color:${sister.color}">${sister.name}</span>
       <span class="meeting-thinking">考え中...</span>
     </div>
     <div class="meeting-msg-body typing-indicator">
-      <span class="typing-dot"></span>
-      <span class="typing-dot"></span>
-      <span class="typing-dot"></span>
+      <span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span>
     </div>`;
-
     chatArea.appendChild(msgDiv);
     _scrollToBottom();
   }
-
   /** タイピングインジケーター非表示 */
   function hideTyping() {
     const typing = document.getElementById('meeting-typing');
     if (typing) typing.remove();
   }
-
   /** アクションボタン表示（ラウンド完了後） */
   function _showActionButtons() {
     const actions = meetingScreen?.querySelector('.meeting-actions');
     if (actions) actions.classList.remove('hidden');
-    // ヘッダーの📝📋を有効化
     const btnM = meetingScreen?.querySelector('#btn-meeting-minutes');
     const btnD = meetingScreen?.querySelector('#btn-meeting-doc');
     if (btnM) btnM.disabled = false;
     if (btnD) btnD.disabled = false;
-    // v1.2追加 - 入力欄のplaceholderをわかりやすく変更
-    if (topicInput) {
-      topicInput.placeholder = '💬 追加の質問や指示を入力...';
-    }
-    // v1.2追加 - ラウンド番号をガイドに反映
+    if (topicInput) topicInput.placeholder = '💬 追加の質問や指示を入力...';
     const guide = meetingScreen?.querySelector('#meeting-action-guide');
     const round = (typeof MeetingRelay !== 'undefined') ? MeetingRelay.getCurrentRound() : 0;
     if (guide) guide.textContent = `✅ ラウンド${round}完了！次はどうする？`;
   }
-
   /** アクションボタン非表示 */
   function _hideActionButtons() {
     const actions = meetingScreen?.querySelector('.meeting-actions');
     if (actions) actions.classList.add('hidden');
   }
-
   /** チャットエリアをクリア */
   function _clearChat() { if (chatArea) chatArea.innerHTML = ''; }
 
@@ -445,6 +412,37 @@ const MeetingUI = (() => {
         _updateMeetingFilePreview();
       });
     });
+  }
+
+  // v1.7追加 - 📋指示書生成ドロップダウンメニュー
+  function _toggleDocDropdown(anchorBtn) {
+    const existing = document.getElementById('doc-gen-dropdown');
+    if (existing) { existing.remove(); return; }
+    const menu = document.createElement('div');
+    menu.id = 'doc-gen-dropdown';
+    menu.className = 'doc-gen-dropdown';
+    [
+      { label: '📋 CLAUDE.md', fileType: 'claude' },
+      { label: '📐 設計書', fileType: 'design' },
+      { label: '📝 ステップ指示書', fileType: 'step' },
+      { label: '📦 全部生成', fileType: 'all' },
+    ].forEach(item => {
+      const btn = document.createElement('button');
+      btn.className = 'doc-gen-dropdown-item';
+      btn.textContent = item.label;
+      btn.addEventListener('click', () => {
+        menu.remove();
+        if (typeof MeetingDocActions !== 'undefined') MeetingDocActions.generateDoc(item.fileType);
+      });
+      menu.appendChild(btn);
+    });
+    const rect = anchorBtn.getBoundingClientRect();
+    menu.style.cssText = `position:fixed;top:${rect.bottom + 4}px;right:${window.innerWidth - rect.right}px`;
+    document.body.appendChild(menu);
+    const close = (e) => {
+      if (!menu.contains(e.target) && e.target !== anchorBtn) { menu.remove(); document.removeEventListener('click', close); }
+    };
+    setTimeout(() => document.addEventListener('click', close), 10);
   }
 
   /** v1.0追加 - 📂過去の会議一覧を表示（MeetingArchiveUIに委譲） */
