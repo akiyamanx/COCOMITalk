@@ -1,5 +1,6 @@
 // COCOMITalk - 会議ドキュメントアクション（議事録DL＋指示書生成）
 // v1.0 2026-03-10 - meeting-ui.jsから分離
+// v1.1 2026-03-23 - 連続ダウンロードに間隔追加（Android Chromeブロック対策）
 'use strict';
 
 /** 会議ドキュメントアクションモジュール */
@@ -94,8 +95,10 @@ const MeetingDocActions = (() => {
     try {
       const result = await DocGenerator.generate(chatMessages);
       if (result.success && result.files.length > 0) {
-        for (const file of result.files) {
-          _downloadBlob(file.content, file.name, 'text/markdown; charset=utf-8');
+        // v1.1修正 - 連続ダウンロードにAndroid Chromeがブロックするため500ms間隔を空ける
+        for (let i = 0; i < result.files.length; i++) {
+          if (i > 0) await new Promise(r => setTimeout(r, 500));
+          _downloadBlob(result.files[i].content, result.files[i].name, 'text/markdown; charset=utf-8');
         }
         _sysMsg(`📋 指示書${result.files.length}ファイルをダウンロードしたよ！`);
       }
