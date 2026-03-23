@@ -3,6 +3,7 @@
 // v1.0 - 語りコードの完成形：お姉ちゃん統合→クロちゃん最終チェックの2段階生成
 // v1.1 2026-03-08 - GPT-5系のdeveloperロール＋max_completion_tokens対応
 // v1.2 2026-03-23 - max_tokens 4096→16384に拡張（3ファイル合計で途切れ防止）
+// v1.3 2026-03-23 - Opus 4.6 temperature非対応修正（会議モードで500エラー防止）
 
 'use strict';
 
@@ -195,8 +196,11 @@ const DocGenerator = (() => {
         system: systemPrompt,
         messages: [{ role: 'user', content: userContent }],
         max_tokens: 16384,  // v1.2修正 - 3ファイル合計で途切れ防止
-        temperature: 0.2,
       };
+      // v1.3修正 - Opus 4.6はtemperature非対応（api-claude.js v1.1準拠）
+      if (!modelName.includes('opus')) {
+        body.temperature = 0.2;
+      }
       const data = await ApiCommon.callAPI('claude', body);
       const content = data?.content;
       if (content && content.length > 0) {
