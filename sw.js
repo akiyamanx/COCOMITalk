@@ -95,7 +95,8 @@
 // v2.96 2026-03-22 - 会議モードVectorize議題検索注入（prompt-builder v1.3 + meeting-relay v2.2）
 // v2.97 2026-03-22 - 会議エラー日本語化+致命的エラー即停止（meeting-relay v2.3）
 // v2.98 2026-03-23 - グループモード💾SAVE対応（chat-group.js v1.6）
-const CACHE_NAME = 'cocomitalk-v2.98';
+// v2.99 2026-03-23 - 指示書生成max_tokens拡張（doc-generator.js v1.2）
+const CACHE_NAME = 'cocomitalk-v2.99';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
