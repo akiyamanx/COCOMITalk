@@ -1,6 +1,7 @@
 // COCOMITalk - 会議ドキュメントアクション（議事録DL＋指示書生成）
 // v1.0 2026-03-10 - meeting-ui.jsから分離
 // v1.1 2026-03-23 - 連続ダウンロードに間隔追加（Android Chromeブロック対策）
+// v1.2 2026-03-24 - DL間隔を1500msに拡大＋多ファイル時の案内（上位モデルで7-9ファイル生成時のブロック対策）
 'use strict';
 
 /** 会議ドキュメントアクションモジュール */
@@ -95,12 +96,23 @@ const MeetingDocActions = (() => {
     try {
       const result = await DocGenerator.generate(chatMessages);
       if (result.success && result.files.length > 0) {
-        // v1.1修正 - 連続ダウンロードにAndroid Chromeがブロックするため500ms間隔を空ける
-        for (let i = 0; i < result.files.length; i++) {
-          if (i > 0) await new Promise(r => setTimeout(r, 500));
-          _downloadBlob(result.files[i].content, result.files[i].name, 'text/markdown; charset=utf-8');
+        // v1.2 - 多ファイル時の案内（上位モデルだと7-9ファイルになることがある）
+        if (result.files.length > 3) {
+          _sysMsg(`📋 ${result.files.length}ファイル生成完了！順番にダウンロードするよ（Chromeの「複数ダウンロード許可」が出たら許可してね）`);
+          await new Promise(r => setTimeout(r, 1000));
         }
-        _sysMsg(`📋 指示書${result.files.length}ファイルをダウンロードしたよ！`);
+        // v1.2修正 - DL間隔を1500msに拡大（上位モデルの多ファイル連続DLでブロックされる対策）
+        let dlCount = 0;
+        for (let i = 0; i < result.files.length; i++) {
+          if (i > 0) await new Promise(r => setTimeout(r, 1500));
+          try {
+            _downloadBlob(result.files[i].content, result.files[i].name, 'text/markdown; charset=utf-8');
+            dlCount++;
+          } catch (dlError) {
+            console.error(`[MeetingDocActions] DL失敗: ${result.files[i].name}`, dlError);
+          }
+        }
+        _sysMsg(`📋 指示書${dlCount}/${result.files.length}ファイルをダウンロードしたよ！`);
       }
     } catch (error) {
       _sysMsg(`指示書生成エラー: ${error.message}`);
