@@ -6,6 +6,7 @@
 // v1.3 2026-03-11 - PromptBuilder共通化リファクタ（メモリー＋検索注入をprompt-builder.jsに委譲）
 // v1.4 2026-03-13 - 他姉妹セリフ代弁バグ修正（グループ会話ルールに自分の言葉だけ制約を追加）
 // v1.5 2026-03-16 - グループモードファイル添付対応（方針C: テキスト全員・画像リードのみ）
+// v1.6 2026-03-23 - グループモードでもAI自発的記憶保存マーカー検知（detectAndSave対応）
 
 'use strict';
 
@@ -71,11 +72,16 @@ const ChatGroup = (() => {
             }
           }
 
-          const reply = await _callSisterInGroup(
+          let reply = await _callSisterInGroup(
             userText, sisterKey, isLead, sisterAPI,
             chatHistories, relayContext, complement, SISTERS,
             undefined, sisterAttachment
           );
+
+          // v1.6追加 - グループモードでもAI自発的記憶保存マーカーを検知
+          if (typeof ChatMemory !== 'undefined' && reply.includes('💾SAVE:')) {
+            reply = await ChatMemory.detectAndSave(reply, sisterKey, chatHistories[sisterKey] || []);
+          }
 
           hideTyping();
           addMessage('ai', reply, { sisterKey, isLead });
