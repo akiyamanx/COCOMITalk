@@ -96,7 +96,8 @@
 // v2.97 2026-03-22 - 会議エラー日本語化+致命的エラー即停止（meeting-relay v2.3）
 // v2.98 2026-03-23 - グループモード💾SAVE対応（chat-group.js v1.6）
 // v2.99 2026-03-23 - 指示書生成max_tokens拡張（doc-generator.js v1.2）
-const CACHE_NAME = 'cocomitalk-v3.14';
+// v3.00 2026-03-24 - MCP GitHub push実戦テスト（クロちゃんがMCP経由で直接更新！）
+const CACHE_NAME = 'cocomitalk-v3.15';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
