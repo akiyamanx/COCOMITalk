@@ -119,6 +119,10 @@ const MeetingDocActions = (() => {
           }
         }
         _sysMsg(`📋 指示書${dlCount}/${result.files.length}ファイルをダウンロードしたよ！`);
+        // v1.3 - クロちゃんチェックがスキップされた場合の丁寧な案内
+        if (result.reviewSkipped) {
+          _sysMsg('⚠️ お姉ちゃん版です。クロちゃん復旧後に再チェックしてね');
+        }
       }
     } catch (error) {
       _sysMsg(`指示書生成エラー: ${error.message}`);
