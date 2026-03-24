@@ -2,6 +2,7 @@
 // このファイルはcocomi-api-relay Worker経由のAPI呼び出しを共通化する
 // v0.5 Step 2 - 共通ヘルパー新規作成
 // v0.6 2026-03-10 - AbortController対応（送信キャンセル機能）
+// v0.7 2026-03-24 - タイムアウト検出＋エラーメッセージ強化（30秒制限の原因特定支援）
 
 'use strict';
 
@@ -32,6 +33,7 @@ const ApiCommon = (() => {
   /**
    * Worker経由でAPIを呼び出す
    * v0.6変更 - AbortController対応（options.signalで外部からも渡せる）
+   * v0.7変更 - タイムアウト検出＋エラーメッセージ強化
    */
   async function callAPI(endpoint, body, options = {}) {
     const authToken = getAuthToken();
@@ -52,6 +54,9 @@ const ApiCommon = (() => {
       fetchBody = JSON.stringify(body);
     }
 
+    // v0.7追加 - リクエスト開始時刻を記録（タイムアウト判定用）
+    const startTime = Date.now();
+
     try {
       const response = await fetch(`${WORKER_URL}/${endpoint}`, {
         method: 'POST',
@@ -63,10 +68,25 @@ const ApiCommon = (() => {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMsg = errorData?.error?.message || errorData?.error || `HTTP ${response.status}`;
-        throw new Error(`API中継エラー（${endpoint}）: ${errorMsg}`);
+        // v0.7追加 - 502/504/524はWorkerタイムアウトの可能性を明示
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        if ([502, 504, 524].includes(response.status)) {
+          throw new Error(`${endpoint}: Workerタイムアウト（${elapsed}秒）。上位モデルの設計書は30秒制限に引っかかる場合があるよ`);
+        }
+        throw new Error(`API中継エラー（${endpoint}）: ${errorMsg}（${elapsed}秒）`);
       }
 
       return response.json();
+    } catch (err) {
+      // v0.7追加 - ネットワークエラー時のタイムアウト判定
+      if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        if (elapsed > 25) {
+          throw new Error(`${endpoint}: 通信タイムアウト（${elapsed}秒）。Workerの30秒制限が原因の可能性が高いよ`);
+        }
+        throw new Error(`${endpoint}: 通信エラー（${elapsed}秒）: ${err.message}`);
+      }
+      throw err;
     } finally {
       // v0.6追加 - 完了したcontrollerをリストから除去
       _activeControllers = _activeControllers.filter(c => c !== controller);

@@ -3,6 +3,7 @@
 // v1.1 2026-03-23 - 連続ダウンロードに間隔追加（Android Chromeブロック対策）
 // v1.2 2026-03-24 - DL間隔を1500msに拡大＋多ファイル時の案内（上位モデルで7-9ファイル生成時のブロック対策）
 // v1.3 2026-03-24 - 分割ボタン対応（fileType引数でCLAUDE.md/設計書/指示書を個別生成可能に）
+// v1.4 2026-03-24 - エラー詳細表示強化（デバッグ情報をチャットに表示、改行をスペースに変換）
 'use strict';
 
 /** 会議ドキュメントアクションモジュール */
@@ -125,7 +126,9 @@ const MeetingDocActions = (() => {
         }
       }
     } catch (error) {
-      _sysMsg(`指示書生成エラー: ${error.message}`);
+      // v1.4修正 - エラー詳細をチャットに丁寧に表示（改行をスペースに変換して1行で見やすく）
+      const cleanMsg = (error.message || String(error)).replace(/\n/g, ' ');
+      _sysMsg(`❌ ${label}生成エラー: ${cleanMsg}`);
     }
   }
 
