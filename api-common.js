@@ -94,6 +94,109 @@ const ApiCommon = (() => {
   }
 
   /**
+   * v0.7追加 - ストリーミングAPI呼び出し（SSEパース＋テキスト組み立て）
+   * Worker経由でstream:trueのリクエストを投げ、SSEストリームを受信して
+   * テキストを組み立てて返す。30秒タイムアウト回避用。
+   * @param {string} endpoint - 'openai' or 'claude'
+   * @param {Object} body - APIリクエストボディ（stream:trueを含む）
+   * @returns {Promise<Object>} OpenAI形式 or Claude形式のレスポンスオブジェクト
+   */
+  async function callAPIStream(endpoint, body) {
+    const authToken = getAuthToken();
+    if (!authToken) {
+      throw new Error('COCOMI認証トークンが設定されていません');
+    }
+
+    const controller = new AbortController();
+    _activeControllers.push(controller);
+    const startTime = Date.now();
+
+    try {
+      const response = await fetch(`${WORKER_URL}/${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-COCOMI-AUTH': authToken,
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        const errorMsg = errorData?.error?.message || errorData?.error || `HTTP ${response.status}`;
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        throw new Error(`API中継エラー（${endpoint}）: ${errorMsg}（${elapsed}秒）`);
+      }
+
+      // SSEストリームをパースしてテキストを組み立てる
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let finishReason = null;
+      let stopReason = null;
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        // 最後の不完全な行はバッファに残す
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const dataStr = line.slice(6).trim();
+          if (dataStr === '[DONE]') continue;
+
+          try {
+            const parsed = JSON.parse(dataStr);
+            if (endpoint === 'openai') {
+              // OpenAI SSE: choices[0].delta.content
+              const delta = parsed.choices?.[0]?.delta?.content;
+              if (delta) fullText += delta;
+              const fr = parsed.choices?.[0]?.finish_reason;
+              if (fr) finishReason = fr;
+            } else if (endpoint === 'claude') {
+              // Claude SSE: delta.text (content_block_delta) or delta.stop_reason (message_delta)
+              if (parsed.type === 'content_block_delta') {
+                const delta = parsed.delta?.text;
+                if (delta) fullText += delta;
+              } else if (parsed.type === 'message_delta') {
+                stopReason = parsed.delta?.stop_reason || null;
+              }
+            }
+          } catch (e) {
+            // JSONパース失敗は無視（不完全なチャンク）
+          }
+        }
+      }
+
+      // 各API形式に合わせたレスポンスオブジェクトを組み立てて返す
+      if (endpoint === 'openai') {
+        return {
+          choices: [{ message: { content: fullText }, finish_reason: finishReason || 'stop' }],
+        };
+      } else {
+        return {
+          content: [{ type: 'text', text: fullText }],
+          stop_reason: stopReason || 'end_turn',
+        };
+      }
+    } catch (err) {
+      if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        throw new Error(`${endpoint}: ストリーミング通信エラー（${elapsed}秒）: ${err.message}`);
+      }
+      throw err;
+    } finally {
+      _activeControllers = _activeControllers.filter(c => c !== controller);
+    }
+  }
+
+  /**
    * v0.6追加 - 全ての進行中APIリクエストを中断
    * @returns {number} 中断したリクエスト数
    */
@@ -118,6 +221,7 @@ const ApiCommon = (() => {
     getAuthToken,
     hasAuthToken,
     callAPI,
+    callAPIStream,
     getWorkerURL,
     abortAll,
     hasActiveRequests,
