@@ -1,9 +1,10 @@
-// voice-input.js v2.2
+// voice-input.js v2.2.2
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
 // UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
 // v2.0 方針F: バッファ蓄積＋2.5秒待機＋ノイズフィルタ＋確認アニメ
 // v2.1 修正 - TTS途中切れバグ修正（TTS待機フラグ＋STT再開抑制）
 // v2.2 改修 - voice-state.js連携（三姉妹会議決定: ステートマシン＋sessionID＋自己修復）
+// v2.2.2 修正 - _restartSTT()にTTS再生状態チェック追加（フィードバックループ対策）
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS） */
 class VoiceController {
@@ -276,12 +277,17 @@ class VoiceController {
     if (this._lastBufferText && text === this._lastBufferText) return true;
     return false;
   }
+  // v2.2.2修正 - TTS再生中のSTT再開を確実に防止（フィードバックループ対策）
   _restartSTT() {
     setTimeout(() => {
-      if (this._enabled && !this._voiceState.isSpeaking()) {
+      // speaking状態チェック＋実際の再生状態チェック（二重ガード）
+      if (this._enabled
+          && !this._voiceState.isSpeaking()
+          && !this._playback.isPlaying()
+          && !this._playback.isQueuePlaying()) {
         this._stt.start({ language: 'ja-JP' });
       }
-    }, 400);
+    }, 800);
   }
 
   // v2.2.1改修 - TTS後のSTT再開（健全性チェック＋自己修復＋speaking再侵入ガード）
