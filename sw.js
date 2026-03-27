@@ -1,4 +1,4 @@
-<![CDATA[// COCOMITalk - Service Worker
+// COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v0.3 Session C - PWA強化（キャッシュ更新＋オフライン画面）
 // v0.5 Step 3.5 - 会議系ファイル追加＋キャッシュバージョンアップ
@@ -101,7 +101,8 @@
 // v3.02 2026-03-27 - whisper-provider.js v1.4 ハルシネーションフィルタ追加＋無音判定延長
 // v3.03 2026-03-27 - HOTトピック通知: prompt-builder.js v1.4（直近24h新着記憶注入）
 // v3.04 2026-03-27 - #77 吹き出しタップ読み上げ（chat-ui.js v1.1 + voice-input.js v2.2.3）
-const CACHE_NAME = 'cocomitalk-v3.19';
+// v3.05 2026-03-27 - #77改善: voice-output.js v1.5チャンク分割 + chat-ui.js v1.2停止トグル
+const CACHE_NAME = 'cocomitalk-v3.20';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
@@ -270,4 +271,4 @@ function _offlineResponse() {
   return new Response(html, {
     headers: { 'Content-Type': 'text/html; charset=utf-8' },
   });
-}]]>
+}
