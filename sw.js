@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.12 2026-03-28 - voice-output.js v2.0 詳細ログDL＋連続スペース除去
-const CACHE_NAME = 'cocomitalk-v3.27';
+// v3.13 2026-03-28 - voice-output.js v2.1 VOICEVOX残りチャンク修正
+const CACHE_NAME = 'cocomitalk-v3.28';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
