@@ -95,6 +95,10 @@ class AudioPlaybackManager {
 
     // マークダウン記法やコードブロックを除去（読み上げに不要）
     const cleanText = this._cleanTextForTTS(text);
+
+    // === デバッグオーバーレイ（一時的 — #77特殊文字調査用） ===
+    this._showTTSDebug(text, cleanText);
+
     if (cleanText.length === 0) {
       console.log('[AudioPM] クリーニング後テキストが空のためスキップ');
       return;
@@ -590,6 +594,56 @@ class AudioPlaybackManager {
    */
   isPlaying() {
     return this._playing;
+  }
+
+  // === デバッグ用（一時的 — #77特殊文字調査） ===
+  _showTTSDebug(rawText, cleanText) {
+    // 特殊文字を可視化する関数
+    const visualize = (str) => str
+      .replace(/\r\n/g, '⏎[CRLF]')
+      .replace(/\r/g, '⏎[CR]')
+      .replace(/\n/g, '⏎[LF]')
+      .replace(/\u2028/g, '⏎[LS]')
+      .replace(/\u2029/g, '⏎[PS]')
+      .replace(/\u00A0/g, '[NBSP]')
+      .replace(/\u3000/g, '[全角SP]')
+      .replace(/\t/g, '[TAB]');
+
+    // 既存のデバッグオーバーレイがあれば削除
+    const old = document.getElementById('tts-debug-overlay');
+    if (old) old.remove();
+
+    const div = document.createElement('div');
+    div.id = 'tts-debug-overlay';
+    div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;'
+      + 'background:rgba(0,0,0,0.9);color:#0f0;font-size:11px;'
+      + 'padding:10px;overflow:auto;z-index:99999;'
+      + 'font-family:monospace;white-space:pre-wrap;word-break:break-all;';
+
+    // 特殊文字カウント
+    const crlfCount = (rawText.match(/\r\n/g) || []).length;
+    const crCount = (rawText.replace(/\r\n/g, '').match(/\r/g) || []).length;
+    const lfCount = (rawText.replace(/\r\n/g, '').match(/\n/g) || []).length;
+    const lsCount = (rawText.match(/\u2028/g) || []).length;
+    const psCount = (rawText.match(/\u2029/g) || []).length;
+    const nbspCount = (rawText.match(/\u00A0/g) || []).length;
+    const zenSpCount = (rawText.match(/\u3000/g) || []).length;
+
+    div.innerHTML = '<b style="color:#ff0;font-size:14px;">'
+      + '🔍 TTS DEBUG — タップで閉じる</b>\n\n'
+      + '<b style="color:#ff0;">【特殊文字カウント（raw）】</b>\n'
+      + `LF(\\n): ${lfCount}  CRLF(\\r\\n): ${crlfCount}  CR(\\r): ${crCount}\n`
+      + `LineSep(U+2028): ${lsCount}  ParaSep(U+2029): ${psCount}\n`
+      + `NBSP: ${nbspCount}  全角SP: ${zenSpCount}\n\n`
+      + '<b style="color:#ff0;">【raw（先頭400字）】</b>\n'
+      + visualize(rawText.slice(0, 400)) + '\n\n'
+      + '<b style="color:#ff0;">【clean後（先頭400字）】</b>\n'
+      + '<span style="color:#0ff;">'
+      + visualize(cleanText.slice(0, 400)) + '</span>\n\n'
+      + `<b style="color:#ff0;">raw: ${rawText.length}字 → clean: ${cleanText.length}字</b>`;
+
+    div.addEventListener('click', () => div.remove());
+    document.body.appendChild(div);
   }
 
   /**
