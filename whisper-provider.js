@@ -1,8 +1,9 @@
-// whisper-provider.js v1.3
+// whisper-provider.js v1.4
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大10秒で強制送信
 // ピコン音なし・高精度・ブラウザ非依存
+// v1.4 2026-03-27 - ハルシネーションフィルタ追加（おやすみなさい等）＋無音判定2500→3000ms延長
 // v1.3 2026-03-19 - DebugLoggerフック追加（_debugLogからログファイル出力に連携）
 
 // v1.0 新規作成 - Whisper API STT（パターンCハイブリッド方式）
@@ -33,7 +34,7 @@ class WhisperProvider extends SpeechProvider {
 
     // 設定値
     this._SILENCE_THRESHOLD = 35;    // 無音判定の音量閾値（0-255、環境音を除外するため高め）
-    this._SILENCE_DURATION = 2500;   // 無音継続でAPI送信（ms）— 息継ぎ1〜2秒を吸収
+    this._SILENCE_DURATION = 3000;   // v2.2.3変更 - 無音継続でAPI送信（ms）— 2500→3000に延長、ゆっくり話す時の息継ぎ対策
     this._MAX_RECORD_TIME = 15000;   // 最大録音時間（ms）— 長話でも余裕
     this._MIN_RECORD_TIME = 800;     // 最小録音時間（ms）— 短すぎる音声を無視
     this._VOLUME_CHECK_MS = 100;     // 音量チェック間隔（ms）
@@ -441,6 +442,7 @@ class WhisperProvider extends SpeechProvider {
   }
 
   /** Whisperのハルシネーション（無音時に勝手に生成される定型文）を判定 */
+  // v2.2.3追加 - 「おやすみなさい」等の未登録パターンを追加（統合レポートA-1対応）
   _isHallucination(text) {
     const patterns = [
       /ご視聴/, /ご清聴/, /ご覧いただき/, /チャンネル登録/, /高評価/,
@@ -448,6 +450,10 @@ class WhisperProvider extends SpeechProvider {
       /字幕/, /翻訳/, /エンディング/, /提供/, /次回/, /おわり/,
       /BGM/, /Music/, /Subtitles/i, /Subscribe/i, /Thank you/i,
       /^\s*[.。…\s]+\s*$/, // ドットや省略記号のみ
+      /^おやすみなさい[。.]?$/, // v2.2.3追加 - 無音時に誤認識されるパターン
+      /これからもお楽しみに/, // v2.2.3追加
+      /次の動画でお会いしましょう/, // v2.2.3追加
+      /^以上です[。.]?$/, // v2.2.3追加 - 短文完結のみ（文中の「以上です」は許可）
     ];
     return patterns.some(p => p.test(text));
   }
