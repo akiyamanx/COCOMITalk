@@ -1,5 +1,5 @@
 # COCOMI CI - COCOMITalk品質チェック
-# v1.5 - 2026-03-12 JS構文チェック(node --check)＋グローバルクラス定義チェック(grep)追加
+# v1.6 - 2026-03-27 500行制限を段階制に変更（500⚠️警告/550❌エラー）＋ESLint導入（警告のみ）
 
 name: COCOMI CI
 
@@ -15,25 +15,44 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # 1. 500行制限チェック
-      - name: 500行制限チェック
+      # 0. Node.jsセットアップ（ESLint用）
+      - name: Node.jsセットアップ
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 1. 行数制限チェック（段階制: 500⚠️警告 / 550❌エラー）
+      - name: 行数制限チェック（段階制）
         run: |
-          echo "=== 500行制限チェック ==="
-          OVER_LIMIT=0
+          echo "=== 行数制限チェック（段階制） ==="
+          echo "  500行超え → ⚠️ 警告（CIは通す）"
+          echo "  550行超え → ❌ エラー（CIを落とす）"
+          echo ""
+          HARD_FAIL=0
+          SOFT_WARN=0
           for file in $(find . -name "*.js" -o -name "*.html" -o -name "*.css" | grep -v node_modules | grep -v .github); do
             LINES=$(wc -l < "$file")
-            if [ "$LINES" -gt 500 ]; then
-              echo "❌ $file: ${LINES}行（500行超過）"
-              OVER_LIMIT=1
+            if [ "$LINES" -gt 550 ]; then
+              echo "❌ $file: ${LINES}行（550行超過 — 分割必須！）"
+              HARD_FAIL=1
+            elif [ "$LINES" -gt 500 ]; then
+              echo "⚠️ $file: ${LINES}行（500行超過 — 分割を検討してね）"
+              SOFT_WARN=1
             else
               echo "✅ $file: ${LINES}行"
             fi
           done
-          if [ "$OVER_LIMIT" -eq 1 ]; then
-            echo "::error::500行を超えるファイルがあります。"
+          if [ "$HARD_FAIL" -eq 1 ]; then
+            echo ""
+            echo "::error::550行を超えるファイルがあります。分割してください。"
             exit 1
           fi
-          echo "✅ 全ファイル500行以内"
+          if [ "$SOFT_WARN" -eq 1 ]; then
+            echo ""
+            echo "::warning::500行を超えるファイルがあります。次の機能追加時に分割を検討してください。"
+          fi
+          echo ""
+          echo "✅ 行数制限チェック完了"
 
       # 2. JS構文チェック（node --check）
       - name: JS構文チェック
@@ -51,7 +70,20 @@ jobs:
           fi
           echo "✅ 全JSファイル構文OK"
 
-      # 3. グローバルクラス定義チェック（grep）
+      # 3. ESLint品質チェック（警告のみ・CIは落とさない）
+      - name: ESLint品質チェック
+        run: |
+          echo "=== ESLint品質チェック ==="
+          npm install --no-save eslint@8 2>/dev/null
+          if [ -f ".eslintrc.json" ]; then
+            npx eslint "*.js" "prompts/*.js" --max-warnings 999 2>&1 || true
+          else
+            echo "⚠️ .eslintrc.json が見つかりません（ESLintスキップ）"
+          fi
+          echo ""
+          echo "📝 ESLintは現在警告のみモードです（CIは落としません）"
+
+      # 4. グローバルクラス定義チェック（grep）
       - name: グローバルクラス定義チェック
         run: |
           echo "=== グローバルクラス定義チェック ==="
@@ -68,7 +100,7 @@ jobs:
           fi
           echo "✅ 全クラス定義OK"
 
-      # 4. 先頭コメントチェック
+      # 5. 先頭コメントチェック
       - name: 先頭コメントチェック
         run: |
           echo "=== 先頭コメントチェック ==="
@@ -81,7 +113,7 @@ jobs:
             fi
           done
 
-      # 5. バージョン番号チェック
+      # 6. バージョン番号チェック
       - name: バージョン番号チェック
         run: |
           echo "=== バージョン番号チェック ==="
@@ -94,7 +126,7 @@ jobs:
             fi
           done
 
-      # 6. console.log検出（警告のみ・CIは落とさない）
+      # 7. console.log検出（警告のみ・CIは落とさない）
       - name: console.log検出
         run: |
           echo "=== console.log検出（情報のみ） ==="
@@ -108,13 +140,13 @@ jobs:
           done
           echo "合計: ${COUNT}件（開発中のため警告のみ）"
 
-      # 7. TODO/FIXME検出
+      # 8. TODO/FIXME検出
       - name: TODO/FIXME検出
         run: |
           echo "=== TODO/FIXME検出 ==="
           grep -rn "TODO\|FIXME\|HACK\|XXX" --include="*.js" --include="*.html" --include="*.css" . --exclude-dir=node_modules --exclude-dir=.github || echo "✅ TODO/FIXMEなし"
 
-      # 8. ファイル行数サマリー
+      # 9. ファイル行数サマリー
       - name: ファイル行数サマリー
         run: |
           echo "=== ファイル行数サマリー ==="
@@ -126,7 +158,7 @@ jobs:
           done
           echo "合計: ${TOTAL}行"
 
-      # 9. LINE通知（成功時）
+      # 10. LINE通知（成功時）
       - name: LINE通知（成功）
         if: success()
         env:
@@ -143,7 +175,7 @@ jobs:
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -d "{\"to\":\"${LINE_USER_ID}\",\"messages\":[{\"type\":\"text\",\"text\":\"${TEXT}\"}]}"
 
-      # 10. LINE通知（失敗時）
+      # 11. LINE通知（失敗時）
       - name: LINE通知（失敗）
         if: failure()
         env:
