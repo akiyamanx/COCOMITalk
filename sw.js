@@ -100,7 +100,8 @@
 // v3.01 2026-03-25 - voice-input.js v2.2.2 TTS/STTフィードバックループ修正
 // v3.02 2026-03-27 - whisper-provider.js v1.4 ハルシネーションフィルタ追加＋無音判定延長
 // v3.03 2026-03-27 - HOTトピック通知: prompt-builder.js v1.4（直近24h新着記憶注入）
-const CACHE_NAME = 'cocomitalk-v3.18';
+// v3.04 2026-03-27 - #77 吹き出しタップ読み上げ（chat-ui.js v1.1 + voice-input.js v2.2.3）
+const CACHE_NAME = 'cocomitalk-v3.19';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
