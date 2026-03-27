@@ -1,9 +1,10 @@
-// openai-tts-provider.js v1.0
+// openai-tts-provider.js v1.1
 // このファイルはOpenAI TTS APIをcocomi-api-relay Worker経由で呼び出す
 // TTSProviderインターフェースに準拠した実装
 // /tts エンドポイント（Step 5aで実装済み）を使用する
 
 // v1.0 新規作成 - Step 5b OpenAI TTS実装
+// v1.1 修正 - #77改善: テキスト長制限を500→4000文字に緩和（voice-output v1.5チャンク分割と連携）
 
 /**
  * OpenAI TTSプロバイダー
@@ -51,11 +52,15 @@ class OpenAITTSProvider extends TTSProvider {
       throw new Error('テキストが空です');
     }
 
-    // テキスト長制限（安全ガイド準拠 - コスト安全策）
-    const MAX_TEXT_LENGTH = 500;
-    const truncatedText = text.length > MAX_TEXT_LENGTH
-      ? text.substring(0, MAX_TEXT_LENGTH) + '...'
-      : text;
+    // v1.1修正 - テキスト長制限をOpenAI TTS APIの上限に合わせて緩和
+    // voice-output.js v1.5のチャンク分割（450文字以下）と連携するため
+    // プロバイダー側は4000文字まで許可（APIの4096文字制限に安全マージン）
+    const MAX_TEXT_LENGTH = 4000;
+    let truncatedText = text;
+    if (text.length > MAX_TEXT_LENGTH) {
+      console.warn(`[TTS] テキストが${MAX_TEXT_LENGTH}文字を超過（${text.length}文字）→ 切り詰め`);
+      truncatedText = text.substring(0, MAX_TEXT_LENGTH);
+    }
 
     // api-common.jsからWorker URL/認証トークンを取得
     if (typeof ApiCommon === 'undefined' || !ApiCommon.hasAuthToken()) {
@@ -69,7 +74,7 @@ class OpenAITTSProvider extends TTSProvider {
     const url = `${ApiCommon.getWorkerURL()}/tts`;
     const startTime = performance.now();
 
-    console.log(`[TTS] 生成開始: voice=${voice}, text="${truncatedText.substring(0, 30)}...", speed=${speed}`);
+    console.log(`[TTS] 生成開始: voice=${voice}, text="${truncatedText.substring(0, 30)}..." (${truncatedText.length}文字), speed=${speed}`);
 
     const response = await fetch(url, {
       method: 'POST',
