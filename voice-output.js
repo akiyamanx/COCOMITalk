@@ -1,4 +1,4 @@
-// voice-output.js v1.5
+// voice-output.js v1.6
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -10,6 +10,7 @@
 // v1.3 追加 - playbackRate再生速度＋canplaythrough待ち
 // v1.4 追加 - Step 5d TTSフォールバック（VOICEVOX→OpenAI自動切替）
 // v1.5 追加 - #77改善: 長文チャンク分割読み上げ（句読点で分割→順次再生）
+// v1.6 修正 - #77改善: TTS読み飛ばし修正（改行→連続文変換で全文読み上げ）
 
 /**
  * AudioPlaybackManager
@@ -21,6 +22,7 @@
  * - 割り込み停止（ボタン押下 or テキスト入力で即停止）
  * - 姉妹アイコン発光の通知
  * - v1.5 長文チャンク分割（OpenAI TTS 4096文字制限対応）
+ * - v1.6 改行→連続文変換（TTS読み飛ばし修正）
  */
 class AudioPlaybackManager {
   constructor() {
@@ -628,8 +630,14 @@ class AudioPlaybackManager {
     cleaned = cleaned.replace(/\|.*\|/g, '');
     cleaned = cleaned.replace(/^[-|:\s]+$/gm, '');
 
-    // 連続する空行を1つにまとめる
-    cleaned = cleaned.replace(/\n{3,}/g, '\n\n');
+    // v1.6追加 - TTS向け改行→連続文変換
+    // マークダウン除去後の改行だらけテキストをTTS APIが読み飛ばす問題を修正
+    // 改行を除去して句読点で繋いだ自然な1文に変換する
+    cleaned = cleaned.replace(/^\s*$/gm, '');              // 空行を除去
+    cleaned = cleaned.replace(/([。！？])\n+/g, '$1');      // 句読点後の改行→そのまま結合
+    cleaned = cleaned.replace(/([^\n。！？、])\n+/g, '$1。'); // 句読点なし行末→句点補って結合
+    cleaned = cleaned.replace(/\n+/g, '');                  // 残り改行を除去
+    cleaned = cleaned.replace(/。{2,}/g, '。');              // 連続句点を1つに
 
     // 前後の空白をトリム
     cleaned = cleaned.trim();
