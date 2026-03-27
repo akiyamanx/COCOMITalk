@@ -1,5 +1,6 @@
 // COCOMITalk - チャットUI（メッセージ表示・タイピング表示・デモ返答）
 // v1.0 2026-03-10 - chat-core.jsから表示系ロジックを分離
+// v1.1 2026-03-27 - #77 吹き出しタップ読み上げ（AI返答bubbleをタップ→TTS再生）
 'use strict';
 
 /** チャットUI表示モジュール */
@@ -64,6 +65,16 @@ const ChatUi = (() => {
       textNode.textContent = text;
     }
     bubble.appendChild(textNode);
+
+    // v1.1追加 - #77 吹き出しタップ読み上げ（AI返答のみ）
+    if (role === 'ai') {
+      bubble.style.cursor = 'pointer';
+      bubble.addEventListener('click', () => {
+        if (window.voiceController && window.voiceController.speakBubble) {
+          window.voiceController.speakBubble(text, sisterKey);
+        }
+      });
+    }
 
     if (options.noHistory) {
       msgDiv.classList.add('msg-no-history');
