@@ -1,8 +1,8 @@
-// voice-output.js v1.7
+// voice-output.js v1.8
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
-// v1.7修正: チャンクサイズ縮小（CHUNK_LIMIT 500→200, MAX_CHUNK 450→150）TTS読み飛ばし防止
+// v1.8修正: 見出し行まるごと除去+太字見出し行除去（TTS要約読み防止の根本修正）
 
 // v1.0 新規作成 - Step 5b TTS再生管理
 // v1.1 追加 - キュー再生機能（グループモード3人全員対応）
@@ -661,10 +661,13 @@ class AudioPlaybackManager {
     // インラインコードを除去（`...`）
     cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
 
-    // マークダウンの見出し記号を除去（### など）
-    cleaned = cleaned.replace(/^#{1,6}\s+/gm, '');
+    // v1.8修正 - 見出し行をまるごと除去（#記号だけでなく行全体。TTS要約読み防止）
+    cleaned = cleaned.replace(/^#{1,6}\s+.*$/gm, '');
 
-    // マークダウンの太字・斜体記号を除去
+    // v1.8修正 - 太字だけの行（見出し的な役割）も除去（**まとめ** のような行）
+    cleaned = cleaned.replace(/^\*\*[^*]+\*\*\s*$/gm, '');
+
+    // マークダウンの太字・斜体記号を除去（文中の太字は中身だけ残す）
     cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
     cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
     cleaned = cleaned.replace(/__([^_]+)__/g, '$1');
