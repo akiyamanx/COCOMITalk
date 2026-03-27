@@ -105,7 +105,8 @@
 // v3.07 2026-03-27 - #77修正: voice-output.js v1.6 TTS読み飛ばし修正（改行→連続文変換）
 // v3.08 2026-03-28 - #77調査: voice-output.js デバッグオーバーレイ追加（一時的）
 // v3.09 2026-03-28 - #77修正: voice-output.js v1.7 チャンクサイズ縮小（CHUNK_LIMIT 200, MAX_CHUNK 150）
-const CACHE_NAME = 'cocomitalk-v3.24';
+// v3.10 2026-03-28 - #77修正: voice-output.js v1.8 見出し行まるごと除去（TTS要約読み根本修正）
+const CACHE_NAME = 'cocomitalk-v3.25';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
