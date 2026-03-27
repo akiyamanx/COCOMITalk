@@ -1,0 +1,48 @@
+{
+  "env": {
+    "browser": true,
+    "es2021": true
+  },
+  "parserOptions": {
+    "ecmaVersion": "latest",
+    "sourceType": "script"
+  },
+  "rules": {
+    "no-undef": "warn",
+    "no-unused-vars": ["warn", { "vars": "local", "args": "none" }],
+    "eqeqeq": ["warn", "smart"],
+    "no-constant-condition": "warn",
+    "no-debugger": "warn",
+    "no-dupe-keys": "error",
+    "no-duplicate-case": "error",
+    "no-unreachable": "warn",
+    "no-redeclare": "warn"
+  },
+  "globals": {
+    "VoiceCommand": "writable",
+    "WebSpeechProvider": "writable",
+    "AudioPlaybackManager": "writable",
+    "VoiceUI": "writable",
+    "PromptBuilder": "writable",
+    "COCOMIChat": "writable",
+    "ChatUI": "writable",
+    "ChatGroup": "writable",
+    "ChatMemory": "writable",
+    "MeetingRelay": "writable",
+    "MeetingUI": "writable",
+    "MeetingHistory": "writable",
+    "DocGenerator": "writable",
+    "TokenMonitor": "writable",
+    "MemoryUI": "writable",
+    "MemoryImportUI": "writable",
+    "AudioHealthMonitor": "writable",
+    "VoiceState": "writable",
+    "VoiceSender": "writable",
+    "AppSettings": "writable",
+    "TTSTest": "writable",
+    "WhisperProvider": "writable",
+    "API_BASE": "readonly",
+    "AUTH_TOKEN": "readonly",
+    "APP_CONFIG": "readonly"
+  }
+}
