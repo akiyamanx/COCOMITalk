@@ -1,8 +1,8 @@
-// voice-output.js v1.6
+// voice-output.js v1.7
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
-// v2.1調査済み: チャンク間の_playing管理は正常。TTS途中切れの原因はvoice-input.js側
+// v1.7修正: チャンクサイズ縮小（CHUNK_LIMIT 500→200, MAX_CHUNK 450→150）TTS読み飛ばし防止
 
 // v1.0 新規作成 - Step 5b TTS再生管理
 // v1.1 追加 - キュー再生機能（グループモード3人全員対応）
@@ -105,7 +105,7 @@ class AudioPlaybackManager {
     }
 
     // v1.5追加 - 長文の場合はチャンク分割で再生
-    const CHUNK_LIMIT = 500; // 500文字以上なら分割（TTS API安全マージン）
+    const CHUNK_LIMIT = 200; // v1.7修正 - 200文字以上なら分割（TTS読み飛ばし防止）
     if (cleanText.length > CHUNK_LIMIT) {
       console.log(`[AudioPM] 長文検出（${cleanText.length}文字）→ チャンク分割再生`);
       await this._speakChunked(cleanText, sisterId, options);
@@ -225,7 +225,7 @@ class AudioPlaybackManager {
    * @returns {string[]} チャンク配列
    */
   _splitTextToChunks(text) {
-    const MAX_CHUNK = 450; // 安全マージン込み
+    const MAX_CHUNK = 150; // v1.7修正 - 短チャンクでTTS読み飛ばし防止
     const chunks = [];
 
     // まず句読点・改行で分割
