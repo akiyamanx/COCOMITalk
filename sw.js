@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.13 2026-03-28 - voice-output.js v2.1 VOICEVOX残りチャンク修正
-const CACHE_NAME = 'cocomitalk-v3.28';
+// v3.14 2026-03-28 - 三姉妹自己認識プロンプト追加（prompts/ v1.1/v1.1/v1.3）
+const CACHE_NAME = 'cocomitalk-v3.29';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
