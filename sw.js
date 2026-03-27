@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.11 2026-03-28 - #77調査: voice-output.js v1.9 チャンク再生進行ログパネル
-const CACHE_NAME = 'cocomitalk-v3.26';
+// v3.12 2026-03-28 - #77調査: voice-output.js v1.9-debug チャンク再生ミニログ
+const CACHE_NAME = 'cocomitalk-v3.27';
 
 const CACHE_FILES = [
   './',
