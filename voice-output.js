@@ -1,8 +1,8 @@
-// voice-output.js v1.8
+// voice-output.js v1.9
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
-// v1.8修正: 見出し行まるごと除去+太字見出し行除去（TTS要約読み防止の根本修正）
+// v1.9デバッグ: チャンク再生進行ログパネル追加（#77根本原因調査）
 
 // v1.0 新規作成 - Step 5b TTS再生管理
 // v1.1 追加 - キュー再生機能（グループモード3人全員対応）
@@ -11,54 +11,30 @@
 // v1.4 追加 - Step 5d TTSフォールバック（VOICEVOX→OpenAI自動切替）
 // v1.5 追加 - #77改善: 長文チャンク分割読み上げ（句読点で分割→順次再生）
 // v1.6 修正 - #77改善: TTS読み飛ばし修正（改行→連続文変換で全文読み上げ）
+// v1.8 修正 - 見出し行まるごと除去+太字見出し行除去
+// v1.9 デバッグ - チャンク再生進行ログパネル（#77根本原因調査用・一時的）
 
-/**
- * AudioPlaybackManager
- * TTS音声の再生を管理するクラス
- *
- * 機能:
- * - 単発再生（1対1チャット用）
- * - キュー再生（会議モード用 — Step 5cで拡張）
- * - 割り込み停止（ボタン押下 or テキスト入力で即停止）
- * - 姉妹アイコン発光の通知
- * - v1.5 長文チャンク分割（OpenAI TTS 4096文字制限対応）
- * - v1.6 改行→連続文変換（TTS読み飛ばし修正）
- */
 class AudioPlaybackManager {
   constructor() {
-    // TTSプロバイダー（差し替え可能）
     this._openaiProvider = new OpenAITTSProvider();
-    // v1.2追加 - VOICEVOXプロバイダー（利用可能ならインスタンス化）
     this._voicevoxProvider = (typeof VoicevoxTTSProvider !== 'undefined')
       ? new VoicevoxTTSProvider() : null;
-    // 現在のプロバイダー参照
     this._ttsProvider = this._openaiProvider;
-    // 現在再生中のAudioオブジェクト
     this._currentAudio = null;
-    // 再生状態
     this._playing = false;
-    // v1.1追加 - キュー再生用
     this._queue = [];
     this._queuePlaying = false;
     this._queueCancelled = false;
-    // イベントコールバック
-    this.onPlayStart = null;   // (sisterId) => {}
-    this.onPlayEnd = null;     // (sisterId) => {}
-    this.onPlayError = null;   // (error, sisterId) => {}
-    // v1.1追加 - キュー全体完了コールバック
-    this.onQueueEnd = null;    // () => {}
-    // v1.3追加 - 再生速度（playbackRateで制御）
+    this.onPlayStart = null;
+    this.onPlayEnd = null;
+    this.onPlayError = null;
+    this.onQueueEnd = null;
     this._speed = 1.0;
-    // v1.4追加 - フォールバック通知コールバック
-    this.onFallback = null; // (message) => {} — UI通知用
-    // v1.5追加 - チャンク分割再生中フラグ
+    this.onFallback = null;
     this._chunkedPlaying = false;
   }
 
-  /**
-   * v1.2追加 - TTSプロバイダーを切り替える
-   * @param {string} providerName - 'openai' | 'voicevox'
-   */
+  // v1.2追加 - TTSプロバイダー切替
   switchProvider(providerName) {
     if (providerName === 'voicevox' && this._voicevoxProvider) {
       this._ttsProvider = this._voicevoxProvider;
@@ -73,127 +49,145 @@ class AudioPlaybackManager {
     }
   }
 
-  /**
-   * テキストを声で再生する（1対1チャット用）
-   * v1.5改良: 長文は句読点で分割して順次再生（TTS文字数制限対応）
-   * @param {string} text - 読み上げるテキスト
-   * @param {string} sisterId - 'gemini' | 'openai' | 'claude'
-   * @param {object} options - { speed: number }
-   * @returns {Promise<void>}
-   */
+  // ═══════════════════════════════════════════
+  // v1.9追加 - デバッグログパネル（#77調査用・一時的）
+  // ═══════════════════════════════════════════
+
+  _dbgInit() {
+    let p = document.getElementById('tts-dbg-panel');
+    if (p) { p.innerHTML = ''; return p; }
+    p = document.createElement('div');
+    p.id = 'tts-dbg-panel';
+    p.style.cssText = 'position:fixed;bottom:0;left:0;right:0;max-height:40vh;'
+      + 'overflow-y:auto;background:rgba(0,0,0,0.85);color:#0f0;font-size:10px;'
+      + 'padding:6px 8px;z-index:99999;font-family:monospace;'
+      + 'border-top:2px solid #ff0;white-space:pre-wrap;word-break:break-all;';
+    // 閉じるボタン
+    const btn = document.createElement('div');
+    btn.textContent = '✕ 閉じる';
+    btn.style.cssText = 'color:#ff0;font-size:12px;font-weight:bold;cursor:pointer;'
+      + 'text-align:right;margin-bottom:4px;';
+    btn.onclick = () => p.remove();
+    p.appendChild(btn);
+    document.body.appendChild(p);
+    return p;
+  }
+
+  _dbgLog(msg, color) {
+    const p = document.getElementById('tts-dbg-panel');
+    if (!p) return;
+    const line = document.createElement('div');
+    line.style.cssText = `color:${color || '#0f0'};margin:1px 0;`;
+    line.textContent = `[${new Date().toLocaleTimeString('ja-JP')}] ${msg}`;
+    p.appendChild(line);
+    p.scrollTop = p.scrollHeight;
+  }
+
+  // ═══════════════════════════════════════════
+
   async speak(text, sisterId, options = {}) {
-    // 既に再生中なら停止してから新しい再生を開始
     if (this._playing) {
       this.stop();
     }
-
-    // テキストが空なら何もしない
     if (!text || text.trim().length === 0) {
       console.log('[AudioPM] テキストが空のためスキップ');
       return;
     }
 
-    // マークダウン記法やコードブロックを除去（読み上げに不要）
     const cleanText = this._cleanTextForTTS(text);
 
-    // === デバッグオーバーレイ（一時的 — #77特殊文字調査用） ===
-    this._showTTSDebug(text, cleanText);
+    // v1.9 デバッグパネル初期化＋cleanText全文表示
+    const panel = this._dbgInit();
+    this._dbgLog(`🔍 raw: ${text.length}字 → clean: ${cleanText.length}字`, '#ff0');
+    this._dbgLog(`📝 clean全文:`, '#ff0');
+    this._dbgLog(cleanText, '#0ff');
 
     if (cleanText.length === 0) {
-      console.log('[AudioPM] クリーニング後テキストが空のためスキップ');
+      this._dbgLog('⚠️ クリーニング後テキストが空→スキップ', '#f00');
       return;
     }
 
-    // v1.5追加 - 長文の場合はチャンク分割で再生
-    const CHUNK_LIMIT = 200; // v1.7修正 - 200文字以上なら分割（TTS読み飛ばし防止）
+    const CHUNK_LIMIT = 200;
     if (cleanText.length > CHUNK_LIMIT) {
-      console.log(`[AudioPM] 長文検出（${cleanText.length}文字）→ チャンク分割再生`);
+      this._dbgLog(`📦 ${cleanText.length}字 > ${CHUNK_LIMIT} → チャンク分割再生`, '#ff0');
       await this._speakChunked(cleanText, sisterId, options);
       return;
     }
 
-    // 短文はそのまま従来通り再生
+    this._dbgLog(`📦 ${cleanText.length}字 ≤ ${CHUNK_LIMIT} → 単発再生`, '#ff0');
     await this._speakSingle(cleanText, sisterId, options);
   }
 
-  /**
-   * v1.5追加 - 長文をチャンク分割して順次再生する
-   * 句読点（。！？）で分割し、各チャンクを順番にTTS→再生
-   * @param {string} cleanText - クリーニング済みテキスト
-   * @param {string} sisterId - 姉妹ID
-   * @param {object} options - { speed: number }
-   */
   async _speakChunked(cleanText, sisterId, options = {}) {
     const chunks = this._splitTextToChunks(cleanText);
-    console.log(`[AudioPM] チャンク分割: ${chunks.length}個に分割`);
+    this._dbgLog(`✂️ ${chunks.length}チャンクに分割`, '#ff0');
+    chunks.forEach((c, i) => {
+      this._dbgLog(`  [${i+1}] ${c.length}字: "${c.substring(0, 40)}..."`, '#888');
+    });
 
     this._chunkedPlaying = true;
     this._queueCancelled = false;
     const voiceConfig = getSisterVoice(sisterId);
 
-    // 再生開始通知（アイコン発光用）— 最初の1回だけ
     this._playing = true;
     if (this.onPlayStart) this.onPlayStart(sisterId);
 
     for (let i = 0; i < chunks.length; i++) {
-      // 停止チェック（再タップで停止された場合）
+      // キャンセルチェック
       if (this._queueCancelled) {
-        console.log(`[AudioPM] チャンク再生キャンセル（${i + 1}/${chunks.length}）`);
+        this._dbgLog(`🛑 チャンク${i+1}でキャンセル検出！_queueCancelled=true`, '#f00');
         break;
       }
 
       const chunk = chunks[i];
-      console.log(`[AudioPM] チャンク${i + 1}/${chunks.length}: "${chunk.substring(0, 30)}..." (${chunk.length}文字)`);
+      this._dbgLog(`▶️ チャンク${i+1}/${chunks.length} 再生開始 (${chunk.length}字)`, '#0f0');
 
       try {
+        const startTime = Date.now();
         await this._speakOneChunk(chunk, voiceConfig.voice, sisterId, options);
+        const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
+        this._dbgLog(`✅ チャンク${i+1} 完了 (${elapsed}秒)`, '#0f0');
       } catch (e) {
-        console.warn(`[AudioPM] チャンク${i + 1}エラー（スキップ）:`, e.message);
-        // エラーが起きても次のチャンクに進む
+        this._dbgLog(`❌ チャンク${i+1} エラー: ${e.message}`, '#f00');
       }
     }
 
-    // 全チャンク完了 → 再生終了通知
     this._playing = false;
     this._currentAudio = null;
     this._chunkedPlaying = false;
-    console.log(`[AudioPM] チャンク分割再生完了: ${voiceConfig.label}`);
+    this._dbgLog(`🏁 全チャンク再生完了`, '#ff0');
     if (this.onPlayEnd) this.onPlayEnd(sisterId);
   }
 
-  /**
-   * v1.5追加 - 1チャンクだけTTS生成→再生完了まで待つ
-   * @param {string} chunkText - チャンクテキスト
-   * @param {string} voice - TTS voice名
-   * @param {string} sisterId - 姉妹ID
-   * @param {object} options - { speed: number }
-   * @returns {Promise<void>}
-   */
   _speakOneChunk(chunkText, voice, sisterId, options = {}) {
     return new Promise(async (resolve, reject) => {
       try {
+        this._dbgLog(`  🎵 TTS生成中...`, '#888');
         const audio = await this._ttsProvider.synthesize(
           chunkText, voice, { speed: options.speed || 1.0 }
         );
+        this._dbgLog(`  🎵 TTS生成OK → audio.duration=${audio.duration || '?'}`, '#888');
 
         this._currentAudio = audio;
         this._speed = options.speed || 1.0;
         audio.playbackRate = this._speed;
 
         audio.addEventListener('ended', () => {
+          this._dbgLog(`  🔊 ended発火`, '#888');
           resolve();
         }, { once: true });
 
         audio.addEventListener('error', (e) => {
-          console.warn(`[AudioPM] チャンク再生エラー:`, e);
-          resolve(); // エラーでも次に進む
+          this._dbgLog(`  💥 errorイベント: ${e?.message || 'unknown'}`, '#f00');
+          resolve();
         }, { once: true });
 
         await audio.play();
+        this._dbgLog(`  🔊 play()開始`, '#888');
       } catch (error) {
-        // v1.4追加 - VOICEVOXエラー時にOpenAI TTSへフォールバック
+        // VOICEVOXフォールバック
         if (this._ttsProvider === this._voicevoxProvider && this._openaiProvider.isAvailable()) {
-          console.warn(`[AudioPM] VOICEVOXエラー → OpenAIフォールバック: ${error.message}`);
+          this._dbgLog(`  🔄 VOICEVOXエラー→OpenAIフォールバック`, '#ff0');
           if (this.onFallback) this.onFallback('🔄 VOICEVOX→OpenAI TTSに自動切替');
           try {
             const openaiVoice = SISTER_VOICE_MAP[sisterId]?.openai?.voice || 'alloy';
@@ -210,7 +204,7 @@ class AudioPlaybackManager {
             resolve();
             return;
           } catch (fbErr) {
-            console.error(`[AudioPM] フォールバックも失敗: ${fbErr.message}`);
+            this._dbgLog(`  💥 フォールバックも失敗: ${fbErr.message}`, '#f00');
           }
         }
         reject(error);
@@ -218,228 +212,149 @@ class AudioPlaybackManager {
     });
   }
 
-  /**
-   * v1.5追加 - テキストを句読点で分割する
-   * 各チャンクが500文字以内になるように分割
-   * @param {string} text - 分割対象テキスト
-   * @returns {string[]} チャンク配列
-   */
   _splitTextToChunks(text) {
-    const MAX_CHUNK = 150; // v1.7修正 - 短チャンクでTTS読み飛ばし防止
+    const MAX_CHUNK = 150;
     const chunks = [];
-
-    // まず句読点・改行で分割
     const sentences = text.split(/(?<=[。！？\n])/);
     let currentChunk = '';
-
     for (const sentence of sentences) {
-      // 1文だけでMAX_CHUNKを超える場合は強制分割
       if (sentence.length > MAX_CHUNK) {
-        if (currentChunk) {
-          chunks.push(currentChunk.trim());
-          currentChunk = '';
-        }
-        // 読点（、）で更に分割を試みる
+        if (currentChunk) { chunks.push(currentChunk.trim()); currentChunk = ''; }
         const subParts = sentence.split(/(?<=[、])/);
         let subChunk = '';
         for (const part of subParts) {
           if ((subChunk + part).length > MAX_CHUNK) {
             if (subChunk) chunks.push(subChunk.trim());
             subChunk = part;
-          } else {
-            subChunk += part;
-          }
+          } else { subChunk += part; }
         }
         if (subChunk) currentChunk = subChunk;
         continue;
       }
-
-      // 足しても収まるなら結合
       if ((currentChunk + sentence).length <= MAX_CHUNK) {
         currentChunk += sentence;
       } else {
-        // 収まらないなら前のチャンクを確定して新規開始
         if (currentChunk) chunks.push(currentChunk.trim());
         currentChunk = sentence;
       }
     }
-
-    // 残りを追加
-    if (currentChunk.trim()) {
-      chunks.push(currentChunk.trim());
-    }
-
-    // 空チャンクを除去
+    if (currentChunk.trim()) chunks.push(currentChunk.trim());
     return chunks.filter(c => c.length > 0);
   }
 
-  /**
-   * 短文をそのまま再生する（従来のspeak()ロジック）
-   * v1.5でspeak()から分離
-   */
   async _speakSingle(cleanText, sisterId, options = {}) {
-    // 声の設定を取得
     const voiceConfig = getSisterVoice(sisterId);
-    console.log(`[AudioPM] 再生準備: ${voiceConfig.label} (voice=${voiceConfig.voice})`);
-
+    this._dbgLog(`🔊 単発再生: ${voiceConfig.label}`, '#0f0');
     try {
-      // TTS生成
       const audio = await this._ttsProvider.synthesize(
-        cleanText,
-        voiceConfig.voice,
-        { speed: options.speed || 1.0 }
+        cleanText, voiceConfig.voice, { speed: options.speed || 1.0 }
       );
-
-      // 再生開始
       this._currentAudio = audio;
       this._playing = true;
-      // v1.3追加 - 再生速度をplaybackRateで反映（全エンジン共通）
       this._speed = options.speed || 1.0;
       audio.playbackRate = this._speed;
-
-      // 再生開始通知（アイコン発光用）
       if (this.onPlayStart) this.onPlayStart(sisterId);
 
-      // v1.2追加 - VOICEVOX長文分割: 残りチャンクがあれば連続再生
       const remainingChunks = audio._vvRemainingChunks || [];
       const vvSpeakerId = audio._vvSpeakerId;
       const vvApiKey = audio._vvApiKey;
 
-      // 再生完了時の処理
       audio.addEventListener('ended', async () => {
-        // 残りチャンクがあれば次を再生
         if (remainingChunks.length > 0 && !this._queueCancelled) {
           await this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId);
         }
-        // 全チャンク完了（または残りなし）→ 再生終了通知
         this._playing = false;
         this._currentAudio = null;
-        console.log(`[AudioPM] 再生完了: ${voiceConfig.label}`);
+        this._dbgLog(`✅ 単発再生完了`, '#0f0');
         if (this.onPlayEnd) this.onPlayEnd(sisterId);
       });
 
-      // 再生エラー時 — 全チャンク再生を試みてからエラー通知
       audio.addEventListener('error', (e) => {
-        console.warn(`[AudioPM] 1stチャンクエラー、残りを試行:`, e);
-        // 最初のチャンクがエラーでも残りチャンクがあれば試す
+        this._dbgLog(`❌ 単発再生エラー`, '#f00');
         if (remainingChunks.length > 0 && !this._queueCancelled) {
           this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId).then(() => {
-            this._playing = false;
-            this._currentAudio = null;
+            this._playing = false; this._currentAudio = null;
             if (this.onPlayEnd) this.onPlayEnd(sisterId);
           });
         } else {
-          this._playing = false;
-          this._currentAudio = null;
+          this._playing = false; this._currentAudio = null;
           if (this.onPlayError) this.onPlayError(`再生エラー: ${voiceConfig.label}`, sisterId);
         }
       });
 
       await audio.play();
-
     } catch (error) {
-      // v1.4追加 - VOICEVOXエラー時にOpenAI TTSへフォールバック
+      // VOICEVOXフォールバック
       if (this._ttsProvider === this._voicevoxProvider && this._openaiProvider.isAvailable()) {
-        console.warn(`[AudioPM] VOICEVOXエラー → OpenAI TTSにフォールバック: ${error.message}`);
         if (this.onFallback) this.onFallback('🔄 VOICEVOX→OpenAI TTSに自動切替');
         try {
-          const fbVoice = getSisterVoice(sisterId);
           const openaiVoice = SISTER_VOICE_MAP[sisterId]?.openai?.voice || 'alloy';
           const fbAudio = await this._openaiProvider.synthesize(
             cleanText, openaiVoice, { speed: options.speed || 1.0 }
           );
-          this._currentAudio = fbAudio;
-          this._playing = true;
+          this._currentAudio = fbAudio; this._playing = true;
           fbAudio.playbackRate = this._speed;
           if (this.onPlayStart) this.onPlayStart(sisterId);
           fbAudio.addEventListener('ended', () => {
-            this._playing = false;
-            this._currentAudio = null;
+            this._playing = false; this._currentAudio = null;
             if (this.onPlayEnd) this.onPlayEnd(sisterId);
           });
           fbAudio.addEventListener('error', () => {
-            this._playing = false;
-            this._currentAudio = null;
+            this._playing = false; this._currentAudio = null;
             if (this.onPlayError) this.onPlayError('フォールバック再生エラー', sisterId);
           });
           await fbAudio.play();
           return;
-        } catch (fbErr) {
-          console.error(`[AudioPM] フォールバックも失敗: ${fbErr.message}`);
-        }
+        } catch (fbErr) { /* フォールバックも失敗 */ }
       }
-      this._playing = false;
-      this._currentAudio = null;
-      const msg = `TTS生成エラー: ${error.message}`;
-      console.error(`[AudioPM] ${msg}`);
-      if (this.onPlayError) this.onPlayError(msg, sisterId);
+      this._playing = false; this._currentAudio = null;
+      if (this.onPlayError) this.onPlayError(`TTS生成エラー: ${error.message}`, sisterId);
     }
   }
 
-  /**
-   * 再生を即座に停止する（割り込み用 — 200ms以内目標）
-   */
   stop() {
+    // v1.9デバッグ: stop()呼び出しをログ
+    this._dbgLog(`⏹️ stop()呼び出し！ playing=${this._playing} chunked=${this._chunkedPlaying}`, '#f80');
+    // 呼び出し元を記録（超重要）
+    try { throw new Error('stack'); } catch(e) {
+      const stack = e.stack.split('\n').slice(1, 4).map(s => s.trim()).join(' ← ');
+      this._dbgLog(`  📍 ${stack}`, '#f80');
+    }
+
     if (this._currentAudio) {
       try {
         this._currentAudio.pause();
         this._currentAudio.currentTime = 0;
-        // ObjectURL解放
         if (this._currentAudio.src && this._currentAudio.src.startsWith('blob:')) {
           URL.revokeObjectURL(this._currentAudio.src);
         }
-      } catch (e) {
-        console.warn('[AudioPM] 停止エラー:', e.message);
-      }
+      } catch (e) { /* ignore */ }
       this._currentAudio = null;
     }
     this._playing = false;
-    // v1.1追加 - キュー再生中なら全キャンセル
     this._queueCancelled = true;
     this._queue = [];
     this._queuePlaying = false;
-    // v1.5追加 - チャンク分割再生も停止
     this._chunkedPlaying = false;
-    console.log('[AudioPM] 再生停止');
   }
 
   // ═══════════════════════════════════════════
-  // v1.1追加 - キュー再生（グループモード用）
+  // キュー再生（グループモード用）
   // ═══════════════════════════════════════════
 
-  /**
-   * 複数の姉妹の応答を順番に再生する（グループモード用）
-   * @param {Array<{text: string, sisterId: string}>} items - 再生キュー
-   * @param {object} options - { speed: number }
-   */
   async speakQueue(items, options = {}) {
     if (!items || items.length === 0) return;
-
-    // 既存の再生・キューをクリア
     this.stop();
-
     this._queue = [...items];
     this._queuePlaying = true;
     this._queueCancelled = false;
-    console.log(`[AudioPM] キュー再生開始: ${items.length}人分`);
 
     for (let i = 0; i < this._queue.length; i++) {
-      // キャンセルチェック
-      if (this._queueCancelled) {
-        console.log('[AudioPM] キュー再生キャンセル');
-        break;
-      }
-
+      if (this._queueCancelled) break;
       const item = this._queue[i];
       try {
-        // 各姉妹の音声を順番に再生（awaitで完了を待つ）
         await this._speakAndWait(item.text, item.sisterId, options);
-      } catch (e) {
-        console.warn(`[AudioPM] キュー[${i}] エラー:`, e.message);
-        // エラーが起きても次の姉妹に進む
-      }
-
-      // 姉妹間に300msの間を空ける（自然な会話感）
+      } catch (e) { /* エラーでも次に進む */ }
       if (i < this._queue.length - 1 && !this._queueCancelled) {
         await new Promise(r => setTimeout(r, 300));
       }
@@ -447,44 +362,26 @@ class AudioPlaybackManager {
 
     this._queuePlaying = false;
     this._queue = [];
-    if (!this._queueCancelled && this.onQueueEnd) {
-      this.onQueueEnd();
-    }
+    if (!this._queueCancelled && this.onQueueEnd) this.onQueueEnd();
   }
 
-  /**
-   * 1人分の再生を完了まで待つ（キュー再生の内部用）
-   * @returns {Promise<void>}
-   */
   _speakAndWait(text, sisterId, options = {}) {
-    return new Promise(async (resolve, reject) => {
-      if (!text || text.trim().length === 0) {
-        resolve();
-        return;
-      }
-
+    return new Promise(async (resolve) => {
+      if (!text || text.trim().length === 0) { resolve(); return; }
       const cleanText = this._cleanTextForTTS(text);
-      if (cleanText.length === 0) {
-        resolve();
-        return;
-      }
+      if (cleanText.length === 0) { resolve(); return; }
 
       const voiceConfig = getSisterVoice(sisterId);
-      console.log(`[AudioPM] キュー再生: ${voiceConfig.label}`);
-
       try {
         const audio = await this._ttsProvider.synthesize(
           cleanText, voiceConfig.voice, { speed: options.speed || 1.0 }
         );
-
         this._currentAudio = audio;
         this._playing = true;
-        // v1.3追加 - 再生速度
         this._speed = options.speed || 1.0;
         audio.playbackRate = this._speed;
         if (this.onPlayStart) this.onPlayStart(sisterId);
 
-        // v1.2追加 - VOICEVOX長文分割: 残りチャンク
         const remainingChunks = audio._vvRemainingChunks || [];
         const vvSpeakerId = audio._vvSpeakerId;
         const vvApiKey = audio._vvApiKey;
@@ -493,36 +390,29 @@ class AudioPlaybackManager {
           if (remainingChunks.length > 0 && !this._queueCancelled) {
             await this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId);
           }
-          this._playing = false;
-          this._currentAudio = null;
+          this._playing = false; this._currentAudio = null;
           if (this.onPlayEnd) this.onPlayEnd(sisterId);
           resolve();
         });
-
-        audio.addEventListener('error', async (e) => {
-          console.warn(`[AudioPM] キューチャンクエラー、残りを試行:`, e);
+        audio.addEventListener('error', async () => {
           if (remainingChunks.length > 0 && !this._queueCancelled) {
             await this._playVVChunks(remainingChunks, vvSpeakerId, vvApiKey, sisterId);
           }
-          this._playing = false;
-          this._currentAudio = null;
+          this._playing = false; this._currentAudio = null;
           if (this.onPlayEnd) this.onPlayEnd(sisterId);
           resolve();
         });
-
         await audio.play();
       } catch (error) {
-        // v1.4追加 - VOICEVOXエラー時にOpenAI TTSへフォールバック
+        // VOICEVOXフォールバック
         if (this._ttsProvider === this._voicevoxProvider && this._openaiProvider.isAvailable()) {
-          console.warn(`[AudioPM] キューVOICEVOXエラー → OpenAIフォールバック: ${error.message}`);
           if (this.onFallback) this.onFallback('🔄 VOICEVOX→OpenAI TTSに自動切替');
           try {
             const openaiVoice = SISTER_VOICE_MAP[sisterId]?.openai?.voice || 'alloy';
             const fbAudio = await this._openaiProvider.synthesize(
               cleanText, openaiVoice, { speed: options.speed || 1.0 }
             );
-            this._currentAudio = fbAudio;
-            this._playing = true;
+            this._currentAudio = fbAudio; this._playing = true;
             fbAudio.playbackRate = this._speed;
             if (this.onPlayStart) this.onPlayStart(sisterId);
             await new Promise((res) => {
@@ -530,178 +420,72 @@ class AudioPlaybackManager {
               fbAudio.addEventListener('error', res, { once: true });
               fbAudio.play().catch(res);
             });
-            this._playing = false;
-            this._currentAudio = null;
+            this._playing = false; this._currentAudio = null;
             if (this.onPlayEnd) this.onPlayEnd(sisterId);
-            resolve();
-            return;
-          } catch (fbErr) {
-            console.error(`[AudioPM] キューフォールバックも失敗: ${fbErr.message}`);
-          }
+            resolve(); return;
+          } catch (fbErr) { /* フォールバックも失敗 */ }
         }
-        this._playing = false;
-        this._currentAudio = null;
-        console.warn(`[AudioPM] TTS生成エラー: ${error.message}`);
-        resolve(); // エラーでも次に進む
+        this._playing = false; this._currentAudio = null;
+        resolve();
       }
     });
   }
 
-  /**
-   * v1.2追加 - VOICEVOXの残りチャンクを順番に再生する
-   */
   async _playVVChunks(chunks, speakerId, apiKey, sisterId) {
     const provider = this._voicevoxProvider;
     if (!provider) return;
     for (let i = 0; i < chunks.length; i++) {
       if (this._queueCancelled) break;
       try {
-        console.log(`[AudioPM] VVチャンク${i + 2}/${chunks.length + 1}: "${chunks[i].substring(0, 20)}..."`);
         const audio = await provider.synthesizeChunk(chunks[i], speakerId, apiKey);
         this._currentAudio = audio;
-        // 読み込み完了を待ってから再生（途中切れ防止）
         await new Promise((resolve, reject) => {
-          const timeout = setTimeout(() => { reject(new Error('チャンク読み込みタイムアウト')); }, 15000);
+          const timeout = setTimeout(() => { reject(new Error('timeout')); }, 15000);
           audio.addEventListener('canplaythrough', () => { clearTimeout(timeout); resolve(); }, { once: true });
-          audio.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('チャンク読み込みエラー')); }, { once: true });
+          audio.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('error')); }, { once: true });
           audio.load();
         });
-        // load()後にplaybackRate設定（load()でリセットされるため）
         audio.playbackRate = this._speed;
-        // 再生完了を待つ
         await new Promise((resolve) => {
           audio.addEventListener('ended', resolve, { once: true });
           audio.addEventListener('error', resolve, { once: true });
           audio.play().catch(resolve);
         });
-      } catch (e) {
-        console.warn(`[AudioPM] VVチャンク${i + 2}エラー（スキップ）:`, e.message);
-      }
+      } catch (e) { /* スキップ */ }
     }
   }
 
-  /**
-   * キュー再生中かどうか
-   * @returns {boolean}
-   */
-  isQueuePlaying() {
-    return this._queuePlaying;
-  }
+  isQueuePlaying() { return this._queuePlaying; }
+  isPlaying() { return this._playing; }
 
-  /**
-   * 現在再生中かどうか
-   * @returns {boolean}
-   */
-  isPlaying() {
-    return this._playing;
-  }
-
-  // === デバッグ用（一時的 — #77特殊文字調査） ===
-  _showTTSDebug(rawText, cleanText) {
-    // 特殊文字を可視化する関数
-    const visualize = (str) => str
-      .replace(/\r\n/g, '⏎[CRLF]')
-      .replace(/\r/g, '⏎[CR]')
-      .replace(/\n/g, '⏎[LF]')
-      .replace(/\u2028/g, '⏎[LS]')
-      .replace(/\u2029/g, '⏎[PS]')
-      .replace(/\u00A0/g, '[NBSP]')
-      .replace(/\u3000/g, '[全角SP]')
-      .replace(/\t/g, '[TAB]');
-
-    // 既存のデバッグオーバーレイがあれば削除
-    const old = document.getElementById('tts-debug-overlay');
-    if (old) old.remove();
-
-    const div = document.createElement('div');
-    div.id = 'tts-debug-overlay';
-    div.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;'
-      + 'background:rgba(0,0,0,0.9);color:#0f0;font-size:11px;'
-      + 'padding:10px;overflow:auto;z-index:99999;'
-      + 'font-family:monospace;white-space:pre-wrap;word-break:break-all;';
-
-    // 特殊文字カウント
-    const crlfCount = (rawText.match(/\r\n/g) || []).length;
-    const crCount = (rawText.replace(/\r\n/g, '').match(/\r/g) || []).length;
-    const lfCount = (rawText.replace(/\r\n/g, '').match(/\n/g) || []).length;
-    const lsCount = (rawText.match(/\u2028/g) || []).length;
-    const psCount = (rawText.match(/\u2029/g) || []).length;
-    const nbspCount = (rawText.match(/\u00A0/g) || []).length;
-    const zenSpCount = (rawText.match(/\u3000/g) || []).length;
-
-    div.innerHTML = '<b style="color:#ff0;font-size:14px;">'
-      + '🔍 TTS DEBUG — タップで閉じる</b>\n\n'
-      + '<b style="color:#ff0;">【特殊文字カウント（raw）】</b>\n'
-      + `LF(\\n): ${lfCount}  CRLF(\\r\\n): ${crlfCount}  CR(\\r): ${crCount}\n`
-      + `LineSep(U+2028): ${lsCount}  ParaSep(U+2029): ${psCount}\n`
-      + `NBSP: ${nbspCount}  全角SP: ${zenSpCount}\n\n`
-      + '<b style="color:#ff0;">【raw（先頭400字）】</b>\n'
-      + visualize(rawText.slice(0, 400)) + '\n\n'
-      + '<b style="color:#ff0;">【clean後（先頭400字）】</b>\n'
-      + '<span style="color:#0ff;">'
-      + visualize(cleanText.slice(0, 400)) + '</span>\n\n'
-      + `<b style="color:#ff0;">raw: ${rawText.length}字 → clean: ${cleanText.length}字</b>`;
-
-    div.addEventListener('click', () => div.remove());
-    document.body.appendChild(div);
-  }
-
-  /**
-   * TTS用にテキストをクリーニングする
-   * マークダウン記法やコードブロックは読み上げに不要なので除去
-   * @param {string} text
-   * @returns {string}
-   */
   _cleanTextForTTS(text) {
     let cleaned = text;
-
-    // コードブロックを除去（```...```）
     cleaned = cleaned.replace(/```[\s\S]*?```/g, 'コードブロックは省略します。');
-
-    // インラインコードを除去（`...`）
     cleaned = cleaned.replace(/`([^`]+)`/g, '$1');
-
-    // v1.8修正 - 見出し行をまるごと除去（#記号だけでなく行全体。TTS要約読み防止）
+    // v1.8 見出し行まるごと除去
     cleaned = cleaned.replace(/^#{1,6}\s+.*$/gm, '');
-
-    // v1.8修正 - 太字だけの行（見出し的な役割）も除去（**まとめ** のような行）
+    // v1.8 太字だけの行（見出し的）も除去
     cleaned = cleaned.replace(/^\*\*[^*]+\*\*\s*$/gm, '');
-
-    // マークダウンの太字・斜体記号を除去（文中の太字は中身だけ残す）
+    // 太字・斜体（文中）
     cleaned = cleaned.replace(/\*\*([^*]+)\*\*/g, '$1');
     cleaned = cleaned.replace(/\*([^*]+)\*/g, '$1');
     cleaned = cleaned.replace(/__([^_]+)__/g, '$1');
     cleaned = cleaned.replace(/_([^_]+)_/g, '$1');
-
-    // マークダウンのリンクをテキスト部分だけ残す
     cleaned = cleaned.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-
-    // URLを除去（読み上げると長い）
     cleaned = cleaned.replace(/https?:\/\/\S+/g, 'リンク');
-
-    // 箇条書き記号を除去
     cleaned = cleaned.replace(/^[\s]*[-*+]\s+/gm, '');
     cleaned = cleaned.replace(/^[\s]*\d+\.\s+/gm, '');
-
-    // テーブルは省略
     cleaned = cleaned.replace(/\|.*\|/g, '');
     cleaned = cleaned.replace(/^[-|:\s]+$/gm, '');
-
-    // v1.6追加 - TTS向け改行→連続文変換
-    // マークダウン除去後の改行だらけテキストをTTS APIが読み飛ばす問題を修正
-    // 改行を除去して句読点で繋いだ自然な1文に変換する
-    cleaned = cleaned.replace(/^\s*$/gm, '');              // 空行を除去
-    cleaned = cleaned.replace(/([。！？])\n+/g, '$1');      // 句読点後の改行→そのまま結合
-    cleaned = cleaned.replace(/([^\n。！？、])\n+/g, '$1。'); // 句読点なし行末→句点補って結合
-    cleaned = cleaned.replace(/\n+/g, '');                  // 残り改行を除去
-    cleaned = cleaned.replace(/。{2,}/g, '。');              // 連続句点を1つに
-
-    // 前後の空白をトリム
+    // v1.6 改行→連続文変換
+    cleaned = cleaned.replace(/^\s*$/gm, '');
+    cleaned = cleaned.replace(/([。！？])\n+/g, '$1');
+    cleaned = cleaned.replace(/([^\n。！？、])\n+/g, '$1。');
+    cleaned = cleaned.replace(/\n+/g, '');
+    cleaned = cleaned.replace(/。{2,}/g, '。');
     cleaned = cleaned.trim();
-
     return cleaned;
   }
 }
 
-// グローバルに公開
 window.AudioPlaybackManager = AudioPlaybackManager;
