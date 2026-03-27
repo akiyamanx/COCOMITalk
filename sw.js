@@ -98,7 +98,8 @@
 // v2.99 2026-03-23 - 指示書生成max_tokens拡張（doc-generator.js v1.2）
 // v3.00 2026-03-24 - MCP GitHub push実戦テスト（クロちゃんがMCP経由で直接更新！）
 // v3.01 2026-03-25 - voice-input.js v2.2.2 TTS/STTフィードバックループ修正
-const CACHE_NAME = 'cocomitalk-v3.16';
+// v3.02 2026-03-27 - whisper-provider.js v1.4 ハルシネーションフィルタ追加＋無音判定延長
+const CACHE_NAME = 'cocomitalk-v3.17';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
