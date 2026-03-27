@@ -1,15 +1,16 @@
-// voice-output.js v2.0
+// voice-output.js v2.1
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
-// v2.0 デバッグ強化: 詳細ログ収集＋ファイルDL機能（#77根本原因調査）
-// v2.0 修正: 連続スペース除去追加（cleanTextForTTS改善）
+// v2.1 修正: _speakOneChunkにVOICEVOX残りチャンク再生を追加（#77読み飛ばし根本修正）
+// v2.0 デバッグ強化: 詳細ログ収集＋ファイルDL機能＋連続スペース除去
 
 // v1.0 新規作成 - Step 5b TTS再生管理
 // v1.5 追加 - #77改善: 長文チャンク分割読み上げ
 // v1.6 修正 - #77改善: TTS読み飛ばし修正（改行→連続文変換）
 // v1.8 修正 - 見出し行まるごと除去+太字見出し行除去
 // v2.0 デバッグ - 詳細ログDL＋連続スペース除去（#77根本原因調査用）
+// v2.1 修正 - _speakOneChunkにVOICEVOX残りチャンク再生追加（#77読み飛ばし根本修正）
 
 class AudioPlaybackManager {
   constructor() {
@@ -29,7 +30,6 @@ class AudioPlaybackManager {
     this._speed = 1.0;
     this.onFallback = null;
     this._chunkedPlaying = false;
-    // v2.0 デバッグログ収集用
     this._debugLog = [];
   }
 
@@ -40,10 +40,6 @@ class AudioPlaybackManager {
       this._ttsProvider = this._openaiProvider;
     }
   }
-
-  // ═══════════════════════════════════════════
-  // v2.0 デバッグシステム（ログ収集＋ミニパネル＋DLボタン）
-  // ═══════════════════════════════════════════
 
   _log(msg, level) {
     const ts = new Date().toLocaleTimeString('ja-JP', {hour12:false});
@@ -105,8 +101,6 @@ class AudioPlaybackManager {
     URL.revokeObjectURL(url);
     this._log('📥 ログDL完了: ' + fname, 'info');
   }
-
-  // ═══════════════════════════════════════════
 
   async speak(text, sisterId, options = {}) {
     if (this._playing) this.stop();
@@ -187,6 +181,7 @@ class AudioPlaybackManager {
     if (this.onPlayEnd) this.onPlayEnd(sisterId);
   }
 
+  // v2.1修正 - VOICEVOX残りチャンク再生を追加（#77読み飛ばし根本修正）
   _speakOneChunk(chunkText, voice, sisterId, options = {}) {
     return new Promise(async (resolve, reject) => {
       try {
@@ -198,12 +193,26 @@ class AudioPlaybackManager {
         const genMs = Date.now() - t0;
         this._log(`  🎵 TTS生成OK (${genMs}ms) duration=${audio.duration || '?'}s`, 'info');
 
+        // v2.1追加 - VOICEVOX残りチャンク情報を取得
+        const vvRemaining = audio._vvRemainingChunks || [];
+        const vvSpeakerId = audio._vvSpeakerId;
+        const vvApiKey = audio._vvApiKey;
+        if (vvRemaining.length > 0) {
+          this._log(`  📦 VOICEVOX残りチャンク: ${vvRemaining.length}個`, 'warn');
+        }
+
         this._currentAudio = audio;
         this._speed = options.speed || 1.0;
         audio.playbackRate = this._speed;
 
-        audio.addEventListener('ended', () => {
+        audio.addEventListener('ended', async () => {
           this._log(`  🔊 ended (実再生${((Date.now()-t0-genMs)/1000).toFixed(1)}秒)`, 'info');
+          // v2.1追加 - VOICEVOX残りチャンクがあれば順次再生
+          if (vvRemaining.length > 0 && !this._queueCancelled) {
+            this._log(`  🔊 VOICEVOX残り${vvRemaining.length}チャンク再生開始`, 'info');
+            await this._playVVChunks(vvRemaining, vvSpeakerId, vvApiKey, sisterId);
+            this._log(`  🔊 VOICEVOX残りチャンク再生完了`, 'info');
+          }
           resolve();
         }, { once: true });
         audio.addEventListener('error', (e) => {
@@ -381,7 +390,6 @@ class AudioPlaybackManager {
     c = c.replace(/([^\n。！？、])\n+/g, '$1。');
     c = c.replace(/\n+/g, '');
     c = c.replace(/。{2,}/g, '。');
-    // v2.0追加 - 連続スペースを1つに圧縮（TTS読み飛ばし防止）
     c = c.replace(/\s{2,}/g, ' ');
     c = c.trim();
     return c;
