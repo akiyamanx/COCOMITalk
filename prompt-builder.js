@@ -6,6 +6,7 @@
 // v1.1 2026-03-12 - Step 6 Phase 1: チャット記憶注入（_getChatMemoryText追加）
 // v1.2 2026-03-15 - Step 6 Phase 2: Vectorize RAG意味検索結果注入（_getVectorSearchText追加）
 // v1.3 2026-03-22 - 会議モード用Vectorize議題検索（preloadVectorSearch公開、count引数対応）
+// v1.4 2026-03-27 - HOTトピック通知: 直近の新着記憶を「🔥 HOTトピック」として注入
 'use strict';
 
 /**
@@ -16,14 +17,12 @@
  *   const fullPrompt = systemPrompt + extra;
  *
  * モード別のデフォルト:
- *   chat    — メモリー3件 + 検索結果（使ったらクリア）
- *   group   — メモリー3件 + 検索結果（クリアしない＝全姉妹参照用）
- *   meeting — メモリー5件 + 検索結果（クリアしない＝ラウンド中保持）
+ *   chat    — メモリー3件 + 検索結果（使ったらクリア）+ HOTトピック
+ *   group   — メモリー3件 + 検索結果（クリアしない＝全姉妹参照用）+ HOTトピック
+ *   meeting — メモリー5件 + 検索結果（クリアしない＝ラウンド中保持）+ HOTトピックなし
  *
  * 将来拡張:
- *   - Vectorize RAG結果の注入（Step 6）
- *   - Function Calling検索結果の注入（Phase 2a+）
- *   - 1対1チャット記憶の注入（chat-memory.js連携）
+ *   - is_talkedカラムで既読管理（HOTトピックの重複防止）
  */
 const PromptBuilder = (() => {
 
@@ -34,6 +33,11 @@ const PromptBuilder = (() => {
     meeting: { memoryLimit: 5, clearSearch: false },
   };
 
+  // v1.4追加 - HOTトピック取得済みキャッシュ（同一セッション内で2回目以降はキャッシュを使う）
+  let _hotTopicCache = null;
+  let _hotTopicCacheTime = 0;
+  const HOT_TOPIC_CACHE_TTL = 5 * 60 * 1000; // 5分キャッシュ
+
   /**
    * プロンプト注入テキストを構築する
    * @param {Object} options
@@ -42,6 +46,7 @@ const PromptBuilder = (() => {
    * @param {boolean} [options.clearSearch] - 検索結果を使用後にクリアするか（省略時はモード別デフォルト）
    * @param {boolean} [options.skipMemory] - メモリー取得をスキップ（デフォルトfalse）
    * @param {boolean} [options.skipSearch] - 検索結果注入をスキップ（デフォルトfalse）
+   * @param {boolean} [options.skipHotTopic] - HOTトピック注入をスキップ（デフォルトfalse）
    * @param {string} [options.preBuiltMemory] - 事前に取得済みのメモリーテキスト（meeting-relayの会議開始時用）
    * @returns {Promise<string>} - システムプロンプトに追加する文字列
    */
@@ -53,28 +58,34 @@ const PromptBuilder = (() => {
     const clearSearch = options.clearSearch ?? defaults.clearSearch;
     const skipMemory = options.skipMemory || false;
     const skipSearch = options.skipSearch || false;
+    // v1.4追加 - 会議モードではHOTトピック不要（議題に集中するため）
+    const skipHotTopic = options.skipHotTopic || mode === 'meeting';
 
     let extra = '';
 
     // --- 1. KVメモリー注入 ---
     if (options.preBuiltMemory) {
-      // 事前取得済みのメモリーテキストを使う（meeting-relayの会議中はこれ）
       extra += options.preBuiltMemory;
     } else if (!skipMemory) {
       extra += await _getMemoryText(memoryLimit);
     }
 
-    // --- 2. 検索結果注入 ---
+    // --- 2. HOTトピック注入（v1.4追加） ---
+    if (!skipHotTopic) {
+      extra += await _getHotTopicText();
+    }
+
+    // --- 3. 検索結果注入 ---
     if (!skipSearch) {
       extra += _getSearchText(clearSearch);
     }
 
-    // --- 3. Vectorize RAG意味検索結果（Step 6 Phase 2） ---
+    // --- 4. Vectorize RAG意味検索結果（Step 6 Phase 2） ---
     if (!options.skipVector && options.userText) {
       extra += await _getVectorSearchText(options.userText);
     }
 
-    // --- 4. 1対1チャット記憶注入（Step 6 Phase 1） ---
+    // --- 5. 1対1チャット記憶注入（Step 6 Phase 1） ---
     if (!options.skipChatMemory && mode === 'chat') {
       extra += await _getChatMemoryText(options.chatMemoryLimit || 3);
     }
@@ -140,7 +151,6 @@ const PromptBuilder = (() => {
 
   /**
    * v1.2追加 - Vectorize意味検索結果テキストを取得（Step 6 Phase 2）
-   * ユーザーの発言に関連する過去の記憶をVectorize検索して注入
    * @param {string} userText - ユーザーの発言テキスト
    * @returns {Promise<string>}
    */
@@ -165,8 +175,90 @@ const PromptBuilder = (() => {
   }
 
   /**
+   * v1.4追加 - HOTトピック（直近の新着記憶）テキストを取得
+   * cocomi-api-relayの/memory-recentエンドポイントから直近24h以内の記憶を取得し、
+   * 感情温度付きの「HOTトピック」セクションとしてプロンプトに注入する
+   * @returns {Promise<string>}
+   */
+  async function _getHotTopicText() {
+    // ApiCommonが未定義なら何もしない
+    if (typeof ApiCommon === 'undefined') return '';
+
+    try {
+      // キャッシュが有効ならそれを返す（5分以内）
+      const now = Date.now();
+      if (_hotTopicCache !== null && (now - _hotTopicCacheTime) < HOT_TOPIC_CACHE_TTL) {
+        if (_hotTopicCache) {
+          console.log('[PromptBuilder] HOTトピック注入OK（キャッシュ）');
+        }
+        return _hotTopicCache;
+      }
+
+      const workerUrl = ApiCommon.getWorkerURL();
+      const authToken = ApiCommon.getAuthToken();
+      if (!workerUrl || !authToken) return '';
+
+      const res = await fetch(`${workerUrl}/memory-recent?hours=24&limit=5`, {
+        method: 'GET',
+        headers: {
+          'X-COCOMI-AUTH': authToken,
+        },
+      });
+
+      if (!res.ok) {
+        console.warn('[PromptBuilder] HOTトピック取得失敗:', res.status);
+        _hotTopicCache = '';
+        _hotTopicCacheTime = now;
+        return '';
+      }
+
+      const data = await res.json();
+      const memories = data.memories || [];
+
+      if (memories.length === 0) {
+        _hotTopicCache = '';
+        _hotTopicCacheTime = now;
+        return '';
+      }
+
+      // 感情温度の絵文字マッピング
+      const emojiMap = { 1: '💧', 2: '😢', 3: '😐', 4: '😊', 5: '🔥' };
+
+      let prompt = '\n\n【🔥 最近の新しい記憶（HOTトピック）】\n';
+      prompt += '以下は最近新しく共有された情報です。会話の中で自然に話題にしてください。\n';
+      prompt += 'ただし、無理に全部触れる必要はありません。会話の流れに合うものだけ拾ってください。\n\n';
+
+      for (let i = 0; i < memories.length; i++) {
+        const m = memories[i];
+        const eu = emojiMap[m.emotion_user] || '😐';
+        const ea = emojiMap[m.emotion_ai] || '😐';
+        const date = m.created_at ? m.created_at.slice(0, 10) : '';
+        prompt += `${i + 1}. 「${m.topic}」（${eu}${m.emotion_user}/${ea}${m.emotion_ai}）`;
+        if (m.summary) {
+          // summaryは60文字に切り詰め（トークン節約）
+          const short = m.summary.length > 60 ? m.summary.slice(0, 60) + '…' : m.summary;
+          prompt += ` — ${short}`;
+        }
+        prompt += ` [${date}]\n`;
+      }
+
+      prompt += '\n※ 感情温度の数字は、保存された時のアキヤと私（姉妹）の温度感です。\n';
+      prompt += '  🔥5の話題は特に盛り上がっていたので、アキヤも話したいかもしれません。\n';
+
+      console.log(`[PromptBuilder] HOTトピック注入OK（${memories.length}件）`);
+      _hotTopicCache = prompt;
+      _hotTopicCacheTime = now;
+      return prompt;
+    } catch (e) {
+      console.warn('[PromptBuilder] HOTトピック取得スキップ:', e.message);
+      _hotTopicCache = '';
+      _hotTopicCacheTime = Date.now();
+      return '';
+    }
+  }
+
+  /**
    * グループ/会議モードの全姉妹完了後に検索結果をクリアする
-   * chat-group.js / meeting-relay.jsのラウンド完了後に呼ぶ
    */
   function clearSearch() {
     if (typeof SearchUI !== 'undefined') {
@@ -177,7 +269,6 @@ const PromptBuilder = (() => {
 
   /**
    * 会議開始時にメモリーを事前取得する（meeting-relay用）
-   * 会議中は毎回KVを叩かず、この結果をpreBuiltMemoryとして渡す
    * @param {number} limit - 件数
    * @returns {Promise<string>}
    */
@@ -187,7 +278,6 @@ const PromptBuilder = (() => {
 
   /**
    * v1.3追加 - 会議開始時にVectorize議題検索を事前取得する（meeting-relay用）
-   * 議題テキストに関連する過去の記憶を検索して注入テキストを返す
    * @param {string} topicText - 議題テキスト
    * @param {number} [count=3] - 検索件数
    * @returns {Promise<string>}
@@ -196,10 +286,21 @@ const PromptBuilder = (() => {
     return await _getVectorSearchText(topicText, count);
   }
 
+  /**
+   * v1.4追加 - HOTトピックキャッシュをクリアする
+   * 新しい記憶が追加された後に呼ぶことで、次回取得時に最新を反映
+   */
+  function clearHotTopicCache() {
+    _hotTopicCache = null;
+    _hotTopicCacheTime = 0;
+    console.log('[PromptBuilder] HOTトピックキャッシュクリア');
+  }
+
   return {
     build,
     clearSearch,
     preloadMemory,
-    preloadVectorSearch, // v1.3追加
+    preloadVectorSearch,
+    clearHotTopicCache, // v1.4追加
   };
 })();
