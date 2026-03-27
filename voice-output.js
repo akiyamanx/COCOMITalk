@@ -1,4 +1,4 @@
-// voice-output.js v1.4
+// voice-output.js v1.5
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -9,6 +9,7 @@
 // v1.2 追加 - プロバイダー切替＋VOICEVOX長文分割連続再生
 // v1.3 追加 - playbackRate再生速度＋canplaythrough待ち
 // v1.4 追加 - Step 5d TTSフォールバック（VOICEVOX→OpenAI自動切替）
+// v1.5 追加 - #77改善: 長文チャンク分割読み上げ（句読点で分割→順次再生）
 
 /**
  * AudioPlaybackManager
@@ -19,6 +20,7 @@
  * - キュー再生（会議モード用 — Step 5cで拡張）
  * - 割り込み停止（ボタン押下 or テキスト入力で即停止）
  * - 姉妹アイコン発光の通知
+ * - v1.5 長文チャンク分割（OpenAI TTS 4096文字制限対応）
  */
 class AudioPlaybackManager {
   constructor() {
@@ -47,6 +49,8 @@ class AudioPlaybackManager {
     this._speed = 1.0;
     // v1.4追加 - フォールバック通知コールバック
     this.onFallback = null; // (message) => {} — UI通知用
+    // v1.5追加 - チャンク分割再生中フラグ
+    this._chunkedPlaying = false;
   }
 
   /**
@@ -69,6 +73,7 @@ class AudioPlaybackManager {
 
   /**
    * テキストを声で再生する（1対1チャット用）
+   * v1.5改良: 長文は句読点で分割して順次再生（TTS文字数制限対応）
    * @param {string} text - 読み上げるテキスト
    * @param {string} sisterId - 'gemini' | 'openai' | 'claude'
    * @param {object} options - { speed: number }
@@ -93,6 +98,180 @@ class AudioPlaybackManager {
       return;
     }
 
+    // v1.5追加 - 長文の場合はチャンク分割で再生
+    const CHUNK_LIMIT = 500; // 500文字以上なら分割（TTS API安全マージン）
+    if (cleanText.length > CHUNK_LIMIT) {
+      console.log(`[AudioPM] 長文検出（${cleanText.length}文字）→ チャンク分割再生`);
+      await this._speakChunked(cleanText, sisterId, options);
+      return;
+    }
+
+    // 短文はそのまま従来通り再生
+    await this._speakSingle(cleanText, sisterId, options);
+  }
+
+  /**
+   * v1.5追加 - 長文をチャンク分割して順次再生する
+   * 句読点（。！？）で分割し、各チャンクを順番にTTS→再生
+   * @param {string} cleanText - クリーニング済みテキスト
+   * @param {string} sisterId - 姉妹ID
+   * @param {object} options - { speed: number }
+   */
+  async _speakChunked(cleanText, sisterId, options = {}) {
+    const chunks = this._splitTextToChunks(cleanText);
+    console.log(`[AudioPM] チャンク分割: ${chunks.length}個に分割`);
+
+    this._chunkedPlaying = true;
+    this._queueCancelled = false;
+    const voiceConfig = getSisterVoice(sisterId);
+
+    // 再生開始通知（アイコン発光用）— 最初の1回だけ
+    this._playing = true;
+    if (this.onPlayStart) this.onPlayStart(sisterId);
+
+    for (let i = 0; i < chunks.length; i++) {
+      // 停止チェック（再タップで停止された場合）
+      if (this._queueCancelled) {
+        console.log(`[AudioPM] チャンク再生キャンセル（${i + 1}/${chunks.length}）`);
+        break;
+      }
+
+      const chunk = chunks[i];
+      console.log(`[AudioPM] チャンク${i + 1}/${chunks.length}: "${chunk.substring(0, 30)}..." (${chunk.length}文字)`);
+
+      try {
+        await this._speakOneChunk(chunk, voiceConfig.voice, sisterId, options);
+      } catch (e) {
+        console.warn(`[AudioPM] チャンク${i + 1}エラー（スキップ）:`, e.message);
+        // エラーが起きても次のチャンクに進む
+      }
+    }
+
+    // 全チャンク完了 → 再生終了通知
+    this._playing = false;
+    this._currentAudio = null;
+    this._chunkedPlaying = false;
+    console.log(`[AudioPM] チャンク分割再生完了: ${voiceConfig.label}`);
+    if (this.onPlayEnd) this.onPlayEnd(sisterId);
+  }
+
+  /**
+   * v1.5追加 - 1チャンクだけTTS生成→再生完了まで待つ
+   * @param {string} chunkText - チャンクテキスト
+   * @param {string} voice - TTS voice名
+   * @param {string} sisterId - 姉妹ID
+   * @param {object} options - { speed: number }
+   * @returns {Promise<void>}
+   */
+  _speakOneChunk(chunkText, voice, sisterId, options = {}) {
+    return new Promise(async (resolve, reject) => {
+      try {
+        const audio = await this._ttsProvider.synthesize(
+          chunkText, voice, { speed: options.speed || 1.0 }
+        );
+
+        this._currentAudio = audio;
+        this._speed = options.speed || 1.0;
+        audio.playbackRate = this._speed;
+
+        audio.addEventListener('ended', () => {
+          resolve();
+        }, { once: true });
+
+        audio.addEventListener('error', (e) => {
+          console.warn(`[AudioPM] チャンク再生エラー:`, e);
+          resolve(); // エラーでも次に進む
+        }, { once: true });
+
+        await audio.play();
+      } catch (error) {
+        // v1.4追加 - VOICEVOXエラー時にOpenAI TTSへフォールバック
+        if (this._ttsProvider === this._voicevoxProvider && this._openaiProvider.isAvailable()) {
+          console.warn(`[AudioPM] VOICEVOXエラー → OpenAIフォールバック: ${error.message}`);
+          if (this.onFallback) this.onFallback('🔄 VOICEVOX→OpenAI TTSに自動切替');
+          try {
+            const openaiVoice = SISTER_VOICE_MAP[sisterId]?.openai?.voice || 'alloy';
+            const fbAudio = await this._openaiProvider.synthesize(
+              chunkText, openaiVoice, { speed: options.speed || 1.0 }
+            );
+            this._currentAudio = fbAudio;
+            fbAudio.playbackRate = this._speed;
+            await new Promise((res) => {
+              fbAudio.addEventListener('ended', res, { once: true });
+              fbAudio.addEventListener('error', res, { once: true });
+              fbAudio.play().catch(res);
+            });
+            resolve();
+            return;
+          } catch (fbErr) {
+            console.error(`[AudioPM] フォールバックも失敗: ${fbErr.message}`);
+          }
+        }
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * v1.5追加 - テキストを句読点で分割する
+   * 各チャンクが500文字以内になるように分割
+   * @param {string} text - 分割対象テキスト
+   * @returns {string[]} チャンク配列
+   */
+  _splitTextToChunks(text) {
+    const MAX_CHUNK = 450; // 安全マージン込み
+    const chunks = [];
+
+    // まず句読点・改行で分割
+    const sentences = text.split(/(?<=[。！？\n])/);
+    let currentChunk = '';
+
+    for (const sentence of sentences) {
+      // 1文だけでMAX_CHUNKを超える場合は強制分割
+      if (sentence.length > MAX_CHUNK) {
+        if (currentChunk) {
+          chunks.push(currentChunk.trim());
+          currentChunk = '';
+        }
+        // 読点（、）で更に分割を試みる
+        const subParts = sentence.split(/(?<=[、])/);
+        let subChunk = '';
+        for (const part of subParts) {
+          if ((subChunk + part).length > MAX_CHUNK) {
+            if (subChunk) chunks.push(subChunk.trim());
+            subChunk = part;
+          } else {
+            subChunk += part;
+          }
+        }
+        if (subChunk) currentChunk = subChunk;
+        continue;
+      }
+
+      // 足しても収まるなら結合
+      if ((currentChunk + sentence).length <= MAX_CHUNK) {
+        currentChunk += sentence;
+      } else {
+        // 収まらないなら前のチャンクを確定して新規開始
+        if (currentChunk) chunks.push(currentChunk.trim());
+        currentChunk = sentence;
+      }
+    }
+
+    // 残りを追加
+    if (currentChunk.trim()) {
+      chunks.push(currentChunk.trim());
+    }
+
+    // 空チャンクを除去
+    return chunks.filter(c => c.length > 0);
+  }
+
+  /**
+   * 短文をそのまま再生する（従来のspeak()ロジック）
+   * v1.5でspeak()から分離
+   */
+  async _speakSingle(cleanText, sisterId, options = {}) {
     // 声の設定を取得
     const voiceConfig = getSisterVoice(sisterId);
     console.log(`[AudioPM] 再生準備: ${voiceConfig.label} (voice=${voiceConfig.voice})`);
@@ -213,6 +392,8 @@ class AudioPlaybackManager {
     this._queueCancelled = true;
     this._queue = [];
     this._queuePlaying = false;
+    // v1.5追加 - チャンク分割再生も停止
+    this._chunkedPlaying = false;
     console.log('[AudioPM] 再生停止');
   }
 
@@ -362,10 +543,6 @@ class AudioPlaybackManager {
 
   /**
    * v1.2追加 - VOICEVOXの残りチャンクを順番に再生する
-   * @param {string[]} chunks - 残りチャンクの配列
-   * @param {number} speakerId - 話者ID
-   * @param {string} apiKey - APIキー
-   * @param {string} sisterId - 姉妹ID（ログ用）
    */
   async _playVVChunks(chunks, speakerId, apiKey, sisterId) {
     const provider = this._voicevoxProvider;
