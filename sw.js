@@ -102,7 +102,8 @@
 // v3.04 2026-03-27 - #77 吹き出しタップ読み上げ（chat-ui.js v1.1 + voice-input.js v2.2.3）
 // v3.05 2026-03-27 - #77改善: voice-output.js v1.5チャンク分割 + chat-ui.js v1.2停止トグル
 // v3.06 2026-03-27 - #77修正: openai-tts-provider.js v1.1 テキスト長制限500→4000文字に緩和
-const CACHE_NAME = 'cocomitalk-v3.21';
+// v3.07 2026-03-27 - #77修正: voice-output.js v1.6 TTS読み飛ばし修正（改行→連続文変換）
+const CACHE_NAME = 'cocomitalk-v3.22';
 
 // v0.5更新 - 会議系・API系ファイル追加
 const CACHE_FILES = [
