@@ -3,6 +3,7 @@
 // v1.6 2026-03-21 - 会議グレード選択対応（meeting-lite/meeting/meeting-full）
 // v1.7 2026-03-24 - 📋ボタンをドロップダウン化（CLAUDE.md/設計書/指示書を個別生成）
 // v1.8 2026-03-28 - 相談トピック連携: ConsultationUI.init()呼び出し＋会議終了時の回答ダイアログ
+// v1.8.1 2026-03-28 - バグ修正: 回答ダイアログ表示時にhide()が先に走って見えない問題を修正
 'use strict';
 
 /** 会議UIモジュール */
@@ -33,7 +34,7 @@ const MeetingUI = (() => {
     topicInput = meetingScreen.querySelector('.meeting-topic-input');
     _setupEvents();
     if (typeof MeetingVoice !== 'undefined') MeetingVoice.init();
-    console.log('[MeetingUI] 初期化完了 v1.8');
+    console.log('[MeetingUI] 初期化完了 v1.8.1');
   }
 
   /** イベントリスナー設定 */
@@ -125,16 +126,24 @@ const MeetingUI = (() => {
     _showActionButtons();
   }
 
-  // v1.8修正 - 会議終了時に相談トピック回答ダイアログを表示
+  // v1.8.1修正 - 相談トピック会議の場合、回答ダイアログ選択後まで画面を閉じない
   function _handleEndMeeting() {
     // v1.8追加 - 相談トピック会議だった場合、回答ダイアログを表示
     if (typeof ConsultationUI !== 'undefined' && ConsultationUI.hasActiveConsultation()) {
-      ConsultationUI.showResolveDialogIfNeeded();
-      // ダイアログ表示後に画面を閉じる処理は_resolveConsultation内でやるので、ここではreturnしない
-      // ただし画面閉じは回答選択後に行いたいので、ここで画面は閉じない
-      // → ダイアログのボタン押下後に通常の終了フローを実行する
+      const dialogShown = ConsultationUI.showResolveDialogIfNeeded();
+      if (dialogShown) {
+        // v1.8.1修正 - ダイアログが表示された場合はここで止める
+        // 画面クローズは_resolveConsultation完了後にcloseMeetingScreen()を呼ぶ
+        return;
+      }
     }
 
+    // 通常の会議終了（相談トピックなし or ダイアログ不要時）
+    _closeMeetingScreen();
+  }
+
+  // v1.8.1追加 - 会議画面を閉じる共通処理（ダイアログ完了後にも呼ばれる）
+  function _closeMeetingScreen() {
     hide();
     if (typeof ModeSwitcher !== 'undefined') ModeSwitcher.setMode('normal');
     _clearChat();
@@ -350,5 +359,7 @@ const MeetingUI = (() => {
     addSisterMessage, addUserMessage, addSystemMessage,
     showTyping, hideTyping, restoreDisplay,
     startNewMeeting: _startNewMeeting, handleContinue: _handleContinue,
+    // v1.8.1追加 - ConsultationUIの_resolveConsultation完了後に呼ぶ
+    closeMeetingScreen: _closeMeetingScreen,
   };
 })();
