@@ -1,0 +1,236 @@
+/* COCOMITalk - 相談トピック連携スタイル */
+/* v1.0 2026-03-28 - 新規作成 */
+
+/* --- 通知バー（pendingがある時だけ表示） --- */
+.consultation-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  margin: 0 8px 4px;
+  background: linear-gradient(135deg, #2a1f4e 0%, #1a1235 100%);
+  border: 1px solid #6c5ce7;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  animation: consultation-pulse 2s ease-in-out infinite;
+}
+
+.consultation-bar:hover {
+  border-color: #a29bfe;
+  background: linear-gradient(135deg, #352a5e 0%, #221a42 100%);
+}
+
+@keyframes consultation-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.3); }
+  50% { box-shadow: 0 0 12px 2px rgba(108, 92, 231, 0.2); }
+}
+
+.consultation-bar-icon {
+  font-size: 1.2em;
+}
+
+.consultation-bar-text {
+  flex: 1;
+  font-size: 0.85em;
+  color: #e8e8f0;
+  font-weight: 500;
+}
+
+.consultation-bar-arrow {
+  font-size: 0.75em;
+  color: #a29bfe;
+  transition: transform 0.2s ease;
+}
+
+/* --- 展開パネル --- */
+.consultation-panel {
+  margin: 0 8px 8px;
+  background: #1a1235;
+  border: 1px solid #6c5ce7;
+  border-radius: 12px;
+  overflow: hidden;
+  animation: consultation-slide-down 0.2s ease;
+}
+
+@keyframes consultation-slide-down {
+  from { opacity: 0; max-height: 0; }
+  to { opacity: 1; max-height: 500px; }
+}
+
+.consultation-panel-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: #2a1f4e;
+  font-size: 0.85em;
+  font-weight: 600;
+  color: #e8e8f0;
+}
+
+.consultation-close-btn {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1em;
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.consultation-panel-body {
+  padding: 12px 14px;
+}
+
+.consultation-topic {
+  font-size: 0.95em;
+  font-weight: 600;
+  color: #a29bfe;
+  margin-bottom: 8px;
+}
+
+.consultation-question {
+  font-size: 0.85em;
+  color: #d0d0e0;
+  line-height: 1.5;
+  margin-bottom: 8px;
+  white-space: pre-wrap;
+}
+
+.consultation-context {
+  font-size: 0.8em;
+  color: #888;
+  line-height: 1.4;
+  margin-bottom: 10px;
+  padding: 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  white-space: pre-wrap;
+}
+
+.consultation-comment-area {
+  margin-bottom: 10px;
+}
+
+.consultation-comment-label {
+  display: block;
+  font-size: 0.8em;
+  color: #a29bfe;
+  margin-bottom: 4px;
+}
+
+.consultation-comment-input {
+  width: 100%;
+  padding: 8px 10px;
+  background: #0d0a1a;
+  border: 1px solid #333;
+  border-radius: 8px;
+  color: #e8e8f0;
+  font-size: 0.85em;
+  resize: vertical;
+  font-family: inherit;
+  box-sizing: border-box;
+}
+
+.consultation-comment-input:focus {
+  border-color: #6c5ce7;
+  outline: none;
+}
+
+.consultation-start-btn {
+  width: 100%;
+  padding: 10px;
+  background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.consultation-start-btn:hover {
+  opacity: 0.9;
+}
+
+.consultation-start-btn:active {
+  opacity: 0.7;
+}
+
+/* --- 回答ダイアログ --- */
+.consultation-resolve-dialog {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.consultation-resolve-dialog.hidden {
+  display: none;
+}
+
+.consultation-resolve-overlay {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.6);
+}
+
+.consultation-resolve-box {
+  position: relative;
+  background: #1a1235;
+  border: 1px solid #6c5ce7;
+  border-radius: 16px;
+  padding: 24px 20px;
+  max-width: 320px;
+  width: 90%;
+  text-align: center;
+}
+
+.consultation-resolve-msg {
+  font-size: 0.95em;
+  color: #e8e8f0;
+  margin: 0 0 20px;
+  font-weight: 600;
+}
+
+.consultation-resolve-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.consultation-resolve-dl,
+.consultation-resolve-both {
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  font-size: 0.9em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.2s;
+}
+
+.consultation-resolve-dl {
+  background: #333;
+  color: #e8e8f0;
+}
+
+.consultation-resolve-both {
+  background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+  color: white;
+}
+
+.consultation-resolve-dl:hover,
+.consultation-resolve-both:hover {
+  opacity: 0.9;
+}
+
+/* --- hidden ユーティリティ --- */
+.consultation-bar.hidden,
+.consultation-panel.hidden,
+.consultation-context.hidden {
+  display: none;
+}
