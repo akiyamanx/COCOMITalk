@@ -4,32 +4,29 @@
 // アキヤが補足コメントを追加して三姉妹会議に投入する。
 // 会議完了後は「ファイルDLだけ」or「DL＋DB保存」を選べる。
 // v1.0 2026-03-28 - 新規作成
+// v1.1 2026-03-28 - バグ修正: 議題テキスト短縮＋会議自動開始＋回答ダイアログ条件修正
 'use strict';
 
 /** 相談トピック連携UIモジュール */
 const ConsultationUI = (() => {
 
-  // 現在表示中の相談トピック
   let _currentConsultation = null;
-  // 通知バー要素
   let _barEl = null;
-  // 展開パネル要素
   let _panelEl = null;
-  // 回答ダイアログ要素
   let _dialogEl = null;
+  // v1.1追加 - 会議が実際に実行されたかフラグ
+  let _meetingExecuted = false;
 
   /**
    * 初期化 — 会議画面表示時に呼ばれる
-   * pending相談があれば通知バーを表示する
    */
   async function init() {
     _createElements();
     await _checkPendingConsultations();
   }
 
-  /** DOM要素を生成（まだDOMに追加されていなければ作る） */
+  /** DOM要素を生成 */
   function _createElements() {
-    // v1.0 - 通知バー
     if (!document.getElementById('consultation-bar')) {
       const bar = document.createElement('div');
       bar.id = 'consultation-bar';
@@ -38,7 +35,6 @@ const ConsultationUI = (() => {
       bar.addEventListener('click', _togglePanel);
       _barEl = bar;
 
-      // v1.0 - 展開パネル
       const panel = document.createElement('div');
       panel.id = 'consultation-panel';
       panel.className = 'consultation-panel hidden';
@@ -65,7 +61,6 @@ const ConsultationUI = (() => {
       panel.querySelector('.consultation-start-btn').addEventListener('click', _startMeetingWithConsultation);
       _panelEl = panel;
 
-      // v1.0 - 回答ダイアログ
       const dialog = document.createElement('div');
       dialog.id = 'consultation-resolve-dialog';
       dialog.className = 'consultation-resolve-dialog hidden';
@@ -84,14 +79,11 @@ const ConsultationUI = (() => {
       dialog.querySelector('.consultation-resolve-overlay').addEventListener('click', () => _resolveConsultation(false));
       _dialogEl = dialog;
 
-      // v1.0 - DOMに挿入（会議フッターの先頭に通知バー＋パネル）
       const meetingFooter = document.querySelector('.meeting-input-area');
       if (meetingFooter) {
         meetingFooter.insertBefore(panel, meetingFooter.firstChild);
         meetingFooter.insertBefore(bar, meetingFooter.firstChild);
       }
-
-      // 回答ダイアログは会議画面に追加
       const meetingScreen = document.getElementById('meeting-screen');
       if (meetingScreen) {
         meetingScreen.appendChild(dialog);
@@ -123,8 +115,8 @@ const ConsultationUI = (() => {
       const consultations = data.consultations || [];
 
       if (consultations.length > 0) {
-        // 最新の1件を表示（複数ある場合は最新優先）
         _currentConsultation = consultations[0];
+        _meetingExecuted = false;
         _showBar(consultations.length);
       } else {
         _hideBar();
@@ -134,7 +126,6 @@ const ConsultationUI = (() => {
     }
   }
 
-  /** 通知バーを表示 */
   function _showBar(count) {
     if (!_barEl) return;
     const text = _barEl.querySelector('.consultation-bar-text');
@@ -142,13 +133,11 @@ const ConsultationUI = (() => {
     _barEl.classList.remove('hidden');
   }
 
-  /** 通知バーを非表示 */
   function _hideBar() {
     if (_barEl) _barEl.classList.add('hidden');
     _hidePanel();
   }
 
-  /** パネルの展開/折りたたみトグル */
   function _togglePanel() {
     if (!_panelEl) return;
     if (_panelEl.classList.contains('hidden')) {
@@ -158,7 +147,6 @@ const ConsultationUI = (() => {
     }
   }
 
-  /** パネルを展開して相談内容を表示 */
   function _showPanel() {
     if (!_panelEl || !_currentConsultation) return;
     const c = _currentConsultation;
@@ -171,15 +159,12 @@ const ConsultationUI = (() => {
     } else {
       ctxEl.classList.add('hidden');
     }
-    // 補足コメント欄をクリア
     _panelEl.querySelector('.consultation-comment-input').value = '';
     _panelEl.classList.remove('hidden');
-    // 矢印を上向きに
     const arrow = _barEl.querySelector('.consultation-bar-arrow');
     if (arrow) arrow.textContent = '▲';
   }
 
-  /** パネルを折りたたむ */
   function _hidePanel() {
     if (_panelEl) _panelEl.classList.add('hidden');
     if (_barEl) {
@@ -188,46 +173,56 @@ const ConsultationUI = (() => {
     }
   }
 
-  /** 相談トピックで会議を開始する */
+  /** v1.1修正 - 相談トピックで会議を直接開始する（議題欄挿入→自動送信） */
   function _startMeetingWithConsultation() {
     if (!_currentConsultation) return;
     const c = _currentConsultation;
     const comment = _panelEl.querySelector('.consultation-comment-input').value.trim();
 
-    // 議題テキストを組み立て
-    let topic = `【📨 相談トピック】${c.topic}\n\n${c.question}`;
+    // v1.1修正 - 議題テキストを短くまとめる（長すぎるとUIが崩れるため）
+    // 全文は会議のシステムプロンプト側に渡す方が適切だが、
+    // まずは議題入力欄に収まるサイズにする
+    let topic = `【📨 相談】${c.topic}\n${c.question}`;
     if (c.context) {
-      topic += `\n\n【背景】\n${c.context}`;
+      // contextは100文字に切り詰め
+      const shortCtx = c.context.length > 100 ? c.context.slice(0, 100) + '...' : c.context;
+      topic += `\n背景: ${shortCtx}`;
     }
     if (comment) {
-      topic += `\n\n【アキヤの補足】\n${comment}`;
-      // アキヤのコメントを保持（resolve時に使う）
+      topic += `\n補足: ${comment}`;
       _currentConsultation._akiyaComment = comment;
-    }
-
-    // 議題入力欄にセット
-    const topicInput = document.querySelector('.meeting-topic-input');
-    if (topicInput) {
-      topicInput.value = topic;
-      // テキストエリアの高さを自動調整
-      topicInput.style.height = 'auto';
-      topicInput.style.height = topicInput.scrollHeight + 'px';
     }
 
     // パネルを閉じる
     _hidePanel();
     _hideBar();
 
-    console.log('[ConsultationUI] 相談トピックを議題に挿入:', c.topic);
+    // v1.1修正 - 議題入力欄にセットして自動的に会議を開始する
+    // MeetingUI.startNewMeetingを直接呼ぶことで、▶ボタン手動押し不要にする
+    _meetingExecuted = true;
+    if (typeof MeetingUI !== 'undefined' && MeetingUI.startNewMeeting) {
+      MeetingUI.startNewMeeting(topic);
+    } else {
+      // フォールバック: 議題入力欄に入れるだけ
+      const topicInput = document.querySelector('.meeting-topic-input');
+      if (topicInput) {
+        topicInput.value = topic;
+        topicInput.style.height = 'auto';
+        topicInput.style.height = Math.min(topicInput.scrollHeight, 200) + 'px';
+      }
+    }
+
+    console.log('[ConsultationUI] 相談トピックで会議開始:', c.topic);
   }
 
   /**
    * 会議完了後に回答ダイアログを表示する
-   * meeting-ui.jsの会議終了フローから呼ばれる
+   * v1.1修正 - 会議が実際に実行された場合のみダイアログを表示
    * @returns {boolean} 相談トピック会議だったらtrue
    */
   function showResolveDialogIfNeeded() {
-    if (!_currentConsultation) return false;
+    // v1.1修正 - 相談がない、または会議が実行されてない場合はスキップ
+    if (!_currentConsultation || !_meetingExecuted) return false;
     if (_dialogEl) {
       _dialogEl.classList.remove('hidden');
     }
@@ -236,15 +231,11 @@ const ConsultationUI = (() => {
 
   /**
    * 回答を処理する（DLのみ or DL＋DB保存）
-   * @param {boolean} saveToDb - DBにも保存するかどうか
    */
   async function _resolveConsultation(saveToDb) {
-    // ダイアログを閉じる
     if (_dialogEl) _dialogEl.classList.add('hidden');
-
     if (!_currentConsultation) return;
 
-    // 会議の結論テキストを取得（MeetingRelayから）
     let resolution = '';
     if (typeof MeetingRelay !== 'undefined') {
       const history = MeetingRelay.getHistory();
@@ -256,15 +247,12 @@ const ConsultationUI = (() => {
       }
     }
 
-    // v1.0 - ファイルDL（必ず実行）
     _downloadResolution(resolution);
 
-    // v1.0 - DB保存（アキヤが選んだ時だけ）
     if (saveToDb) {
       await _saveResolutionToDb(resolution);
     }
 
-    // 完了メッセージ
     if (typeof MeetingUI !== 'undefined') {
       const msg = saveToDb
         ? '📨 回答をDL＋DBに保存しました！次回claude.aiでクロちゃんが読めるよ'
@@ -272,11 +260,10 @@ const ConsultationUI = (() => {
       MeetingUI.addSystemMessage(msg);
     }
 
-    // 相談トピックをクリア
     _currentConsultation = null;
+    _meetingExecuted = false;
   }
 
-  /** 回答をMarkdownファイルとしてDL */
   function _downloadResolution(resolution) {
     if (!_currentConsultation) return;
     const c = _currentConsultation;
@@ -294,7 +281,7 @@ const ConsultationUI = (() => {
     if (c._akiyaComment) {
       md += `## アキヤの補足\n\n${c._akiyaComment}\n\n`;
     }
-    md += `## 三姉妹の回答\n\n${resolution}\n`;
+    md += `## 三姉妹の回答\n\n${resolution || '（会議が実行されませんでした）'}\n`;
 
     const blob = new Blob([md], { type: 'text/markdown; charset=utf-8' });
     const url = URL.createObjectURL(blob);
@@ -307,7 +294,6 @@ const ConsultationUI = (() => {
     URL.revokeObjectURL(url);
   }
 
-  /** 回答をD1に保存（relay /consultation/resolve 経由） */
   async function _saveResolutionToDb(resolution) {
     if (!_currentConsultation || typeof ApiCommon === 'undefined') return;
     try {
@@ -341,12 +327,10 @@ const ConsultationUI = (() => {
     }
   }
 
-  /** 現在の相談トピックがあるか確認（外部参照用） */
   function hasActiveConsultation() {
     return _currentConsultation !== null;
   }
 
-  /** リフレッシュ（会議画面再表示時に呼ぶ） */
   async function refresh() {
     await _checkPendingConsultations();
   }
