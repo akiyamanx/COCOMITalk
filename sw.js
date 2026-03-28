@@ -1,11 +1,12 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.15 2026-03-28 - voice-output.js v2.2 クリーンアップ（デバッグパネル削除）
-const CACHE_NAME = 'cocomitalk-v3.30';
+// v3.16 2026-03-28 - 相談トピック連携: consultation-ui.js + consultation-styles.css 追加
+const CACHE_NAME = 'cocomitalk-v3.31';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
-  './meeting-archive-styles.css', './app.js', './chat-ui.js',
+  './meeting-archive-styles.css', './consultation-styles.css',
+  './app.js', './chat-ui.js',
   './chat-core.js', './chat-group.js', './chat-history.js',
   './token-monitor.js', './api-common.js', './api-gemini.js',
   './api-openai.js', './api-claude.js', './mode-switcher.js',
@@ -15,6 +16,7 @@ const CACHE_FILES = [
   './memory-import-ui.js', './memory-ui-styles.css', './search-ui.js',
   './search-ui-styles.css', './token-monitor-styles.css',
   './search-caller.js', './tool-registry.js', './prompt-builder.js',
+  './consultation-ui.js',
   './meeting-voice.js', './doc-generator.js', './file-handler.js',
   './tts-provider.js', './openai-tts-provider.js',
   './voicevox-tts-provider.js', './speech-provider.js',
