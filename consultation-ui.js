@@ -6,6 +6,7 @@
 // v1.0 2026-03-28 - 新規作成
 // v1.1 2026-03-28 - バグ修正: 議題テキスト短縮＋会議自動開始＋回答ダイアログ条件修正
 // v1.2 2026-03-28 - バグ修正: 会議開始後に通知バーが再表示される問題＋resolve後のバー非表示
+// v1.3 2026-03-28 - バグ修正: 回答選択後にcloseMeetingScreen()を呼んで画面を閉じる
 'use strict';
 
 /** 相談トピック連携UIモジュール */
@@ -218,6 +219,7 @@ const ConsultationUI = (() => {
     return true;
   }
 
+  // v1.3修正 - 回答選択後にMeetingUI.closeMeetingScreen()を呼んで画面を閉じる
   async function _resolveConsultation(saveToDb) {
     if (_dialogEl) _dialogEl.classList.add('hidden');
     if (!_currentConsultation) return;
@@ -251,6 +253,11 @@ const ConsultationUI = (() => {
     _meetingExecuted = false;
     _consultationStarted = false;
     _hideBar();
+
+    // v1.3追加 - 回答選択後に会議画面を閉じる（meeting-ui.js v1.8.1のcloseMeetingScreenを呼ぶ）
+    if (typeof MeetingUI !== 'undefined' && MeetingUI.closeMeetingScreen) {
+      MeetingUI.closeMeetingScreen();
+    }
   }
 
   function _downloadResolution(resolution) {
