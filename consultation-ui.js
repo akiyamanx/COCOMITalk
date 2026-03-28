@@ -5,6 +5,7 @@
 // 会議完了後は「ファイルDLだけ」or「DL＋DB保存」を選べる。
 // v1.0 2026-03-28 - 新規作成
 // v1.1 2026-03-28 - バグ修正: 議題テキスト短縮＋会議自動開始＋回答ダイアログ条件修正
+// v1.2 2026-03-28 - バグ修正: 会議開始後に通知バーが再表示される問題＋resolve後のバー非表示
 'use strict';
 
 /** 相談トピック連携UIモジュール */
@@ -14,18 +15,18 @@ const ConsultationUI = (() => {
   let _barEl = null;
   let _panelEl = null;
   let _dialogEl = null;
-  // v1.1追加 - 会議が実際に実行されたかフラグ
   let _meetingExecuted = false;
+  // v1.2追加 - 会議開始済みフラグ（init再呼び出し時にpending再取得を防ぐ）
+  let _consultationStarted = false;
 
-  /**
-   * 初期化 — 会議画面表示時に呼ばれる
-   */
   async function init() {
     _createElements();
-    await _checkPendingConsultations();
+    // v1.2修正 - 既に会議開始済みならpending再チェックしない
+    if (!_consultationStarted) {
+      await _checkPendingConsultations();
+    }
   }
 
-  /** DOM要素を生成 */
   function _createElements() {
     if (!document.getElementById('consultation-bar')) {
       const bar = document.createElement('div');
@@ -95,7 +96,6 @@ const ConsultationUI = (() => {
     }
   }
 
-  /** pending相談があるかチェック */
   async function _checkPendingConsultations() {
     if (typeof ApiCommon === 'undefined') return;
     try {
@@ -117,6 +117,7 @@ const ConsultationUI = (() => {
       if (consultations.length > 0) {
         _currentConsultation = consultations[0];
         _meetingExecuted = false;
+        _consultationStarted = false;
         _showBar(consultations.length);
       } else {
         _hideBar();
@@ -173,18 +174,13 @@ const ConsultationUI = (() => {
     }
   }
 
-  /** v1.1修正 - 相談トピックで会議を直接開始する（議題欄挿入→自動送信） */
   function _startMeetingWithConsultation() {
     if (!_currentConsultation) return;
     const c = _currentConsultation;
     const comment = _panelEl.querySelector('.consultation-comment-input').value.trim();
 
-    // v1.1修正 - 議題テキストを短くまとめる（長すぎるとUIが崩れるため）
-    // 全文は会議のシステムプロンプト側に渡す方が適切だが、
-    // まずは議題入力欄に収まるサイズにする
     let topic = `【📨 相談】${c.topic}\n${c.question}`;
     if (c.context) {
-      // contextは100文字に切り詰め
       const shortCtx = c.context.length > 100 ? c.context.slice(0, 100) + '...' : c.context;
       topic += `\n背景: ${shortCtx}`;
     }
@@ -193,17 +189,16 @@ const ConsultationUI = (() => {
       _currentConsultation._akiyaComment = comment;
     }
 
-    // パネルを閉じる
     _hidePanel();
     _hideBar();
 
-    // v1.1修正 - 議題入力欄にセットして自動的に会議を開始する
-    // MeetingUI.startNewMeetingを直接呼ぶことで、▶ボタン手動押し不要にする
+    // v1.2追加 - 会議開始済みフラグをON（init再呼び出し時のpending再取得を防ぐ）
     _meetingExecuted = true;
+    _consultationStarted = true;
+
     if (typeof MeetingUI !== 'undefined' && MeetingUI.startNewMeeting) {
       MeetingUI.startNewMeeting(topic);
     } else {
-      // フォールバック: 議題入力欄に入れるだけ
       const topicInput = document.querySelector('.meeting-topic-input');
       if (topicInput) {
         topicInput.value = topic;
@@ -215,13 +210,7 @@ const ConsultationUI = (() => {
     console.log('[ConsultationUI] 相談トピックで会議開始:', c.topic);
   }
 
-  /**
-   * 会議完了後に回答ダイアログを表示する
-   * v1.1修正 - 会議が実際に実行された場合のみダイアログを表示
-   * @returns {boolean} 相談トピック会議だったらtrue
-   */
   function showResolveDialogIfNeeded() {
-    // v1.1修正 - 相談がない、または会議が実行されてない場合はスキップ
     if (!_currentConsultation || !_meetingExecuted) return false;
     if (_dialogEl) {
       _dialogEl.classList.remove('hidden');
@@ -229,9 +218,6 @@ const ConsultationUI = (() => {
     return true;
   }
 
-  /**
-   * 回答を処理する（DLのみ or DL＋DB保存）
-   */
   async function _resolveConsultation(saveToDb) {
     if (_dialogEl) _dialogEl.classList.add('hidden');
     if (!_currentConsultation) return;
@@ -260,8 +246,11 @@ const ConsultationUI = (() => {
       MeetingUI.addSystemMessage(msg);
     }
 
+    // v1.2修正 - 全状態をクリアして通知バーも確実に非表示にする
     _currentConsultation = null;
     _meetingExecuted = false;
+    _consultationStarted = false;
+    _hideBar();
   }
 
   function _downloadResolution(resolution) {
@@ -332,6 +321,7 @@ const ConsultationUI = (() => {
   }
 
   async function refresh() {
+    _consultationStarted = false;
     await _checkPendingConsultations();
   }
 
