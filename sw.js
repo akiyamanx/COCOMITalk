@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.18 2026-03-28 - consultation-ui.js v1.2バグ修正反映
-const CACHE_NAME = 'cocomitalk-v3.33';
+// v3.19 2026-03-28 - meeting-ui.js v1.8.1 + consultation-ui.js v1.3 回答ダイアログ修正
+const CACHE_NAME = 'cocomitalk-v3.34';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
