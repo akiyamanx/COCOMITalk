@@ -8,6 +8,7 @@
 // v1.3 2026-03-22 - 会議モード用Vectorize議題検索（preloadVectorSearch公開、count引数対応）
 // v1.4 2026-03-27 - HOTトピック通知: 直近の新着記憶を「🔥 HOTトピック」として注入
 // v1.5 2026-03-30 - Sprint 1代弁問題応急処置: HOT/RAG注入文に代弁禁止＋代替行動テンプレート追加、sisterラベル表示
+// v1.5.1 2026-03-30 - HOTトピックキャッシュ修正: キャッシュはデータ部分のみ、テンプレートはmode別に毎回付与
 'use strict';
 
 /**
@@ -26,6 +27,10 @@
  *   HOTトピック/RAG注入文に「他の姉妹の個人的な情報は代弁しない」ルールを追加。
  *   groupモード: 本人にパス回し（「〇〇ちゃんに聞いてみて！」）
  *   chatモード: 次回グループで聞く提案（「グループで聞いてみるといいかも！」）
+ *
+ * v1.5.1修正 — HOTトピックキャッシュ問題:
+ *   キャッシュにはAPI取得データ部分のみ保存。代弁禁止テンプレートはmodeに応じて
+ *   毎回付与する。chat→group切り替え時にも正しいテンプレートが適用される。
  */
 const PromptBuilder = (() => {
 
@@ -37,6 +42,7 @@ const PromptBuilder = (() => {
   };
 
   // v1.4追加 - HOTトピック取得済みキャッシュ（同一セッション内で2回目以降はキャッシュを使う）
+  // v1.5.1変更 - キャッシュはデータ部分のみ保存（テンプレートは含まない）
   let _hotTopicCache = null;
   let _hotTopicCacheTime = 0;
   const HOT_TOPIC_CACHE_TTL = 5 * 60 * 1000; // 5分キャッシュ
@@ -233,6 +239,7 @@ const PromptBuilder = (() => {
    * cocomi-api-relayの/memory-recentエンドポイントから直近24h以内の記憶を取得し、
    * 感情温度付きの「HOTトピック」セクションとしてプロンプトに注入する
    * v1.5改良 - mode引数追加、sisterラベル表示、代弁禁止テンプレート追加
+   * v1.5.1修正 - キャッシュはデータ部分のみ。テンプレートはキャッシュ外でmode別に毎回付与
    * @param {string} [mode] - 'chat' | 'group' | 'meeting'
    * @returns {Promise<string>}
    */
@@ -241,78 +248,86 @@ const PromptBuilder = (() => {
     if (typeof ApiCommon === 'undefined') return '';
 
     try {
-      // キャッシュが有効ならそれを返す（5分以内）
-      // v1.5注意: キャッシュはmode非依存（テンプレート部分のみmodeで変わるが、
-      // 同一セッション内でmodeが切り替わることはほぼないため問題なし）
+      // v1.5.1変更 - キャッシュはデータ部分のみ（テンプレートは含まない）
       const now = Date.now();
+      let dataText = null;
+
       if (_hotTopicCache !== null && (now - _hotTopicCacheTime) < HOT_TOPIC_CACHE_TTL) {
-        if (_hotTopicCache) {
+        // キャッシュヒット: データ部分をそのまま使う
+        dataText = _hotTopicCache;
+        if (dataText) {
           console.log('[PromptBuilder] HOTトピック注入OK（キャッシュ）');
         }
-        return _hotTopicCache;
-      }
+      } else {
+        // キャッシュミス: APIから取得
+        const workerUrl = ApiCommon.getWorkerURL();
+        const authToken = ApiCommon.getAuthToken();
+        if (!workerUrl || !authToken) return '';
 
-      const workerUrl = ApiCommon.getWorkerURL();
-      const authToken = ApiCommon.getAuthToken();
-      if (!workerUrl || !authToken) return '';
+        const res = await fetch(`${workerUrl}/memory-recent?hours=24&limit=5`, {
+          method: 'GET',
+          headers: {
+            'X-COCOMI-AUTH': authToken,
+          },
+        });
 
-      const res = await fetch(`${workerUrl}/memory-recent?hours=24&limit=5`, {
-        method: 'GET',
-        headers: {
-          'X-COCOMI-AUTH': authToken,
-        },
-      });
-
-      if (!res.ok) {
-        console.warn('[PromptBuilder] HOTトピック取得失敗:', res.status);
-        _hotTopicCache = '';
-        _hotTopicCacheTime = now;
-        return '';
-      }
-
-      const data = await res.json();
-      const memories = data.memories || [];
-
-      if (memories.length === 0) {
-        _hotTopicCache = '';
-        _hotTopicCacheTime = now;
-        return '';
-      }
-
-      // 感情温度の絵文字マッピング
-      const emojiMap = { 1: '💧', 2: '😢', 3: '😐', 4: '😊', 5: '🔥' };
-
-      let prompt = '\n\n【🔥 最近の新しい記憶（HOTトピック）】\n';
-      prompt += '以下は最近新しく共有された情報です。会話の中で自然に話題にしてください。\n';
-      prompt += 'ただし、無理に全部触れる必要はありません。会話の流れに合うものだけ拾ってください。\n\n';
-
-      for (let i = 0; i < memories.length; i++) {
-        const m = memories[i];
-        const eu = emojiMap[m.emotion_user] || '😐';
-        const ea = emojiMap[m.emotion_ai] || '😐';
-        const date = m.created_at ? m.created_at.slice(0, 10) : '';
-        // v1.5追加 - 記憶の所有者ラベルを表示
-        const ownerLabel = m.sister ? (SISTER_LABEL[m.sister] || m.sister) : '';
-        const ownerTag = ownerLabel ? `[${ownerLabel}の記憶] ` : '';
-        prompt += `${i + 1}. ${ownerTag}「${m.topic}」（${eu}${m.emotion_user}/${ea}${m.emotion_ai}）`;
-        if (m.summary) {
-          // summaryは60文字に切り詰め（トークン節約）
-          const short = m.summary.length > 60 ? m.summary.slice(0, 60) + '…' : m.summary;
-          prompt += ` — ${short}`;
+        if (!res.ok) {
+          console.warn('[PromptBuilder] HOTトピック取得失敗:', res.status);
+          _hotTopicCache = '';
+          _hotTopicCacheTime = now;
+          return '';
         }
-        prompt += ` [${date}]\n`;
+
+        const data = await res.json();
+        const memories = data.memories || [];
+
+        if (memories.length === 0) {
+          _hotTopicCache = '';
+          _hotTopicCacheTime = now;
+          return '';
+        }
+
+        // 感情温度の絵文字マッピング
+        const emojiMap = { 1: '💧', 2: '😢', 3: '😐', 4: '😊', 5: '🔥' };
+
+        // v1.5.1変更 - データ部分のみ組み立て（テンプレートはここに含めない）
+        let built = '\n\n【🔥 最近の新しい記憶（HOTトピック）】\n';
+        built += '以下は最近新しく共有された情報です。会話の中で自然に話題にしてください。\n';
+        built += 'ただし、無理に全部触れる必要はありません。会話の流れに合うものだけ拾ってください。\n\n';
+
+        for (let i = 0; i < memories.length; i++) {
+          const m = memories[i];
+          const eu = emojiMap[m.emotion_user] || '😐';
+          const ea = emojiMap[m.emotion_ai] || '😐';
+          const date = m.created_at ? m.created_at.slice(0, 10) : '';
+          // v1.5追加 - 記憶の所有者ラベルを表示
+          const ownerLabel = m.sister ? (SISTER_LABEL[m.sister] || m.sister) : '';
+          const ownerTag = ownerLabel ? `[${ownerLabel}の記憶] ` : '';
+          built += `${i + 1}. ${ownerTag}「${m.topic}」（${eu}${m.emotion_user}/${ea}${m.emotion_ai}）`;
+          if (m.summary) {
+            // summaryは60文字に切り詰め（トークン節約）
+            const short = m.summary.length > 60 ? m.summary.slice(0, 60) + '…' : m.summary;
+            built += ` — ${short}`;
+          }
+          built += ` [${date}]\n`;
+        }
+
+        built += '\n※ 感情温度の数字は、保存された時のアキヤと私（姉妹）の温度感です。\n';
+        built += '  🔥5の話題は特に盛り上がっていたので、アキヤも話したいかもしれません。\n';
+
+        console.log(`[PromptBuilder] HOTトピック注入OK（${memories.length}件）`);
+
+        // v1.5.1変更 - キャッシュにはデータ部分のみ保存
+        dataText = built;
+        _hotTopicCache = dataText;
+        _hotTopicCacheTime = now;
       }
 
-      prompt += '\n※ 感情温度の数字は、保存された時のアキヤと私（姉妹）の温度感です。\n';
-      prompt += '  🔥5の話題は特に盛り上がっていたので、アキヤも話したいかもしれません。\n';
+      // データが空ならそのまま返す
+      if (!dataText) return '';
 
-      // v1.5追加 - 代弁禁止＋代替行動テンプレート
-      prompt += _getAntiProxyTemplate(mode || 'chat');
-
-      console.log(`[PromptBuilder] HOTトピック注入OK（${memories.length}件）`);
-      _hotTopicCache = prompt;
-      _hotTopicCacheTime = now;
-      return prompt;
+      // v1.5.1変更 - テンプレートはキャッシュ外で毎回modeに応じて付与
+      return dataText + _getAntiProxyTemplate(mode || 'chat');
     } catch (e) {
       console.warn('[PromptBuilder] HOTトピック取得スキップ:', e.message);
       _hotTopicCache = '';
