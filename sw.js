@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.20 2026-03-28 - koko-system.js v1.4 推測代弁禁止ルール追加
-const CACHE_NAME = 'cocomitalk-v3.35';
+// v3.21 2026-03-30 - prompt-builder.js v1.5（Sprint 1代弁問題応急処置）
+const CACHE_NAME = 'cocomitalk-v3.36';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
