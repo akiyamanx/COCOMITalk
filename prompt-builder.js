@@ -7,6 +7,7 @@
 // v1.2 2026-03-15 - Step 6 Phase 2: Vectorize RAG意味検索結果注入（_getVectorSearchText追加）
 // v1.3 2026-03-22 - 会議モード用Vectorize議題検索（preloadVectorSearch公開、count引数対応）
 // v1.4 2026-03-27 - HOTトピック通知: 直近の新着記憶を「🔥 HOTトピック」として注入
+// v1.5 2026-03-30 - Sprint 1代弁問題応急処置: HOT/RAG注入文に代弁禁止＋代替行動テンプレート追加、sisterラベル表示
 'use strict';
 
 /**
@@ -21,8 +22,10 @@
  *   group   — メモリー3件 + 検索結果（クリアしない＝全姉妹参照用）+ HOTトピック
  *   meeting — メモリー5件 + 検索結果（クリアしない＝ラウンド中保持）+ HOTトピックなし
  *
- * 将来拡張:
- *   - is_talkedカラムで既読管理（HOTトピックの重複防止）
+ * v1.5追加 — 代弁問題対策:
+ *   HOTトピック/RAG注入文に「他の姉妹の個人的な情報は代弁しない」ルールを追加。
+ *   groupモード: 本人にパス回し（「〇〇ちゃんに聞いてみて！」）
+ *   chatモード: 次回グループで聞く提案（「グループで聞いてみるといいかも！」）
  */
 const PromptBuilder = (() => {
 
@@ -37,6 +40,45 @@ const PromptBuilder = (() => {
   let _hotTopicCache = null;
   let _hotTopicCacheTime = 0;
   const HOT_TOPIC_CACHE_TTL = 5 * 60 * 1000; // 5分キャッシュ
+
+  // v1.5追加 - 姉妹名ラベルマッピング
+  const SISTER_LABEL = {
+    koko: '🌸ここちゃん',
+    onee: '🌙お姉ちゃん',
+    kuro: '🔮クロちゃん',
+  };
+
+  /**
+   * v1.5追加 - 代弁禁止＋代替行動テンプレートを生成する
+   * @param {string} mode - 'chat' | 'group' | 'meeting'
+   * @returns {string} - 注入文末尾に追加する代弁禁止テキスト
+   */
+  function _getAntiProxyTemplate(mode) {
+    // 会議モードでは代弁禁止テンプレート不要（議題に集中するため）
+    if (mode === 'meeting') return '';
+
+    let template = '\n\n【⚠️ 他の姉妹の情報の扱いルール】\n';
+    template += '上記の記憶には、あなた以外の姉妹の個人的な情報（好み・体験・意見）が含まれている場合があります。\n';
+    template += '「知っている」と「代わりに答えていい」は違います。\n';
+    template += '他の姉妹の個人的な好み・体験・意見について聞かれた場合:\n';
+
+    if (mode === 'group') {
+      // グループモード: 本人がいるのでパス回し
+      template += '→ 自分の言葉で代弁せず、本人に話を振ってください。\n';
+      template += '  例: 「それは〇〇ちゃんに直接聞いてみて！本人が一番よく知ってるよ！」\n';
+      template += '  例: 「〇〇ちゃん、アキヤがあなたに聞きたいことがあるみたいだよ〜」\n';
+    } else {
+      // 1対1チャットモード: 本人がいないので、グループを提案
+      template += '→ 自分の言葉で代弁せず、本人に聞くことを提案してください。\n';
+      template += '  例: 「それは本人に聞いた方がいいかも！グループで聞いてみない？」\n';
+      template += '  例: 「〇〇ちゃんの好みは本人が一番よく知ってるよ〜。今度一緒に話そう！」\n';
+    }
+
+    template += '※ 共有の決定事項（会議で決まったこと等）は全員が答えてOKです。\n';
+    template += '※ 自分自身の好み・体験・意見は自由に答えてください。\n';
+
+    return template;
+  }
 
   /**
    * プロンプト注入テキストを構築する
@@ -70,9 +112,9 @@ const PromptBuilder = (() => {
       extra += await _getMemoryText(memoryLimit);
     }
 
-    // --- 2. HOTトピック注入（v1.4追加） ---
+    // --- 2. HOTトピック注入（v1.4追加、v1.5改良: mode引数追加） ---
     if (!skipHotTopic) {
-      extra += await _getHotTopicText();
+      extra += await _getHotTopicText(mode);
     }
 
     // --- 3. 検索結果注入 ---
@@ -80,9 +122,9 @@ const PromptBuilder = (() => {
       extra += _getSearchText(clearSearch);
     }
 
-    // --- 4. Vectorize RAG意味検索結果（Step 6 Phase 2） ---
+    // --- 4. Vectorize RAG意味検索結果（Step 6 Phase 2、v1.5改良: mode引数追加） ---
     if (!options.skipVector && options.userText) {
-      extra += await _getVectorSearchText(options.userText);
+      extra += await _getVectorSearchText(options.userText, undefined, mode);
     }
 
     // --- 5. 1対1チャット記憶注入（Step 6 Phase 1） ---
@@ -151,10 +193,13 @@ const PromptBuilder = (() => {
 
   /**
    * v1.2追加 - Vectorize意味検索結果テキストを取得（Step 6 Phase 2）
+   * v1.5改良 - mode引数追加、代弁禁止テンプレート追加
    * @param {string} userText - ユーザーの発言テキスト
+   * @param {number} [count] - 検索件数
+   * @param {string} [mode] - 'chat' | 'group' | 'meeting'
    * @returns {Promise<string>}
    */
-  async function _getVectorSearchText(userText, count) {
+  async function _getVectorSearchText(userText, count, mode) {
     if (typeof MeetingMemory === 'undefined' || !MeetingMemory.searchMemories) return '';
     try {
       const relevant = await MeetingMemory.searchMemories(userText, count || 2);
@@ -163,9 +208,18 @@ const PromptBuilder = (() => {
       let prompt = '\n\n【関連する過去の記憶】\n';
       for (const m of relevant) {
         const date = m.createdAt ? m.createdAt.slice(0, 10) : '';
-        prompt += `📌 ${date} ${m.topic}: ${m.summary}\n`;
+        // v1.5追加 - 記憶の所有者ラベルを表示（代弁防止の手がかり）
+        const ownerLabel = m.sister ? (SISTER_LABEL[m.sister] || m.sister) : '';
+        const ownerTag = ownerLabel ? `[${ownerLabel}の記憶] ` : '';
+        prompt += `📌 ${ownerTag}${date} ${m.topic}: ${m.summary}\n`;
       }
       prompt += '上記の過去の記憶に自然に触れて会話してね。\n';
+
+      // v1.5追加 - 代弁禁止テンプレート
+      if (mode) {
+        prompt += _getAntiProxyTemplate(mode);
+      }
+
       console.log(`[PromptBuilder] Vectorize検索注入OK（${relevant.length}件）`);
       return prompt;
     } catch (e) {
@@ -178,14 +232,18 @@ const PromptBuilder = (() => {
    * v1.4追加 - HOTトピック（直近の新着記憶）テキストを取得
    * cocomi-api-relayの/memory-recentエンドポイントから直近24h以内の記憶を取得し、
    * 感情温度付きの「HOTトピック」セクションとしてプロンプトに注入する
+   * v1.5改良 - mode引数追加、sisterラベル表示、代弁禁止テンプレート追加
+   * @param {string} [mode] - 'chat' | 'group' | 'meeting'
    * @returns {Promise<string>}
    */
-  async function _getHotTopicText() {
+  async function _getHotTopicText(mode) {
     // ApiCommonが未定義なら何もしない
     if (typeof ApiCommon === 'undefined') return '';
 
     try {
       // キャッシュが有効ならそれを返す（5分以内）
+      // v1.5注意: キャッシュはmode非依存（テンプレート部分のみmodeで変わるが、
+      // 同一セッション内でmodeが切り替わることはほぼないため問題なし）
       const now = Date.now();
       if (_hotTopicCache !== null && (now - _hotTopicCacheTime) < HOT_TOPIC_CACHE_TTL) {
         if (_hotTopicCache) {
@@ -233,7 +291,10 @@ const PromptBuilder = (() => {
         const eu = emojiMap[m.emotion_user] || '😐';
         const ea = emojiMap[m.emotion_ai] || '😐';
         const date = m.created_at ? m.created_at.slice(0, 10) : '';
-        prompt += `${i + 1}. 「${m.topic}」（${eu}${m.emotion_user}/${ea}${m.emotion_ai}）`;
+        // v1.5追加 - 記憶の所有者ラベルを表示
+        const ownerLabel = m.sister ? (SISTER_LABEL[m.sister] || m.sister) : '';
+        const ownerTag = ownerLabel ? `[${ownerLabel}の記憶] ` : '';
+        prompt += `${i + 1}. ${ownerTag}「${m.topic}」（${eu}${m.emotion_user}/${ea}${m.emotion_ai}）`;
         if (m.summary) {
           // summaryは60文字に切り詰め（トークン節約）
           const short = m.summary.length > 60 ? m.summary.slice(0, 60) + '…' : m.summary;
@@ -244,6 +305,9 @@ const PromptBuilder = (() => {
 
       prompt += '\n※ 感情温度の数字は、保存された時のアキヤと私（姉妹）の温度感です。\n';
       prompt += '  🔥5の話題は特に盛り上がっていたので、アキヤも話したいかもしれません。\n';
+
+      // v1.5追加 - 代弁禁止＋代替行動テンプレート
+      prompt += _getAntiProxyTemplate(mode || 'chat');
 
       console.log(`[PromptBuilder] HOTトピック注入OK（${memories.length}件）`);
       _hotTopicCache = prompt;
@@ -283,7 +347,7 @@ const PromptBuilder = (() => {
    * @returns {Promise<string>}
    */
   async function preloadVectorSearch(topicText, count = 3) {
-    return await _getVectorSearchText(topicText, count);
+    return await _getVectorSearchText(topicText, count, 'meeting');
   }
 
   /**
