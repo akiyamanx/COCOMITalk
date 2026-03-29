@@ -25,15 +25,23 @@ COCOMITalk/
 ├── styles.css            スタイル
 ├── app.js                アプリ初期化・画面管理
 ├── chat-core.js          チャットUI・メッセージ管理
-├── persona-router.js     三姉妹人格切り替え＋プロンプト構築（Session B）
-├── smart-router.js       内容別モデル自動選択（Session C）
-├── api-gemini.js         Gemini API呼び出し（Session B）
-├── api-openai.js         OpenAI API呼び出し（Session C）
-├── api-claude.js         Claude API呼び出し（Session C）
-├── chat-history.js       IndexedDB会話履歴（Session C）
-├── token-monitor.js      トークン使用量モニター（Session D）
-├── voice-io.js           音声入出力（Phase 2）
-├── prompts/              プロンプトファイル（Session B）
+├── prompt-builder.js     プロンプト注入共通化モジュール（メモリー/検索/HOTトピック/RAG）
+├── api-gemini.js         Gemini API呼び出し
+├── api-openai.js         OpenAI API呼び出し
+├── api-claude.js         Claude API呼び出し
+├── api-common.js         API共通処理（Worker URL/認証トークン管理）
+├── chat-group.js         グループチャットモード
+├── chat-memory.js        チャット記憶保存・取得
+├── chat-history.js       IndexedDB会話履歴
+├── chat-ui.js            チャット表示系
+├── token-monitor.js      トークン使用量モニター
+├── voice-input.js        音声入力（Whisper + Web Speech API）
+├── voice-output.js       音声出力（VOICEVOX + Web Speech TTS）
+├── consultation-ui.js    相談トピック連携UI
+├── meeting-ui.js         会議モードUI
+├── meeting-relay.js      会議リレー処理
+├── memory-ui.js          記憶管理UI
+├── prompts/              プロンプトファイル
 │   ├── koko-system.js    ここちゃん用システムプロンプト
 │   ├── gpt-system.js     GPTお姉ちゃん用
 │   └── claude-system.js  クロちゃん用
@@ -52,13 +60,42 @@ COCOMITalk/
 - cocomi-ci.yml で品質チェック
 - 500行制限、コメント・バージョン番号確認
 - LINE通知（GitHub Pages URL含む）
+- GitHub Actions（deploy-worker.yml）でrelay Workerも自動デプロイ
 
-## 現在のバージョン: v0.7（Step 2完了）
-- チャットUI表示
-- 三姉妹タブ切替（姉妹別モデルインジケーター表示）
-- 三姉妹API接続（Gemini/OpenAI/Claude - Worker中継）
+## ネット検索の活用ルール
+Claude Codeは組み込みのWebSearch/WebFetchツールでネット検索が可能。
+作業中に不明点があれば**自分で調べて解決する**こと。推測で進めるのは禁止。
+
+### いつ検索すべきか
+- APIのエラーコードやエラーメッセージの意味がわからない時
+- Gemini / OpenAI / Claude APIの仕様・制限を確認したい時
+- PWA（Service Worker、Cache API、IndexedDB等）の仕様を調べたい時
+- CSS/HTMLの互換性やモバイル対応を確認したい時
+- 新しいWeb API機能やベストプラクティスを確認したい時
+- VOICEVOX / Web Speech API等の音声関連APIの仕様確認
+
+### 検索のコツ
+- 検索クエリは英語で短く具体的に（例: `Service Worker cache update strategy`）
+- エラーメッセージはそのまま検索ワードに含める
+- 公式ドキュメント（MDN, developers.google.com等）を優先する
+- WebFetchで公式ドキュメントの特定ページを直接取得するのも有効
+
+### 検索してはいけないケース
+- COCOMI固有の内部仕様（Worker URL、認証トークン等）→ このCLAUDE.mdや既存コードを参照
+- APIキーやシークレット情報を含む検索
+
+## 現在のバージョン: v3.39（2026-03-30時点）
+- チャットUI（1対1＋グループ＋会議モード）
+- 三姉妹API接続（Gemini/OpenAI/Claude - Worker中継＋ストリーミング）
 - 三姉妹システムプロンプト（3モード: normal/dev/meeting）
 - IndexedDB会話履歴
 - PWA基盤（manifest + Service Worker）
-- トークン使用量モニター（三姉妹全API対応＋姉妹カラー表示）
+- トークン使用量モニター
+- VOICEVOX音声合成（ここちゃん=ずんだもん、お姉ちゃん=四国めたん、クロちゃん=WhiteCUL）
+- 音声入力（Whisper API + Web Speech API）
+- Vectorize RAG意味検索
+- HOTトピック通知（直近24h新着記憶を自動表示）
+- 代弁問題対策済み（ownerベース記憶注入制御 + 代弁禁止テンプレート）
+- AI自発的記憶保存（💾SAVEマーカー）
+- 相談トピック連携（claude.ai↔COCOMITalk会議室）
 - COCOMI CI配置（cocomi-ci.yml）
