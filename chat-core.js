@@ -7,6 +7,7 @@
 // v1.7 2026-03-12 - セッション開始位置記録＋getSessionHistory追加（今の部屋の会話だけDL）
 // v1.8 2026-03-13 - AI自発的記憶保存マーカー検知（💾SAVE:対応）
 // v1.9 2026-03-16 - グループモードにattachment引数を追加（方針C: テキスト全員・画像リードのみ）
+// v2.0 2026-03-30 - Sprint 2: PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
 'use strict';
 
 /** チャットコアモジュール */
@@ -43,7 +44,6 @@ const ChatCore = (() => {
     }
   };
 
-  // 三姉妹のAPIモジュール＋プロンプトマッピング
   const SISTER_API = {
     koko: {
       module: () => (typeof ApiGemini !== 'undefined') ? ApiGemini : null,
@@ -65,12 +65,10 @@ const ChatCore = (() => {
     claude: []
   };
 
-  // v1.7追加 - セッション開始時の履歴長を記録（ダウンロード時に今回分だけ取得用）
   const sessionStartIndex = { koko: 0, gpt: 0, claude: 0 };
 
   let currentSister = 'koko';
 
-  // 初期化
   async function init() {
     chatArea = document.getElementById('chat-area');
     msgInput = document.getElementById('msg-input');
@@ -78,7 +76,6 @@ const ChatCore = (() => {
     welcomeMsg = document.getElementById('welcome-msg');
     charCount = document.getElementById('char-count');
 
-    // v1.2追加 - ChatUiの初期化（表示系を委譲）
     if (typeof ChatUi !== 'undefined') {
       ChatUi.init({
         chatArea,
@@ -87,23 +84,19 @@ const ChatCore = (() => {
       });
     }
 
-    // イベントリスナー設定
     _setupInputEvents();
     _setupSendEvents();
 
     await _loadAllHistories();
 
-    // v1.7追加 - セッション開始位置を記録（今回の会話の開始位置）
     for (const key of ['koko', 'gpt', 'claude']) {
       sessionStartIndex[key] = chatHistories[key].length;
     }
 
-    console.log('[ChatCore] 初期化完了 v1.7');
+    console.log('[ChatCore] 初期化完了 v2.0');
   }
 
-  /** 入力欄のイベント設定 */
   function _setupInputEvents() {
-    // テキストエリアの自動リサイズ
     msgInput.addEventListener('input', () => {
       msgInput.style.height = 'auto';
       msgInput.style.height = Math.min(msgInput.scrollHeight, 120) + 'px';
@@ -119,7 +112,6 @@ const ChatCore = (() => {
       }
     });
 
-    // Enterで送信（Shift+Enterで改行）
     msgInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
@@ -130,7 +122,6 @@ const ChatCore = (() => {
     });
   }
 
-  // 送信ボタンのイベント設定 v1.1改修 - 停止ボタン機能追加
   function _setupSendEvents() {
     btnSend.addEventListener('click', () => {
       if (isProcessing) {
@@ -141,7 +132,6 @@ const ChatCore = (() => {
     });
   }
 
-  /** v1.1追加 - 送信ボタンを⏹停止表示に切替 */
   function _showStopButton() {
     btnSend.disabled = false;
     btnSend.querySelector('.send-arrow').textContent = '⏹';
@@ -149,7 +139,6 @@ const ChatCore = (() => {
     btnSend.title = '停止';
   }
 
-  /** v1.1追加 - 送信ボタンを通常表示に戻す */
   function _restoreSendButton() {
     btnSend.querySelector('.send-arrow').textContent = '↑';
     btnSend.classList.remove('btn-stop');
@@ -157,7 +146,6 @@ const ChatCore = (() => {
     btnSend.disabled = msgInput.value.trim().length === 0;
   }
 
-  /** v1.1追加 - 送信キャンセル処理 */
   function _handleCancel() {
     console.log('[ChatCore] 送信キャンセル実行');
     const aborted = (typeof ApiCommon !== 'undefined') ? ApiCommon.abortAll() : 0;
@@ -168,7 +156,6 @@ const ChatCore = (() => {
     _restoreSendButton();
   }
 
-  // v1.2改修 - 表示系はChatUiに委譲するラッパー関数
   function addMessage(role, text, options) {
     if (typeof ChatUi !== 'undefined') {
       ChatUi.addMessage(role, text, options);
@@ -181,33 +168,27 @@ const ChatCore = (() => {
     if (typeof ChatUi !== 'undefined') ChatUi.hideTyping();
   }
 
-  /** メッセージ送信処理 */
   function _handleSend() {
     const text = msgInput.value.trim();
     if (!text || isProcessing) return;
 
-    // ウェルカムメッセージを消す
     if (welcomeMsg && !welcomeMsg.classList.contains('hidden')) {
       welcomeMsg.classList.add('hidden');
     }
 
     const attachment = (typeof FileHandler !== 'undefined') ? FileHandler.consumeAttachment() : null;
 
-    // ユーザーメッセージを表示（添付ファイル名付き）
     const displayText = attachment ? `📎 ${attachment.name}\n${text}` : text;
     addMessage('user', displayText);
 
-    // 入力欄をクリア
     msgInput.value = '';
     msgInput.style.height = 'auto';
     btnSend.disabled = true;
     charCount.textContent = '';
 
-    // 履歴に追加＋IndexedDB保存
     chatHistories[currentSister].push({ role: 'user', content: text });
     _saveHistory();
 
-    // タイピングインジケーター表示
     isProcessing = true;
     _showStopButton();
     showTyping();
@@ -228,15 +209,14 @@ const ChatCore = (() => {
     }
   }
 
-  /** API経由で返答を取得 */
   async function _apiReply(userText, apiModule, systemPrompt, attachment) {
     try {
       const history = chatHistories[currentSister];
 
-      // v1.5改修 - PromptBuilderでメモリー＋検索結果を一括注入
+      // v2.0変更 - PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
       let fullPrompt = systemPrompt;
       if (typeof PromptBuilder !== 'undefined') {
-        const extra = await PromptBuilder.build({ mode: 'chat', userText });
+        const extra = await PromptBuilder.build({ mode: 'chat', sister: currentSister, userText });
         fullPrompt = systemPrompt + extra;
       }
 
@@ -251,7 +231,6 @@ const ChatCore = (() => {
 
       let reply = await apiModule.sendMessage(userText, fullPrompt, history, opts);
 
-      // v1.8追加 - AI自発的記憶保存マーカー検知（表示前に処理）
       if (typeof ChatMemory !== 'undefined' && reply.includes('💾SAVE:')) {
         reply = await ChatMemory.detectAndSave(reply, currentSister, chatHistories[currentSister]);
       }
@@ -261,13 +240,11 @@ const ChatCore = (() => {
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
       _saveHistory();
 
-      // v1.6追加 - 1対1チャット記憶の自動保存チェック（Step 6 Phase 1）
       if (typeof ChatMemory !== 'undefined') {
         ChatMemory.countTurn(currentSister);
         ChatMemory.autoSave(currentSister, chatHistories[currentSister]);
       }
 
-      // 音声モードなら応答を声で再生
       if (window.voiceController && window.voiceController.isEnabled()) {
         window.voiceController.speakResponse(reply, currentSister);
       }
@@ -290,7 +267,6 @@ const ChatCore = (() => {
     }
   }
 
-  // グループモード
   async function _groupReply(userText, attachment) {
     if (typeof ChatGroup === 'undefined') {
       console.error('[ChatCore] ChatGroupモジュールが見つかりません');
@@ -314,7 +290,6 @@ const ChatCore = (() => {
     }
   }
 
-  // v1.2改修 - デモ返答（ChatUiに委譲）
   function _demoReply(userText) {
     const reply = (typeof ChatUi !== 'undefined')
       ? ChatUi.getDemoReply(currentSister, userText)
@@ -331,12 +306,10 @@ const ChatCore = (() => {
     }, delay);
   }
 
-  // 姉妹切り替え
   function switchSister(sisterKey) {
     if (!SISTERS[sisterKey]) return;
     currentSister = sisterKey;
 
-    // v1.6追加 - チャット記憶の往復カウントリセット
     if (typeof ChatMemory !== 'undefined') {
       ChatMemory.resetTurnCount();
     }
@@ -364,12 +337,10 @@ const ChatCore = (() => {
     console.log(`[ChatCore] 姉妹切替: ${sister.name}`);
   }
 
-  // 現在の姉妹キーを取得
   function getCurrentSister() {
     return currentSister;
   }
 
-  // 履歴をIndexedDBに保存
   function _saveHistory() {
     if (typeof ChatHistory !== 'undefined') {
       ChatHistory.save(currentSister, chatHistories[currentSister]).catch(e => {
@@ -378,7 +349,6 @@ const ChatCore = (() => {
     }
   }
 
-  // IndexedDBから履歴読み込み
   async function _loadAllHistories() {
     if (typeof ChatHistory === 'undefined') return;
 
@@ -406,7 +376,6 @@ const ChatCore = (() => {
     }
   }
 
-  // 会話履歴をクリア
   async function clearHistory(sisterKey) {
     if (sisterKey) {
       chatHistories[sisterKey] = [];
@@ -434,7 +403,6 @@ const ChatCore = (() => {
     init, addMessage, showTyping, hideTyping,
     switchSister, getCurrentSister, clearHistory, SISTERS,
     getHistory: (sister) => chatHistories[sister || currentSister] || [],
-    // v1.7追加 - 今回のセッション（部屋）の会話だけ取得
     getSessionHistory: (sister) => {
       const key = sister || currentSister;
       const start = sessionStartIndex[key] || 0;
