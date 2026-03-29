@@ -7,6 +7,7 @@
 // v1.4 2026-03-13 - 他姉妹セリフ代弁バグ修正（グループ会話ルールに自分の言葉だけ制約を追加）
 // v1.5 2026-03-16 - グループモードファイル添付対応（方針C: テキスト全員・画像リードのみ）
 // v1.6 2026-03-23 - グループモードでもAI自発的記憶保存マーカー検知（detectAndSave対応）
+// v1.7 2026-03-30 - Sprint 2: PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
 
 'use strict';
 
@@ -96,17 +97,14 @@ const ChatGroup = (() => {
       } catch (error) {
         hideTyping();
         const errMsg = `ごめん、通信エラーだった…💦（${error.message}）`;
-        // v0.9.4 - エラーは画面表示のみ、履歴には入れない（トークン節約）
         addMessage('ai', errMsg, { sisterKey, isLead, noHistory: true });
         relayContext.push({ sisterKey, content: '（通信エラーのため発言なし）', isLead });
         console.error(`[ChatGroup] ${sister.name} グループ応答エラー:`, error);
       }
     }
 
-    // v1.3改修 - PromptBuilderで全姉妹完了後に検索結果をクリア
     if (typeof PromptBuilder !== 'undefined') PromptBuilder.clearSearch();
 
-    // 今ターンのリレーを保存（次ターンの補完用）
     prevTurnRelay = relayContext.map(r => ({
       sisterKey: r.sisterKey,
       content: r.content,
@@ -115,7 +113,6 @@ const ChatGroup = (() => {
 
     _saveGroupHistory(currentSister, chatHistories, relayContext, SISTERS);
 
-    // v1.1修正 - 音声モード時、3人全員の応答を順番に再生（キュー方式）
     if (window.voiceController && window.voiceController.isEnabled() && relayContext.length > 0) {
       const queueItems = relayContext.map(r => ({
         text: r.content,
@@ -127,27 +124,20 @@ const ChatGroup = (() => {
 
   /**
    * v0.9.1 - 前ターンの「自分の後」の姉妹の発言を取得（補完分）
-   * @param {number} currentIndex - 今ターンでの自分の順番（0,1,2）
-   * @param {string[]} order - 今ターンの発言順
-   * @param {Object} SISTERS - 姉妹情報
-   * @returns {Array} 補完用の履歴エントリ
    */
   function _getPrevTurnComplement(currentIndex, order, SISTERS) {
-    if (prevTurnRelay.length === 0) return []; // 1ターン目は補完なし
+    if (prevTurnRelay.length === 0) return [];
 
-    // 前ターンで「自分より後に話した姉妹」を特定
     const mySisterKey = order[currentIndex];
     const prevIndex = prevTurnRelay.findIndex(r => r.sisterKey === mySisterKey);
 
-    if (prevIndex === -1) return []; // 前ターンに自分がいない（通常ありえないが安全策）
+    if (prevIndex === -1) return [];
 
-    // 自分より後の発言だけ取得
     const complement = prevTurnRelay.slice(prevIndex + 1);
 
     return complement.map(r => {
       const sister = SISTERS[r.sisterKey];
       return {
-        // v0.9.5 - 他の姉妹の発言はrole:'user'で渡す（自分の発言と混同しない）
         role: 'user',
         content: `【前の会話より】${sister.icon}${sister.name}: ${r.content}`,
       };
@@ -156,14 +146,12 @@ const ChatGroup = (() => {
 
   /**
    * 個別の姉妹APIを呼び出す（グループモード用）
-   * v0.9.1変更 - 前ターン補完分（complement）を履歴に追加
+   * v1.7変更 - PromptBuilder.buildにsister引数追加
    */
   async function _callSisterInGroup(userText, sisterKey, isLead, sisterAPI, chatHistories, relayContext, complement, SISTERS, extraInstruction, attachment) {
     const apiModule = sisterAPI.module();
     const systemPrompt = sisterAPI.prompt();
 
-    // v0.9.2 - 姉妹間対話＋主担当の指示
-    // 前の姉妹の発言がある場合は名前を取得
     const prevNames = relayContext.map(r => SISTERS[r.sisterKey].name);
     const complementNames = complement.map(c => {
       const match = c.content.match(/【前の会話より】(.)(.+?):/);
@@ -171,7 +159,6 @@ const ChatGroup = (() => {
     }).filter(Boolean);
     const otherNames = [...complementNames, ...prevNames];
 
-    // v1.4追加 - 他姉妹セリフ代弁バグ修正（自分の言葉だけルール）
     let groupInstruction = '\n\n【グループ会話ルール — 最重要】';
     groupInstruction += '\nこれは三姉妹＋アキヤの家族グループチャットです。';
     groupInstruction += '\n★絶対厳守★ あなたの応答には【自分自身の言葉だけ】を書いてください。';
@@ -191,15 +178,12 @@ const ChatGroup = (() => {
       ? groupInstruction + '\n\n【あなたが主担当です。深く分析して具体的に提案を主導してください。】'
       : groupInstruction + '\n\n【別の姉妹が主担当です。あなたの専門視点から補足・チェック・別角度の意見を。】';
 
-    // 履歴構築: 自分の過去履歴 + 前ターン補完 + 今ターンの前の姉妹
     const history = [...(chatHistories[sisterKey] || [])];
 
-    // v0.9.1追加 - 前ターンの補完分（自分が見れなかった姉妹の発言）
     for (const entry of complement) {
       history.push(entry);
     }
 
-    // 今ターンの前の姉妹の発言（role:'user'で渡して自分の発言と混同させない）
     for (const prev of relayContext) {
       const prevSister = SISTERS[prev.sisterKey];
       history.push({
@@ -212,10 +196,10 @@ const ChatGroup = (() => {
       ? ModeSwitcher.getModelKey(sisterKey)
       : undefined;
 
-    // v1.3改修 - PromptBuilderでメモリー＋検索結果を一括注入（グループは全姉妹参照用にクリアしない）
+    // v1.7変更 - PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
     let extraPrompt = '';
     if (typeof PromptBuilder !== 'undefined') {
-      extraPrompt = await PromptBuilder.build({ mode: 'group', userText });
+      extraPrompt = await PromptBuilder.build({ mode: 'group', sister: sisterKey, userText });
     }
 
     const opts = { model: modelKey };
@@ -225,7 +209,6 @@ const ChatGroup = (() => {
     );
   }
 
-  /** グループモード用タイピングインジケーター（姉妹名付き） */
   function _showGroupTyping(sisterKey, sister, chatArea, hideTyping) {
     hideTyping();
     const colors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
@@ -254,7 +237,6 @@ const ChatGroup = (() => {
     requestAnimationFrame(() => { chatArea.scrollTop = chatArea.scrollHeight; });
   }
 
-  /** グループ応答を履歴に保存 */
   function _saveGroupHistory(currentSister, chatHistories, relayContext, SISTERS) {
     const groupSummary = relayContext.map(r => {
       const s = SISTERS[r.sisterKey];
@@ -270,14 +252,12 @@ const ChatGroup = (() => {
     }
   }
 
-  /** prevTurnRelayをリセット（ページ遷移やグループ解除時用） */
   function resetHistory() {
     prevTurnRelay = [];
   }
 
   /**
    * v0.9.3追加 - 姉妹だけで会話を続ける（アキヤの発言なし）
-   * 前ターンの会話を踏まえて三姉妹だけで1ターン会話する
    */
   async function continueTalk(ctx) {
     if (prevTurnRelay.length === 0) {
@@ -288,20 +268,16 @@ const ChatGroup = (() => {
     const { currentSister, chatHistories, addMessage, hideTyping,
             chatArea, SISTERS, SISTER_API } = ctx;
 
-    // 前ターンの会話を要約して「続きの話題」にする
     const lastTopic = prevTurnRelay.map(r => {
       const s = SISTERS[r.sisterKey];
       return `${s.icon}${s.name}: ${r.content}`;
     }).join('\n');
 
-    // 前回と同じ順番で発言（動的ルーティング再計算はしない）
     const order = prevTurnRelay.map(r => r.sisterKey);
     const lead = prevTurnRelay.find(r => r.isLead)?.sisterKey || order[0];
 
-    // 今ターンのリレー履歴
     const relayContext = [];
 
-    // v0.9.3 - 区切り表示
     addMessage('ai', '── みんなで話してるよ 🔄 ──', { sisterKey: order[0] });
 
     for (let i = 0; i < order.length; i++) {
@@ -317,7 +293,6 @@ const ChatGroup = (() => {
         if (apiModule && apiModule.hasApiKey()) {
           const complement = _getPrevTurnComplement(i, order, SISTERS);
 
-          // v0.9.3 - 「姉妹同士で会話を続けて」という指示付き
           const continueInstruction = '\n\n【アキヤは今は見守っています。前の会話の続きを姉妹同士で自然に会話してください。相手の姉妹の発言に反応したり、新しい視点を出したり、議論を深めたり。アキヤへの報告じゃなくて、姉妹同士のおしゃべりとして。】';
 
           const reply = await _callSisterInGroup(
@@ -344,7 +319,6 @@ const ChatGroup = (() => {
       }
     }
 
-    // 今ターンのリレーを保存（次のcontinueTalkや通常ターンの補完用）
     prevTurnRelay = relayContext.map(r => ({
       sisterKey: r.sisterKey, content: r.content, isLead: r.isLead,
     }));
