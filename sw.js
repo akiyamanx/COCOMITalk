@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.23 2026-03-30 - Sprint 2: prompt-builder v1.6 + chat-core v2.0 + chat-group v1.7（ownerベース記憶注入制御）
-const CACHE_NAME = 'cocomitalk-v3.38';
+// v3.24 2026-03-30 - prompt-builder v1.6.1（グループで本人回答済みなら自然に受ける）
+const CACHE_NAME = 'cocomitalk-v3.39';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
