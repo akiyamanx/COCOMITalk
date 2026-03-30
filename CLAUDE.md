@@ -84,6 +84,38 @@ Claude Codeは組み込みのWebSearch/WebFetchツールでネット検索が可
 - COCOMI固有の内部仕様（Worker URL、認証トークン等）→ このCLAUDE.mdや既存コードを参照
 - APIキーやシークレット情報を含む検索
 
+## MCP web_search活用ルール（v1.7追加）
+cocomi-mcp-serverに`web_search`ツールが搭載されている（v1.4.0）。
+MCP経由の検索は**承認ダイアログなし**で実行できるため、組み込みWebSearchより効率的。
+
+### MCP web_searchを優先すべき場面
+- 連続して複数の検索が必要な時（承認なしで連続実行できる）
+- Cloudflare Workers / D1 / Vectorize の公式ドキュメント確認
+- npmパッケージの使い方やバージョン互換性の調査
+- エラーメッセージの解決策検索
+
+### 使い方
+```
+ツール名: web_search
+パラメータ:
+  query: 検索クエリ（英語推奨、短く具体的に）
+  count: 結果数（1-10、デフォルト5）
+  language: 検索言語（jp/en、デフォルトen）
+  freshness: 鮮度フィルタ（pd=24時間, pw=1週間, pm=1ヶ月）
+```
+
+### 使い分け
+| 場面 | 推奨ツール | 理由 |
+|------|----------|------|
+| 連続検索・調査作業 | MCP web_search | 承認不要で効率的 |
+| 特定URLのページ取得 | 組み込みWebFetch | URLを直接指定できる |
+| 初回の軽い検索 | どちらでもOK | 差は小さい |
+
+### 注意
+- MCP web_searchはBrave Search API経由（月1,000クエリ無料枠）
+- 不要な検索を連打しない（無料枠を無駄にしない）
+- 検索結果はスニペット（要約）のみ。全文が必要ならWebFetchで該当URLを取得
+
 ## 現在のバージョン: v3.39（2026-03-30時点）
 - チャットUI（1対1＋グループ＋会議モード）
 - 三姉妹API接続（Gemini/OpenAI/Claude - Worker中継＋ストリーミング）
