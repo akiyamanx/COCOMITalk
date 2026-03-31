@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.24 2026-03-30 - prompt-builder v1.6.1（グループで本人回答済みなら自然に受ける）
-const CACHE_NAME = 'cocomitalk-v3.39';
+// v3.25 2026-03-31 - voice-input.js v2.3.0（TTS生成待ち中STT誤起動防止）
+const CACHE_NAME = 'cocomitalk-v3.40';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
