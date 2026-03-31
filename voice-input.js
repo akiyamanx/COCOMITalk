@@ -1,4 +1,4 @@
-// voice-input.js v2.2.3
+// voice-input.js v2.3.0
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
 // UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
 // v2.0 方針F: バッファ蓄積＋2.5秒待機＋ノイズフィルタ＋確認アニメ
@@ -6,6 +6,7 @@
 // v2.2 改修 - voice-state.js連携（三姉妹会議決定: ステートマシン＋sessionID＋自己修復）
 // v2.2.2 修正 - _restartSTT()にTTS再生状態チェック追加（フィードバックループ対策）
 // v2.2.3 追加 - #77 吹き出しタップ読み上げ（speakBubbleメソッド追加。マイクOFF時も動作）
+// v2.3.0 修正 - TTS生成待ち中のSTT誤起動防止（_waitingForTTSフラグ＋復帰待機延長1500ms）
 
 /** VoiceController - 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS） */
 class VoiceController {
@@ -33,6 +34,8 @@ class VoiceController {
     this._sttRetryCount = 0;
     this._STT_MIN_DURATION = 500;
     this._STT_MAX_RETRY = 2;
+    // v2.3.0追加 - TTS生成待ちフラグ（送信後〜TTS再生開始までの隙間でSTT誤起動を防ぐ）
+    this._waitingForTTS = false;
 
     this._setupVoiceCommand();
     this._setupCallbacks();
@@ -119,8 +122,13 @@ class VoiceController {
       }
     };
 
+    // v2.3.0修正 - onEndガードに_waitingForTTSチェック追加
     this._stt.onEnd = () => {
-      if (this._voiceState.isSpeaking() || this._playback.isPlaying() || this._playback.isQueuePlaying()) return;
+      if (this._waitingForTTS || this._voiceState.isSpeaking()
+          || this._playback.isPlaying() || this._playback.isQueuePlaying()) {
+        console.log('[Voice] onEnd: TTS待ち/再生中 → STT再開を抑制');
+        return;
+      }
       const duration = Date.now() - this._sttStartTime;
       const hasText = this._hasFinalText || (this._lastText && this._lastText.trim().length > 0);
 
@@ -128,7 +136,7 @@ class VoiceController {
         this._sttRetryCount++;
         console.log(`[Voice] STT即終了(${duration}ms) → リトライ ${this._sttRetryCount}/${this._STT_MAX_RETRY}`);
         setTimeout(() => {
-          if (this._enabled) this._stt.start({ language: 'ja-JP' });
+          if (this._enabled && !this._waitingForTTS) this._stt.start({ language: 'ja-JP' });
         }, 300);
         return;
       }
@@ -168,7 +176,9 @@ class VoiceController {
       }, 2000);
     };
 
+    // v2.3.0修正 - onPlayStartでTTS待ちフラグをOFF（speakingステートに移行するのでフラグ不要に）
     this._playback.onPlayStart = (sisterId) => {
+      this._waitingForTTS = false;
       const newId = this._voiceState.newSession();
       this._voiceState.transition('speaking');
       if (this._stt instanceof WhisperProvider) {
@@ -185,19 +195,25 @@ class VoiceController {
       }
     };
 
+    // v2.3.0修正 - onPlayEndでTTS待ちフラグをOFF（安全策）
     this._playback.onPlayEnd = (sisterId) => {
+      this._waitingForTTS = false;
       this._ui.highlightSister(sisterId, false);
       if (this._playback.isQueuePlaying()) return;
       this._voiceState.transition('recovering_input');
       if (this._enabled) this._resumeSTTAfterTTS();
     };
 
+    // v2.3.0修正 - onQueueEndでTTS待ちフラグをOFF（安全策）
     this._playback.onQueueEnd = () => {
+      this._waitingForTTS = false;
       this._voiceState.transition('recovering_input');
       if (this._enabled) this._resumeSTTAfterTTS();
     };
 
+    // v2.3.0修正 - onPlayErrorでTTS待ちフラグをOFF（安全策）
     this._playback.onPlayError = (error, sisterId) => {
+      this._waitingForTTS = false;
       this._ui.highlightSister(sisterId, false);
       this._ui.showStatus(error, 'error');
       this._voiceState.forceReset();
@@ -209,8 +225,9 @@ class VoiceController {
   }
 
   _appendBuffer(text) {
-    if (this._voiceState.isSpeaking()) {
-      console.log(`[Voice] speaking中のバッファ追記を拒否: "${text}"`);
+    // v2.3.0修正 - TTS待ち中もバッファ追記を拒否
+    if (this._waitingForTTS || this._voiceState.isSpeaking()) {
+      console.log(`[Voice] TTS待ち/speaking中のバッファ追記を拒否: "${text}"`);
       return;
     }
     this._buffer = this._buffer ? this._buffer + ' ' + text : text;
@@ -225,8 +242,8 @@ class VoiceController {
     this._bufferTimer = setTimeout(() => {
       this._bufferTimer = null;
       if (!this._buffer) return;
-      if (this._voiceState.isSpeaking()) {
-        console.log('[Voice] speaking中 → バッファタイマー発火を無視');
+      if (this._waitingForTTS || this._voiceState.isSpeaking()) {
+        console.log('[Voice] TTS待ち/speaking中 → バッファタイマー発火を無視');
         return;
       }
       if (this._stt.isListening()) this._stt.stop();
@@ -250,6 +267,8 @@ class VoiceController {
       this._finalText = '';
       if (sendText) {
         console.log(`[Voice] 確認完了 → 送信: "${sendText}"`);
+        // v2.3.0追加 - 送信時にTTS待ちフラグON（TTS生成API応答待ちの隙間でSTT誤起動を防ぐ）
+        this._waitingForTTS = true;
         this._sendVoiceMessage(sendText);
       }
     }, this._CONFIRM_DELAY);
@@ -260,10 +279,11 @@ class VoiceController {
     if (this._lastBufferText && text === this._lastBufferText) return true;
     return false;
   }
-  // v2.2.2修正 - TTS再生中のSTT再開を確実に防止
+  // v2.3.0修正 - _restartSTTガードに_waitingForTTSチェック追加
   _restartSTT() {
     setTimeout(() => {
       if (this._enabled
+          && !this._waitingForTTS
           && !this._voiceState.isSpeaking()
           && !this._playback.isPlaying()
           && !this._playback.isQueuePlaying()) {
@@ -272,10 +292,12 @@ class VoiceController {
     }, 800);
   }
 
+  // v2.3.0修正 - 復帰待機を1000ms→1500msに延長（VOICEVOXチャンク間ネットワーク遅延対策）
   async _resumeSTTAfterTTS() {
-    await new Promise(r => setTimeout(r, 1000));
-    if (this._voiceState.isSpeaking() || this._playback.isPlaying() || this._playback.isQueuePlaying()) {
-      console.log('[Voice] _resumeSTTAfterTTS: speaking/再生中 → 復帰中止');
+    await new Promise(r => setTimeout(r, 1500));
+    if (this._waitingForTTS || this._voiceState.isSpeaking()
+        || this._playback.isPlaying() || this._playback.isQueuePlaying()) {
+      console.log('[Voice] _resumeSTTAfterTTS: TTS待ち/speaking/再生中 → 復帰中止');
       return;
     }
     if (this._stt instanceof WhisperProvider && window.audioHealth) {
@@ -297,7 +319,7 @@ class VoiceController {
         if (result.newStream) this._stt._stream = result.newStream;
         console.log(`[Voice] 自己修復成功（Level ${result.level}）`);
       }
-      if (this._voiceState.isSpeaking()) { return; }
+      if (this._waitingForTTS || this._voiceState.isSpeaking()) { return; }
     }
     this._voiceState.transition('listening');
     if (typeof this._stt.resume === 'function') { this._stt.resume(); }
@@ -363,7 +385,7 @@ class VoiceController {
       if (meetingMic) { meetingMic.disabled = true; meetingMic.style.opacity = '0.4'; }
       return;
     }
-    console.log(`[Voice] 初期化完了（v2.2） stt=${this._stt.name} cmd=${!!this._voiceCmd}`);
+    console.log(`[Voice] 初期化完了（v2.3.0） stt=${this._stt.name} cmd=${!!this._voiceCmd}`);
   }
 
   toggleListening() {
@@ -394,6 +416,8 @@ class VoiceController {
       this._lastText = '';
       if (allText) {
         this._enabled = true;
+        // v2.3.0追加 - マイクタップ即送信時もTTS待ちフラグON
+        this._waitingForTTS = true;
         this._sendVoiceMessage(allText);
       } else {
         this._forceIdleState();
@@ -401,6 +425,7 @@ class VoiceController {
     } else if (this._playback.isPlaying() || this._playback.isQueuePlaying()) {
       this._playback.stop();
       this._enabled = false;
+      this._waitingForTTS = false;
       this._forceIdleState();
     } else {
       this.startListening();
@@ -408,6 +433,7 @@ class VoiceController {
   }
 
   _forceIdleState() {
+    this._waitingForTTS = false;
     this._voiceState.forceReset();
     this._ui.hideSendCountdown();
   }
@@ -458,6 +484,7 @@ class VoiceController {
 
   destroy() {
     this._enabled = false;
+    this._waitingForTTS = false;
     this._clearAllTimers();
     this._buffer = '';
     this._lastBufferText = '';
