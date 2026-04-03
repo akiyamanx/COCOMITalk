@@ -1,4 +1,4 @@
-// voice-output.js v2.2
+// voice-output.js v2.3
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -10,6 +10,7 @@
 // v2.0 デバッグ - 詳細ログDL＋連続スペース除去（#77根本原因調査用）
 // v2.1 修正 - _speakOneChunkにVOICEVOX残りチャンク再生追加（#77読み飛ばし根本修正）
 // v2.2 クリーンアップ - デバッグパネル・ログDL機能削除（本番用）
+// v2.3 修正 - speakQueueマイク復帰バグ修正（onPlayStart/onPlayEndをキュー全体で1回ずつに統一）
 
 class AudioPlaybackManager {
   constructor() {
@@ -195,15 +196,33 @@ class AudioPlaybackManager {
     if (!items || items.length === 0) return;
     this.stop();
     this._queue = [...items]; this._queuePlaying = true; this._queueCancelled = false;
+
+    // v2.3追加 - キュー開始時に最初の姉妹のonPlayStartを1回だけ発火
+    // （voice-input.jsのspeaking遷移＋STT停止を1回だけトリガー）
+    const firstSisterId = this._queue[0].sisterId;
+    this._playing = true;
+    if (this.onPlayStart) this.onPlayStart(firstSisterId);
+
     for (let i = 0; i < this._queue.length; i++) {
       if (this._queueCancelled) break;
-      try { await this._speakAndWait(this._queue[i].text, this._queue[i].sisterId, options); } catch(e) {}
+      try {
+        await this._speakAndWait(this._queue[i].text, this._queue[i].sisterId, options);
+      } catch(e) {
+        this._log(`speakQueue item ${i} エラー: ${e.message}`);
+      }
       if (i < this._queue.length - 1 && !this._queueCancelled) await new Promise(r => setTimeout(r, 300));
     }
-    this._queuePlaying = false; this._queue = [];
+
+    // v2.3修正 - キュー完了時に確実にフラグクリア＋onQueueEnd発火
+    this._playing = false;
+    this._currentAudio = null;
+    this._queuePlaying = false;
+    this._queue = [];
     if (!this._queueCancelled && this.onQueueEnd) this.onQueueEnd();
   }
 
+  // v2.3修正 - キュー中はonPlayStart/onPlayEndを発火しない（speakQueue側で一括制御）
+  // 姉妹アイコン発光の切替はonSisterChangeコールバックで通知
   _speakAndWait(text, sisterId, options = {}) {
     return new Promise(async (resolve) => {
       if (!text?.trim()) { resolve(); return; }
@@ -214,17 +233,29 @@ class AudioPlaybackManager {
         const a = await this._ttsProvider.synthesize(clean, vc.voice, { speed: options.speed || 1.0 });
         this._currentAudio = a; this._playing = true;
         this._speed = options.speed || 1.0; a.playbackRate = this._speed;
-        if (this.onPlayStart) this.onPlayStart(sisterId);
+        // v2.3変更 - キュー中のonPlayStartは発火しない（姉妹アイコン切替のみ）
+        if (this._queuePlaying) {
+          if (this.onSisterChange) this.onSisterChange(sisterId);
+        } else {
+          if (this.onPlayStart) this.onPlayStart(sisterId);
+        }
         const rc = a._vvRemainingChunks || [], sid = a._vvSpeakerId, ak = a._vvApiKey;
         a.addEventListener('ended', async () => {
           if (rc.length > 0 && !this._queueCancelled) await this._playVVChunks(rc, sid, ak, sisterId);
           this._playing = false; this._currentAudio = null;
-          if (this.onPlayEnd) this.onPlayEnd(sisterId); resolve();
+          // v2.3変更 - キュー中のonPlayEndは発火しない（speakQueueのonQueueEndに集約）
+          if (!this._queuePlaying) {
+            if (this.onPlayEnd) this.onPlayEnd(sisterId);
+          }
+          resolve();
         });
         a.addEventListener('error', async () => {
           if (rc.length > 0 && !this._queueCancelled) await this._playVVChunks(rc, sid, ak, sisterId);
           this._playing = false; this._currentAudio = null;
-          if (this.onPlayEnd) this.onPlayEnd(sisterId); resolve();
+          if (!this._queuePlaying) {
+            if (this.onPlayEnd) this.onPlayEnd(sisterId);
+          }
+          resolve();
         });
         await a.play();
       } catch(e) { this._playing = false; this._currentAudio = null; resolve(); }
