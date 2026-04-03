@@ -1,15 +1,13 @@
-// whisper-provider.js v1.5
+// whisper-provider.js v1.6
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
-// ハイブリッド方式: 無音検出で区切り＋最大10秒で強制送信
+// ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
 // ピコン音なし・高精度・ブラウザ非依存
+// v1.6 2026-04-04 - 最大録音時間を15秒→25秒に延長（長めの発話対応）
 // v1.5 2026-04-04 - ハルシネーションフィルタ追加（「以上で終わりです」等）
 // v1.4 2026-03-27 - ハルシネーションフィルタ追加（おやすみなさい等）＋無音判定2500→3000ms延長
-// v1.3 2026-03-19 - DebugLoggerフック追加（_debugLogからログファイル出力に連携）
 
-// v1.0 新規作成 - Whisper API STT（パターンCハイブリッド方式）
-// v1.1 追加 - sessionIDガード（三姉妹会議決定: 古い応答を世界から無効にする）
-// v1.2 修正 - resume()にTTS尾音ガード期間追加（300ms待機＋チャンク破棄）
+// v1.0〜v1.3: 履歴省略（Whisper STT/sessionIDガード/resumeガード期間/DebugLogger）
 
 /**
  * Whisper APIプロバイダー
@@ -34,7 +32,9 @@ class WhisperProvider extends SpeechProvider {
 
     this._SILENCE_THRESHOLD = 35;
     this._SILENCE_DURATION = 3000;
-    this._MAX_RECORD_TIME = 15000;
+    // v1.6変更 - 15秒→25秒に延長（長めの発話でも途中で切られないように）
+    // 短い発話は_SILENCE_DURATION（3秒無音）で自動区切りされるので影響なし
+    this._MAX_RECORD_TIME = 25000;
     this._MIN_RECORD_TIME = 800;
     this._VOLUME_CHECK_MS = 100;
     this._VOICE_START_COUNT = 3;
