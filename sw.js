@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.27 2026-04-04 - voice-input.js v2.4.1 + whisper-provider.js v1.5（マイク復帰＋ハルシネーション修正）
-const CACHE_NAME = 'cocomitalk-v3.42';
+// v3.28 2026-04-04 - whisper-provider.js v1.6（最大録音時間15秒→25秒延長）
+const CACHE_NAME = 'cocomitalk-v3.43';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
