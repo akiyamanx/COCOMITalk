@@ -1,8 +1,9 @@
-// voice-input.js v2.4.0
+// voice-input.js v2.4.1
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
 // UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
 // v2.0〜v2.3.0: 履歴省略（バッファ方式/TTS待機フラグ/voice-state連携/吹き出し読み上げ）
-// v2.4.0 修正 - マイク復帰中ハングバグ修正（onSisterChange対応＋フェイルセーフタイマー＋ガード緩和）
+// v2.4.0 修正 - speakQueueマイク復帰バグ修正（onSisterChange/フェイルセーフ/ガード緩和）
+// v2.4.1 修正 - pause済みWhisperのhealthCheckスキップ（recorder=inactive誤判定回避）
 
 class VoiceController {
   constructor() {
@@ -292,37 +293,32 @@ class VoiceController {
     }, 800);
   }
 
-  // v2.4.0修正 - ガード条件からisPlaying()を除去（レースコンディション回避）
+  // v2.4.1修正 - pause済みWhisperはhealthCheckスキップ（recorder=inactiveは正常）
   async _resumeSTTAfterTTS() {
     await new Promise(r => setTimeout(r, 1500));
     if (this._waitingForTTS || this._voiceState.isSpeaking() || this._playback.isQueuePlaying()) {
       console.log(`[Voice] _resumeSTTAfterTTS: 復帰中止 (waitTTS=${this._waitingForTTS}, speaking=${this._voiceState.isSpeaking()}, queue=${this._playback.isQueuePlaying()})`);
       return;
     }
-    if (this._stt instanceof WhisperProvider && window.audioHealth) {
-      const health = await window.audioHealth.checkHealth(
-        this._stt._audioCtx, this._stt._recorder, this._stt._stream, this._stt._analyser
-      );
-      if (!health.allPassed) {
-        console.log('[Voice] AudioContext異常 → 自己修復開始');
-        const result = await window.audioHealth.recover(
-          this._stt._audioCtx, this._stt._recorder, this._stt._stream, this._stt._analyser,
-          () => navigator.mediaDevices.getUserMedia({
-            audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
-          })
-        );
-        if (!result.success) { return; }
-        if (result.newAudioCtx) this._stt._audioCtx = result.newAudioCtx;
-        if (result.newAnalyser) this._stt._analyser = result.newAnalyser;
-        if (result.newRecorder) this._stt._recorder = result.newRecorder;
-        if (result.newStream) this._stt._stream = result.newStream;
-        console.log(`[Voice] 自己修復成功（Level ${result.level}）`);
+    // v2.4.1変更: Whisperがpause済みの場合、resume()が自前で録音再開するのでhealthCheckは不要。
+    // healthCheckはpause/resume機能を持たないWebSpeechProvider用、またはWhisperのstreamが完全に死んだ場合のみ必要。
+    if (this._stt instanceof WhisperProvider) {
+      // Whisperはresume()で自力復帰する。streamが死んでるかだけ簡易チェック。
+      const track = this._stt._stream?.getTracks()?.[0];
+      if (!track || track.readyState !== 'live') {
+        console.log('[Voice] Whisper stream死亡 → startListeningでフル再起動');
+        this._voiceState.transition('listening');
+        this.startListening();
+        return;
       }
       if (this._waitingForTTS || this._voiceState.isSpeaking()) { return; }
+      this._voiceState.transition('listening');
+      this._stt.resume();
+      return;
     }
+    // WebSpeechProvider等: startListeningフロー
     this._voiceState.transition('listening');
-    if (typeof this._stt.resume === 'function') { this._stt.resume(); }
-    else { this.startListening(); }
+    this.startListening();
   }
 
   _setupStateListener() {
@@ -376,7 +372,7 @@ class VoiceController {
       if (meetingMic) { meetingMic.disabled = true; meetingMic.style.opacity = '0.4'; }
       return;
     }
-    console.log(`[Voice] 初期化完了（v2.4.0） stt=${this._stt.name} cmd=${!!this._voiceCmd}`);
+    console.log(`[Voice] 初期化完了（v2.4.1） stt=${this._stt.name} cmd=${!!this._voiceCmd}`);
   }
 
   toggleListening() {
