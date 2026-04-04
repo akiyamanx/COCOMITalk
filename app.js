@@ -3,6 +3,7 @@
 // v1.0～v1.2 設定画面/MeetingHistory初期化/会議自動復元
 // v1.3 2026-03-09 - 音声コントローラー初期化＋姉妹タブ連動（Step 5b）
 // v1.6 2026-03-10 - 設定関連をapp-settings.jsに分離（余裕確保）
+// v1.7 2026-04-05 - ワイワイモード: スタイル切替ボタン初期化追加
 'use strict';
 /** アプリケーションモジュール */
 const App = (() => {
@@ -31,6 +32,8 @@ const App = (() => {
     _setupModeButton();
     _setupPeopleButton();
     _setupContinueTalkButton();
+    // v1.7追加 - ワイワイモード: スタイル切替ボタン初期化
+    _initStyleButton();
     if (typeof MeetingUI !== 'undefined') MeetingUI.init();
     // v1.0追加 - 会議アーカイブUI初期化
     if (typeof MeetingArchiveUI !== 'undefined') MeetingArchiveUI.init();
@@ -56,7 +59,7 @@ const App = (() => {
     _setupFileButtons();
     // v1.6変更 - 設定をAppSettingsモジュールに委譲
     if (typeof AppSettings !== 'undefined') { AppSettings.setup(); AppSettings.loadSettings(); }
-    console.log('[App] COCOMITalk v1.6 起動完了');
+    console.log('[App] COCOMITalk v1.7 起動完了');
   }
   // スプラッシュ画面の制御
   function _handleSplash() {
@@ -174,6 +177,46 @@ const App = (() => {
         btn.disabled = false;
       }
     });
+  }
+
+  // v1.7追加 - ワイワイモード: スタイル切替ボタン初期化
+  function _initStyleButton() {
+    const btnStyle = document.getElementById('btn-style');
+    if (!btnStyle || typeof ChatStyleModes === 'undefined') return;
+
+    // 初期表示を復元
+    _updateStyleButton(btnStyle, ChatStyleModes.getStyle());
+
+    btnStyle.addEventListener('click', () => {
+      // meeting-full時のガード
+      if (typeof StyleResolver !== 'undefined' && typeof ModeSwitcher !== 'undefined') {
+        const toneMode = ModeSwitcher.getMode();
+        const meetingGrade = (typeof MeetingRouter !== 'undefined' && toneMode === 'meeting')
+          ? (MeetingRouter.getCurrentGrade ? MeetingRouter.getCurrentGrade() : null)
+          : null;
+        const nextStyle = ChatStyleModes.getStyle() === 'normal' ? 'waiwai' : 'normal';
+        const result = StyleResolver.resolve(toneMode, nextStyle, meetingGrade);
+
+        if (!result.allowed) {
+          alert(result.message);
+          return;
+        }
+
+        if (result.level === 'warn' && result.message) {
+          console.log(`[App] スタイル警告: ${result.message}`);
+        }
+      }
+
+      const newStyle = ChatStyleModes.toggleStyle();
+      _updateStyleButton(btnStyle, newStyle);
+    });
+  }
+
+  // v1.7追加 - スタイルボタンの表示更新
+  function _updateStyleButton(btn, style) {
+    const info = ChatStyleModes.getStyleInfo(style);
+    btn.textContent = info.label;
+    btn.classList.toggle('style-waiwai', style === 'waiwai');
   }
 
   // テーマカラーを適用
