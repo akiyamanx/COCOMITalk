@@ -1,5 +1,6 @@
 <!-- COCOMITalk - COCOMI Family AI会話アプリ -->
 <!-- v1.7 相談トピック連携 - consultation-ui.js + consultation-styles.css 追加 -->
+<!-- v1.8 2026-04-05 - ワイワイモード: スタイル切替ボタン + script追加 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -48,6 +49,8 @@
         <span class="header-title">COCOMITalk</span>
       </div>
       <div class="header-right">
+        <!-- v1.8追加 - ワイワイモード: スタイル切替ボタン -->
+        <button id="btn-style" class="btn-style" title="会話スタイル切替">💬 じっくり</button>
         <button id="btn-mode" class="mode-btn" data-mode="normal" aria-label="モード切替">💬 普段</button>
         <button id="btn-people" class="people-btn" data-people="solo" aria-label="人数切替" title="1対1モード">👤</button>
         <button id="btn-settings" class="icon-btn" aria-label="設定">⚙️</button>
@@ -331,6 +334,9 @@
   <script src="search-caller.js"></script>
   <script src="tool-registry.js"></script>
   <script src="prompt-builder.js"></script>
+  <!-- v1.8追加 - ワイワイモード: スタイル定義 + 判定ロジック -->
+  <script src="chat-style-modes.js"></script>
+  <script src="style-resolver.js"></script>
   <!-- v1.7追加 - 相談トピック連携UI -->
   <script src="consultation-ui.js"></script>
   <script src="meeting-voice.js"></script>
