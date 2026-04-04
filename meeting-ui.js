@@ -4,6 +4,7 @@
 // v1.7 2026-03-24 - 📋ボタンをドロップダウン化（CLAUDE.md/設計書/指示書を個別生成）
 // v1.8 2026-03-28 - 相談トピック連携: ConsultationUI.init()呼び出し＋会議終了時の回答ダイアログ
 // v1.8.1 2026-03-28 - バグ修正: 回答ダイアログ表示時にhide()が先に走って見えない問題を修正
+// v1.9 2026-04-05 - ワイワイモード: meeting-full時のスタイルボタングレーアウト制御追加
 'use strict';
 
 /** 会議UIモジュール */
@@ -34,7 +35,7 @@ const MeetingUI = (() => {
     topicInput = meetingScreen.querySelector('.meeting-topic-input');
     _setupEvents();
     if (typeof MeetingVoice !== 'undefined') MeetingVoice.init();
-    console.log('[MeetingUI] 初期化完了 v1.8.1');
+    console.log('[MeetingUI] 初期化完了 v1.9');
   }
 
   /** イベントリスナー設定 */
@@ -63,8 +64,38 @@ const MeetingUI = (() => {
     const btnArchive = meetingScreen.querySelector('#btn-meeting-archive');
     if (btnArchive) btnArchive.addEventListener('click', _handleShowArchive);
     _setupFileAttach();
+
+    // v1.9追加 - 会議グレード変更時のワイワイボタングレーアウト制御
+    const gradeSelect = meetingScreen.querySelector('#meeting-grade-select');
+    if (gradeSelect) {
+      gradeSelect.addEventListener('change', () => {
+        _syncStyleButtonForGrade(gradeSelect.value);
+      });
+    }
   }
 
+  // v1.9追加 - 会議グレード変更時にスタイルボタンの有効/無効を制御
+  function _syncStyleButtonForGrade(grade) {
+    const btnStyle = document.getElementById('btn-style');
+    if (!btnStyle) return;
+
+    if (grade === 'meeting-full') {
+      btnStyle.disabled = true;
+      btnStyle.title = 'フル会議ではワイワイモードは使えません';
+      // ワイワイ中だった場合はnormalに強制切替
+      if (typeof ChatStyleModes !== 'undefined' && ChatStyleModes.getStyle() === 'waiwai') {
+        ChatStyleModes.setStyle('normal');
+        const info = ChatStyleModes.getStyleInfo('normal');
+        btnStyle.textContent = info.label;
+        btnStyle.classList.remove('style-waiwai');
+      }
+    } else {
+      btnStyle.disabled = false;
+      btnStyle.title = '会話スタイル切替';
+    }
+  }
+
+  /** v1.2改修 - 送信ボタン/Enter押下時の処理（会議進行中なら確認ダイアログ） */
   async function _handleStartOrContinue() {
     if (!topicInput) return;
     const topic = topicInput.value.trim();
