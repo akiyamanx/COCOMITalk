@@ -11,6 +11,7 @@
 // v1.5.1 2026-03-30 - HOTトピックキャッシュ修正: キャッシュはデータ部分のみ、テンプレートはmode別に毎回付与
 // v1.6 2026-03-30 - Sprint 2代弁問題本命: ownerベース記憶注入制御（他姉妹の個人記憶→メタ情報化）
 // v1.6.1 2026-03-30 - テンプレート修正: グループで本人が既に答えた場合は自然に受ける指示を追加
+// v1.7 2026-04-05 - ワイワイモード: スタイルプロンプト末尾アペンド（ChatStyleModes連携）
 'use strict';
 
 const PromptBuilder = (() => {
@@ -115,6 +116,16 @@ const PromptBuilder = (() => {
 
     if (!options.skipChatMemory && mode === 'chat') {
       extra += await _getChatMemoryText(options.chatMemoryLimit || 3);
+    }
+
+    // v1.7追加 - ワイワイモード: スタイルプロンプト末尾アペンド
+    if (typeof ChatStyleModes !== 'undefined' && sister) {
+      const chatStyle = ChatStyleModes.getStyle();
+      const stylePrompt = ChatStyleModes.getStylePrompt(chatStyle, sister);
+      if (stylePrompt) {
+        extra += stylePrompt;
+        console.log(`[PromptBuilder] スタイルプロンプト注入OK（${chatStyle}, ${sister}）`);
+      }
     }
 
     return extra;
