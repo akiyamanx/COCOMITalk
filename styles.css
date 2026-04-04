@@ -2,6 +2,7 @@
 /* このファイルはアプリ全体のスタイルを定義する */
 /* v0.1 Session A - 基盤構築 */
 /* v1.2 トークンモニター系スタイルをtoken-monitor-styles.cssに分離 */
+/* v1.3 2026-04-05 - ワイワイモード: スタイル切替ボタン追加 */
 
 /* ===== CSS変数 ===== */
 :root {
@@ -351,3 +352,28 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
 }
 /* v1.1追加 - 停止ボタンスタイル */
 .btn-send.btn-stop { background: #e74c3c !important; border-color: #e74c3c !important; animation: pulse-status 1s ease-in-out infinite; }
+
+/* v1.3 2026-04-05追加 - ワイワイモード スタイル切替ボタン */
+.btn-style {
+  background: white;
+  border: 1.5px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-full);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.btn-style:active {
+  transform: scale(0.95);
+}
+.btn-style.style-waiwai {
+  background: var(--active-primary);
+  border-color: var(--active-primary);
+  color: white;
+}
+.btn-style:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
