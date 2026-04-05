@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.33 2026-04-05 - vision-engine.js キャッシュ追加
-const CACHE_NAME = 'cocomitalk-v3.48';
+// v3.34 2026-04-05 - ズーム機能追加キャッシュ更新
+const CACHE_NAME = 'cocomitalk-v3.49';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',

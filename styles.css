@@ -4,6 +4,7 @@
 /* v1.2 トークンモニター系スタイルをtoken-monitor-styles.cssに分離 */
 /* v1.3 2026-04-05 - ワイワイモード: スタイル切替ボタン追加 */
 /* v1.4 2026-04-05 - ビジョンエンジンUI: カメラプレビュー・ボタンスタイル追加 */
+/* v1.5 2026-04-05 - ビジョンエンジン ズームスライダースタイル追加 */
 
 /* ===== CSS変数 ===== */
 :root {
@@ -467,4 +468,71 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
 }
 .vision-btn-capture:hover {
   background: rgba(255, 107, 157, 1);
+}
+
+/* v1.5追加 - ズームスライダー */
+.vision-zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px 8px;
+  background: rgba(26, 26, 36, 0.8);
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+}
+
+.vision-zoom-label {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.vision-zoom-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.vision-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--koko-primary);
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+
+.vision-zoom-slider::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+
+.vision-zoom-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--koko-primary);
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  cursor: pointer;
+}
+
+.vision-zoom-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  min-width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* プレビュー映像のズーム時にはみ出さないようクリップ */
+.vision-preview-wrapper {
+  overflow: hidden;
 }

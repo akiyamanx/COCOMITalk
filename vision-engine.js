@@ -2,6 +2,7 @@
 // このファイルはカメラ映像の取得・キャプチャ・解像度最適化を管理する
 // ここちゃん（Gemini）が三姉妹の「目」として映像を見るための共通基盤
 // v1.0 2026-04-05 - Step1: カメラ起動/手動キャプチャ/解像度リサイズ/FileHandler連携
+// v1.1 2026-04-05 - ズーム機能追加（スライダー1x〜4x、CSS scale+Canvas中央クロップ）
 
 'use strict';
 
@@ -22,12 +23,21 @@ const VisionEngine = (() => {
   const CAPTURE_QUALITY = 0.7; // JPEG品質（0.0〜1.0）
   const CAPTURE_MIME = 'image/jpeg';
 
+  // v1.1追加 - ズーム設定
+  const ZOOM_MIN = 1.0;
+  const ZOOM_MAX = 4.0;
+  const ZOOM_STEP = 0.1;
+  const ZOOM_DEFAULT = 1.0;
+
   // --- 内部状態 ---
   let _stream = null;        // MediaStream（カメラ映像）
   let _videoEl = null;        // <video>要素（プレビュー表示用）
   let _canvas = null;         // <canvas>要素（キャプチャ用、非表示）
   let _isActive = false;      // カメラON/OFF
   let _captureCount = 0;      // キャプチャ回数カウンター
+
+  // v1.1追加 - ズーム状態
+  let _zoomLevel = ZOOM_DEFAULT; // 現在のズーム倍率
 
   // --- 変化検出用（Step2で使用） ---
   let _prevFrameData = null;  // 前回フレームのImageData
@@ -108,6 +118,7 @@ const VisionEngine = (() => {
     _isActive = false;
     _prevFrameData = null;
     _captureCount = 0;
+    _zoomLevel = ZOOM_DEFAULT; // v1.1追加 - ズームリセット
     console.log('[VisionEngine] カメラ停止完了');
   }
 
@@ -124,8 +135,16 @@ const VisionEngine = (() => {
 
     const ctx = _canvas.getContext('2d');
 
-    // 映像をCanvasに描画（リサイズ済み = 320x240）
-    ctx.drawImage(_videoEl, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+    // v1.1変更 - ズーム対応: 中央クロップ方式で描画
+    // ズーム倍率に応じて映像の中央部分だけを切り出してCanvasに描画
+    const vw = _videoEl.videoWidth || 640;
+    const vh = _videoEl.videoHeight || 480;
+    // ソース領域: ズーム倍率で縮小した中央矩形
+    const sw = vw / _zoomLevel;
+    const sh = vh / _zoomLevel;
+    const sx = (vw - sw) / 2;
+    const sy = (vh - sh) / 2;
+    ctx.drawImage(_videoEl, sx, sy, sw, sh, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
 
     // JPEG形式のDataURLに変換
     const dataUrl = _canvas.toDataURL(CAPTURE_MIME, CAPTURE_QUALITY);
@@ -165,7 +184,14 @@ const VisionEngine = (() => {
   function _captureFrame() {
     if (!_isActive || !_videoEl || !_canvas) return null;
     const ctx = _canvas.getContext('2d');
-    ctx.drawImage(_videoEl, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+    // v1.1変更 - ズーム対応
+    const vw = _videoEl.videoWidth || 640;
+    const vh = _videoEl.videoHeight || 480;
+    const sw = vw / _zoomLevel;
+    const sh = vh / _zoomLevel;
+    const sx = (vw - sw) / 2;
+    const sy = (vh - sh) / 2;
+    ctx.drawImage(_videoEl, sx, sy, sw, sh, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
     return ctx.getImageData(0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
   }
 
@@ -246,6 +272,36 @@ const VisionEngine = (() => {
   }
 
   // ============================================
+  // v1.1追加: ズーム制御
+  // ============================================
+
+  /**
+   * ズーム倍率を設定（1.0〜4.0）
+   * CSSのtransform scaleでプレビュー拡大 + キャプチャ時にCanvas中央クロップ
+   * @param {number} level - ズーム倍率
+   */
+  function setZoom(level) {
+    _zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level));
+
+    // CSSでプレビュー映像を拡大（見た目の反映）
+    if (_videoEl) {
+      _videoEl.style.transform = `scale(${_zoomLevel})`;
+      _videoEl.style.transformOrigin = 'center center';
+    }
+
+    console.log(`[VisionEngine] ズーム: ${_zoomLevel.toFixed(1)}x`);
+    return _zoomLevel;
+  }
+
+  /**
+   * 現在のズーム倍率を取得
+   * @returns {number}
+   */
+  function getZoom() {
+    return _zoomLevel;
+  }
+
+  // ============================================
   // ユーティリティ
   // ============================================
 
@@ -316,6 +372,12 @@ const VisionEngine = (() => {
       _canvas.height = CAPTURE_HEIGHT;
       _isActive = true;
 
+      // v1.1追加 - ズーム倍率を維持（カメラ切替後も同じズームレベル）
+      if (_zoomLevel !== ZOOM_DEFAULT && _videoEl) {
+        _videoEl.style.transform = `scale(${_zoomLevel})`;
+        _videoEl.style.transformOrigin = 'center center';
+      }
+
       console.log(`[VisionEngine] カメラ切替: ${currentFacing} → ${newFacing}`);
       return true;
     } catch (err) {
@@ -331,6 +393,8 @@ const VisionEngine = (() => {
     captureAndAttach,
     startAutoCapture,
     stopAutoCapture,
+    setZoom,      // v1.1追加
+    getZoom,      // v1.1追加
     switchCamera,
     isActive,
     isAutoCapturing,

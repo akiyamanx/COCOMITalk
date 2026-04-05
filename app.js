@@ -245,6 +245,11 @@ const App = (() => {
         visionPanel.classList.add('hidden');
         btnToggle.classList.remove('vision-active');
         btnToggle.title = '📷 カメラを起動';
+        // v1.1追加 - ズームスライダーリセット
+        const _zs = document.getElementById('vision-zoom-slider');
+        const _zv = document.getElementById('vision-zoom-value');
+        if (_zs) { _zs.value = '1.0'; }
+        if (_zv) { _zv.textContent = '1.0x'; }
         console.log('[App] ビジョンエンジン: カメラOFF');
       } else {
         // カメラ起動
@@ -271,6 +276,17 @@ const App = (() => {
           setTimeout(() => { btnCapture.style.transform = ''; }, 200);
           console.log(`[App] ビジョンキャプチャ完了: ${att.name} (${att.size}bytes)`);
         }
+      });
+    }
+
+    // v1.1追加 - ズームスライダー
+    const zoomSlider = document.getElementById('vision-zoom-slider');
+    const zoomValue = document.getElementById('vision-zoom-value');
+    if (zoomSlider) {
+      zoomSlider.addEventListener('input', () => {
+        const level = parseFloat(zoomSlider.value);
+        VisionEngine.setZoom(level);
+        if (zoomValue) zoomValue.textContent = `${level.toFixed(1)}x`;
       });
     }
 
