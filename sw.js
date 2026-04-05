@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.29 2026-04-05 - whisper-provider.js v1.7（AudioContext suspend対策）
-const CACHE_NAME = 'cocomitalk-v3.44';
+// v3.30 2026-04-05 - escape-hatch-detector.js追加 (Sprint 2+3統合)
+const CACHE_NAME = 'cocomitalk-v3.45';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
@@ -25,6 +25,7 @@ const CACHE_FILES = [
   './voice-state.js', './voice-command.js', './voice-input.js',
   './voice-sender.js', './app-settings.js',
   './chat-style-modes.js', './style-resolver.js',
+  './escape-hatch-detector.js',
   './prompts/koko-system.js', './prompts/gpt-system.js',
   './prompts/claude-system.js', './manifest.json',
 ];
