@@ -248,8 +248,14 @@ const App = (() => {
         // v1.1追加 - ズームスライダーリセット
         const _zs = document.getElementById('vision-zoom-slider');
         const _zv = document.getElementById('vision-zoom-value');
-        if (_zs) { _zs.value = '1.0'; }
+        if (_zs) { _zs.value = '1.0'; _zs.max = '4.0'; }
         if (_zv) { _zv.textContent = '1.0x'; }
+        // v1.2追加 - 解像度ボタンリセット
+        const _rb = document.getElementById('btn-vision-resolution');
+        if (_rb) {
+          _rb.textContent = '🌿エコ';
+          _rb.classList.remove('res-standard', 'res-hd');
+        }
         console.log('[App] ビジョンエンジン: カメラOFF');
       } else {
         // カメラ起動
@@ -287,6 +293,35 @@ const App = (() => {
         const level = parseFloat(zoomSlider.value);
         VisionEngine.setZoom(level);
         if (zoomValue) zoomValue.textContent = `${level.toFixed(1)}x`;
+      });
+    }
+
+    // v1.2追加 - 解像度切替ボタン
+    const btnResolution = document.getElementById('btn-vision-resolution');
+    if (btnResolution) {
+      btnResolution.addEventListener('click', () => {
+        if (!VisionEngine.isActive()) return;
+        const result = VisionEngine.cycleResolution();
+        if (!result) return;
+
+        // ボタン表示更新
+        btnResolution.textContent = result.label;
+        // スタイルクラス切替
+        btnResolution.classList.remove('res-standard', 'res-hd');
+        if (result.key === 'standard') btnResolution.classList.add('res-standard');
+        if (result.key === 'hd') btnResolution.classList.add('res-hd');
+
+        // ズームスライダーの上限を更新
+        if (zoomSlider) {
+          zoomSlider.max = String(result.currentZoomMax);
+          // 現在値が新上限を超えてたらクランプ
+          if (parseFloat(zoomSlider.value) > result.currentZoomMax) {
+            zoomSlider.value = String(result.currentZoomMax);
+            if (zoomValue) zoomValue.textContent = `${result.currentZoomMax.toFixed(1)}x`;
+          }
+        }
+
+        console.log(`[App] 解像度切替: ${result.label} (${result.desc}) / ズーム上限: ${result.currentZoomMax}x`);
       });
     }
 

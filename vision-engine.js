@@ -3,6 +3,7 @@
 // ここちゃん（Gemini）が三姉妹の「目」として映像を見るための共通基盤
 // v1.0 2026-04-05 - Step1: カメラ起動/手動キャプチャ/解像度リサイズ/FileHandler連携
 // v1.1 2026-04-05 - ズーム機能追加（スライダー1x〜4x、CSS scale+Canvas中央クロップ）
+// v1.2 2026-04-05 - 解像度3段階切替（エコ/標準/高精細）+ ズーム上限連動
 
 'use strict';
 
@@ -17,15 +18,18 @@
 const VisionEngine = (() => {
 
   // --- 設定 ---
-  // v1.0 キャプチャ解像度（低解像度でもAIは十分認識可能、コスト大幅削減）
-  const CAPTURE_WIDTH = 320;
-  const CAPTURE_HEIGHT = 240;
-  const CAPTURE_QUALITY = 0.7; // JPEG品質（0.0〜1.0）
+  // v1.2変更 - 解像度プリセット定義
+  const RESOLUTION_PRESETS = {
+    eco:      { width: 320,  height: 240, quality: 0.7, zoomMax: 4.0, label: '🌿エコ',   desc: '320x240' },
+    standard: { width: 640,  height: 480, quality: 0.8, zoomMax: 6.0, label: '📋標準',   desc: '640x480' },
+    hd:       { width: 1280, height: 720, quality: 0.85, zoomMax: 8.0, label: '🔍高精細', desc: '1280x720' },
+  };
+  const PRESET_ORDER = ['eco', 'standard', 'hd']; // 切替順序
   const CAPTURE_MIME = 'image/jpeg';
 
-  // v1.1追加 - ズーム設定
+  // v1.2変更 - ズーム設定（上限はプリセットで動的に変わる）
   const ZOOM_MIN = 1.0;
-  const ZOOM_MAX = 4.0;
+  let _zoomMax = 4.0; // v1.2: プリセットに応じて動的に変わる
   const ZOOM_STEP = 0.1;
   const ZOOM_DEFAULT = 1.0;
 
@@ -38,6 +42,9 @@ const VisionEngine = (() => {
 
   // v1.1追加 - ズーム状態
   let _zoomLevel = ZOOM_DEFAULT; // 現在のズーム倍率
+
+  // v1.2追加 - 現在の解像度プリセット
+  let _currentPreset = 'eco';
 
   // --- 変化検出用（Step2で使用） ---
   let _prevFrameData = null;  // 前回フレームのImageData
@@ -77,10 +84,11 @@ const VisionEngine = (() => {
       _videoEl.muted = true;
       await _videoEl.play();
 
-      // キャプチャ用Canvas（非表示、解像度固定）
+      // v1.2変更 - キャプチャ用Canvas（プリセットの解像度で生成）
+      const preset = RESOLUTION_PRESETS[_currentPreset];
       _canvas = document.createElement('canvas');
-      _canvas.width = CAPTURE_WIDTH;
-      _canvas.height = CAPTURE_HEIGHT;
+      _canvas.width = preset.width;
+      _canvas.height = preset.height;
 
       _isActive = true;
       _captureCount = 0;
@@ -119,6 +127,8 @@ const VisionEngine = (() => {
     _prevFrameData = null;
     _captureCount = 0;
     _zoomLevel = ZOOM_DEFAULT; // v1.1追加 - ズームリセット
+    _currentPreset = 'eco'; // v1.2追加 - 解像度リセット
+    _zoomMax = RESOLUTION_PRESETS.eco.zoomMax; // v1.2追加
     console.log('[VisionEngine] カメラ停止完了');
   }
 
@@ -135,19 +145,18 @@ const VisionEngine = (() => {
 
     const ctx = _canvas.getContext('2d');
 
-    // v1.1変更 - ズーム対応: 中央クロップ方式で描画
-    // ズーム倍率に応じて映像の中央部分だけを切り出してCanvasに描画
+    // v1.2変更 - 解像度プリセット対応: 中央クロップ方式で描画
+    const preset = RESOLUTION_PRESETS[_currentPreset];
     const vw = _videoEl.videoWidth || 640;
     const vh = _videoEl.videoHeight || 480;
-    // ソース領域: ズーム倍率で縮小した中央矩形
     const sw = vw / _zoomLevel;
     const sh = vh / _zoomLevel;
     const sx = (vw - sw) / 2;
     const sy = (vh - sh) / 2;
-    ctx.drawImage(_videoEl, sx, sy, sw, sh, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+    ctx.drawImage(_videoEl, sx, sy, sw, sh, 0, 0, preset.width, preset.height);
 
-    // JPEG形式のDataURLに変換
-    const dataUrl = _canvas.toDataURL(CAPTURE_MIME, CAPTURE_QUALITY);
+    // JPEG形式のDataURLに変換（品質もプリセットに応じて調整）
+    const dataUrl = _canvas.toDataURL(CAPTURE_MIME, preset.quality);
     // Base64部分だけ取得（data:image/jpeg;base64, を除去）
     const base64 = dataUrl.split(',')[1];
 
@@ -184,15 +193,16 @@ const VisionEngine = (() => {
   function _captureFrame() {
     if (!_isActive || !_videoEl || !_canvas) return null;
     const ctx = _canvas.getContext('2d');
-    // v1.1変更 - ズーム対応
+    // v1.2変更 - 解像度プリセット対応
+    const preset = RESOLUTION_PRESETS[_currentPreset];
     const vw = _videoEl.videoWidth || 640;
     const vh = _videoEl.videoHeight || 480;
     const sw = vw / _zoomLevel;
     const sh = vh / _zoomLevel;
     const sx = (vw - sw) / 2;
     const sy = (vh - sh) / 2;
-    ctx.drawImage(_videoEl, sx, sy, sw, sh, 0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
-    return ctx.getImageData(0, 0, CAPTURE_WIDTH, CAPTURE_HEIGHT);
+    ctx.drawImage(_videoEl, sx, sy, sw, sh, 0, 0, preset.width, preset.height);
+    return ctx.getImageData(0, 0, preset.width, preset.height);
   }
 
   // ============================================
@@ -281,7 +291,7 @@ const VisionEngine = (() => {
    * @param {number} level - ズーム倍率
    */
   function setZoom(level) {
-    _zoomLevel = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, level));
+    _zoomLevel = Math.max(ZOOM_MIN, Math.min(_zoomMax, level));
 
     // CSSでプレビュー映像を拡大（見た目の反映）
     if (_videoEl) {
@@ -299,6 +309,59 @@ const VisionEngine = (() => {
    */
   function getZoom() {
     return _zoomLevel;
+  }
+
+  // ============================================
+  // v1.2追加: 解像度プリセット切替
+  // ============================================
+
+  /**
+   * 解像度プリセットを設定
+   * @param {string} presetKey - 'eco' | 'standard' | 'hd'
+   * @returns {Object} 設定後のプリセット情報
+   */
+  function setResolution(presetKey) {
+    const preset = RESOLUTION_PRESETS[presetKey];
+    if (!preset) {
+      console.warn(`[VisionEngine] 不明なプリセット: ${presetKey}`);
+      return null;
+    }
+
+    _currentPreset = presetKey;
+    _zoomMax = preset.zoomMax;
+
+    // Canvas解像度を更新
+    if (_canvas) {
+      _canvas.width = preset.width;
+      _canvas.height = preset.height;
+    }
+
+    // 現在のズームが新しい上限を超えてたらクランプ
+    if (_zoomLevel > _zoomMax) {
+      setZoom(_zoomMax);
+    }
+
+    console.log(`[VisionEngine] 解像度変更: ${preset.label} (${preset.desc}) / ズーム上限: ${preset.zoomMax}x`);
+    return { key: presetKey, ...preset, currentZoomMax: _zoomMax };
+  }
+
+  /**
+   * 次の解像度プリセットに切替（eco → standard → hd → eco ...）
+   * @returns {Object} 切替後のプリセット情報
+   */
+  function cycleResolution() {
+    const currentIdx = PRESET_ORDER.indexOf(_currentPreset);
+    const nextIdx = (currentIdx + 1) % PRESET_ORDER.length;
+    return setResolution(PRESET_ORDER[nextIdx]);
+  }
+
+  /**
+   * 現在の解像度プリセット情報を取得
+   * @returns {Object}
+   */
+  function getResolution() {
+    const preset = RESOLUTION_PRESETS[_currentPreset];
+    return { key: _currentPreset, ...preset, currentZoomMax: _zoomMax };
   }
 
   // ============================================
@@ -367,9 +430,10 @@ const VisionEngine = (() => {
       _videoEl.muted = true;
       await _videoEl.play();
 
+      const preset = RESOLUTION_PRESETS[_currentPreset]; // v1.2変更
       _canvas = document.createElement('canvas');
-      _canvas.width = CAPTURE_WIDTH;
-      _canvas.height = CAPTURE_HEIGHT;
+      _canvas.width = preset.width;
+      _canvas.height = preset.height;
       _isActive = true;
 
       // v1.1追加 - ズーム倍率を維持（カメラ切替後も同じズームレベル）
@@ -395,6 +459,9 @@ const VisionEngine = (() => {
     stopAutoCapture,
     setZoom,      // v1.1追加
     getZoom,      // v1.1追加
+    setResolution,    // v1.2追加
+    cycleResolution,  // v1.2追加
+    getResolution,    // v1.2追加
     switchCamera,
     isActive,
     isAutoCapturing,

@@ -5,6 +5,7 @@
 <!-- v2.0 2026-04-05 - ビジョンエンジンUI統合（カメラ起動/キャプチャ/切替） -->
 <!-- v2.1 2026-04-05 - ビジョンエンジン ズーム機能UI追加（スライダー1x〜4x） -->
 <!-- v2.1.1 2026-04-05 - ズームバー位置修正（wrapper外へ移動、scale影響回避） -->
+<!-- v2.2 2026-04-05 - 解像度切替ボタン追加（エコ/標準/高精細） -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -90,8 +91,9 @@
           <button id="btn-vision-switch" class="vision-btn vision-btn-switch" aria-label="カメラ切替" title="🔄 前面/背面カメラ切替">🔄</button>
         </div>
       </div>
-      <!-- v2.1修正 - ズームバーをwrapper外に移動（videoのCSS scale影響を回避） -->
+      <!-- v2.2更新 - ズームバー＋解像度切替 -->
       <div class="vision-zoom-bar">
+        <button id="btn-vision-resolution" class="vision-resolution-btn" aria-label="解像度切替" title="解像度切替">🌿エコ</button>
         <span class="vision-zoom-label">🔍</span>
         <input type="range" id="vision-zoom-slider" class="vision-zoom-slider"
                min="1.0" max="4.0" step="0.1" value="1.0">
