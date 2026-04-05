@@ -5,6 +5,7 @@
 // v1.6 2026-03-10 - 設定関連をapp-settings.jsに分離（余裕確保）
 // v1.7 2026-04-05 - ワイワイモード: スタイル切替ボタン初期化追加
 // v1.8 2026-04-05 - ビジョンエンジンUI統合: カメラON/OFF・キャプチャ・切替ボタン初期化
+// v1.9 2026-04-06 - ビジョンエンジン: ピント（AF）ボタン＋AFインジケーター初期化
 'use strict';
 /** アプリケーションモジュール */
 const App = (() => {
@@ -222,6 +223,20 @@ const App = (() => {
     btn.classList.toggle('style-waiwai', style === 'waiwai');
   }
 
+  // v1.9追加 - AFインジケーター更新
+  function _updateFocusIndicator() {
+    const fi = document.getElementById('vision-focus-indicator');
+    if (!fi || typeof VisionEngine === 'undefined') return;
+    fi.classList.remove('af-active', 'af-unsupported');
+    if (VisionEngine.isFocusSupported()) {
+      fi.classList.add('af-active');
+      fi.title = `AF: ${VisionEngine.getFocusMode() || 'active'}`;
+    } else {
+      fi.classList.add('af-unsupported');
+      fi.title = 'AF非対応（固定フォーカス）';
+    }
+  }
+
   // v1.8追加 - ビジョンエンジン: カメラUI初期化
   function _initVisionButtons() {
     if (typeof VisionEngine === 'undefined') {
@@ -256,6 +271,9 @@ const App = (() => {
           _rb.textContent = '🌿エコ';
           _rb.classList.remove('res-standard', 'res-hd');
         }
+        // v1.9追加 - AFインジケーターリセット
+        const _fi = document.getElementById('vision-focus-indicator');
+        if (_fi) { _fi.classList.remove('af-active', 'af-unsupported'); }
         console.log('[App] ビジョンエンジン: カメラOFF');
       } else {
         // カメラ起動
@@ -264,6 +282,8 @@ const App = (() => {
           visionPanel.classList.remove('hidden');
           btnToggle.classList.add('vision-active');
           btnToggle.title = '📷 カメラを停止';
+          // v1.9追加 - AFインジケーター更新
+          _updateFocusIndicator();
           console.log('[App] ビジョンエンジン: カメラON');
         } catch (err) {
           alert(err.message);
@@ -281,6 +301,23 @@ const App = (() => {
           btnCapture.style.transform = 'scale(1.2)';
           setTimeout(() => { btnCapture.style.transform = ''; }, 200);
           console.log(`[App] ビジョンキャプチャ完了: ${att.name} (${att.size}bytes)`);
+        }
+      });
+    }
+
+    // v1.9追加 - 📌ピント合わせてキャプチャボタン
+    const btnFocusCapture = document.getElementById('btn-vision-focus-capture');
+    if (btnFocusCapture) {
+      btnFocusCapture.addEventListener('click', async () => {
+        if (!VisionEngine.isActive()) return;
+        btnFocusCapture.classList.add('focusing');
+        btnFocusCapture.disabled = true;
+        try {
+          const att = await VisionEngine.focusAndCapture();
+          if (att) { console.log(`[App] ピントキャプチャ完了: ${att.name}`); }
+        } finally {
+          btnFocusCapture.classList.remove('focusing');
+          btnFocusCapture.disabled = false;
         }
       });
     }

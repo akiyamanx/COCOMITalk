@@ -6,6 +6,7 @@
 <!-- v2.1 2026-04-05 - ビジョンエンジン ズーム機能UI追加（スライダー1x〜4x） -->
 <!-- v2.1.1 2026-04-05 - ズームバー位置修正（wrapper外へ移動、scale影響回避） -->
 <!-- v2.2 2026-04-05 - 解像度切替ボタン追加（エコ/標準/高精細） -->
+<!-- v2.3 2026-04-06 - ビジョンエンジン ピント（オートフォーカス）ボタン追加 -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -89,12 +90,14 @@
       <div class="vision-preview-wrapper">
         <video id="vision-preview" class="vision-preview" playsinline autoplay muted></video>
         <div class="vision-controls">
+          <button id="btn-vision-focus-capture" class="vision-btn vision-btn-focus" aria-label="ピント合わせてキャプチャ" title="📌 ピントを合わせてからキャプチャ">📌</button>
           <button id="btn-vision-capture" class="vision-btn vision-btn-capture" aria-label="キャプチャ" title="📸 今の映像をキャプチャ">📸</button>
           <button id="btn-vision-switch" class="vision-btn vision-btn-switch" aria-label="カメラ切替" title="🔄 前面/背面カメラ切替">🔄</button>
         </div>
       </div>
       <!-- v2.2更新 - ズームバー＋解像度切替 -->
       <div class="vision-zoom-bar">
+        <span id="vision-focus-indicator" class="vision-focus-indicator" title="フォーカス状態">AF</span>
         <button id="btn-vision-resolution" class="vision-resolution-btn" aria-label="解像度切替" title="解像度切替">🌿エコ</button>
         <span class="vision-zoom-label">🔍</span>
         <input type="range" id="vision-zoom-slider" class="vision-zoom-slider"

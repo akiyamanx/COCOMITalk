@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.37 2026-04-05 - vision-styles.css分離キャッシュ更新
-const CACHE_NAME = 'cocomitalk-v3.52';
+// v3.38 2026-04-06 - オートフォーカス機能キャッシュ更新
+const CACHE_NAME = 'cocomitalk-v3.53';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',

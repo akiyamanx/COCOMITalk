@@ -1,6 +1,7 @@
 /* COCOMITalk - ビジョンエンジンスタイル */
 /* このファイルはカメラプレビュー・ズーム・解像度切替のスタイルを定義する */
 /* v1.0 2026-04-05 - styles.cssから分離（カメラUI+ズーム+解像度ボタン） */
+/* v1.1 2026-04-06 - ピント（オートフォーカス）ボタン＋AFインジケーター追加 */
 
 /* ===== カメラON/OFFトグルボタン（入力エリア内） ===== */
 .btn-vision-toggle {
@@ -170,4 +171,41 @@
 .vision-resolution-btn.res-hd {
   background: rgba(230, 120, 62, 0.4);
   border-color: rgba(230, 120, 62, 0.6);
+}
+
+/* ===== v1.1追加 - ピントボタン ===== */
+.vision-btn-focus {
+  background: rgba(76, 175, 80, 0.9);
+  color: white;
+}
+.vision-btn-focus:hover {
+  background: rgba(76, 175, 80, 1);
+}
+.vision-btn-focus.focusing {
+  animation: pulse-focus 0.5s ease-in-out infinite;
+}
+@keyframes pulse-focus {
+  0%, 100% { transform: scale(1); box-shadow: 0 2px 8px rgba(0,0,0,0.3); }
+  50% { transform: scale(1.15); box-shadow: 0 2px 12px rgba(76,175,80,0.6); }
+}
+
+/* AFインジケーター */
+.vision-focus-indicator {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.4);
+  background: rgba(255,255,255,0.1);
+  border-radius: var(--radius-full);
+  padding: 1px 6px;
+  flex-shrink: 0;
+  transition: all 0.3s;
+}
+.vision-focus-indicator.af-active {
+  color: #4CAF50;
+  background: rgba(76,175,80,0.2);
+  border: 1px solid rgba(76,175,80,0.4);
+}
+.vision-focus-indicator.af-unsupported {
+  color: rgba(255,255,255,0.25);
+  text-decoration: line-through;
 }

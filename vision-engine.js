@@ -4,17 +4,11 @@
 // v1.0 2026-04-05 - Step1: カメラ起動/手動キャプチャ/解像度リサイズ/FileHandler連携
 // v1.1 2026-04-05 - ズーム機能追加（スライダー1x〜4x、CSS scale+Canvas中央クロップ）
 // v1.2 2026-04-05 - 解像度3段階切替（エコ/標準/高精細）+ ズーム上限連動
+// v1.3 2026-04-06 - オートフォーカス機能（continuous AF + single-shot ピントボタン）+ 高精細時カメラ解像度向上
 
 'use strict';
 
-/**
- * ビジョンエンジンモジュール
- * - カメラ起動/停止（getUserMedia）
- * - 手動キャプチャ（ボタンタップで即撮影）
- * - 変化検出モード（将来Step2で追加）
- * - 解像度最適化（320x240でコスト削減）
- * - FileHandlerとの連携（既存の添付フローに乗せる）
- */
+/** ビジョンエンジン: カメラ起動/キャプチャ/ズーム/解像度/AF制御 */
 const VisionEngine = (() => {
 
   // --- 設定 ---
@@ -46,6 +40,10 @@ const VisionEngine = (() => {
   // v1.2追加 - 現在の解像度プリセット
   let _currentPreset = 'eco';
 
+  // v1.3追加 - フォーカス制御
+  let _focusSupported = false;  // focusModeがサポートされてるか
+  let _currentFocusMode = null; // 現在のフォーカスモード
+
   // --- 変化検出用（Step2で使用） ---
   let _prevFrameData = null;  // 前回フレームのImageData
   let _autoTimer = null;      // 自動キャプチャ用タイマーID
@@ -67,14 +65,18 @@ const VisionEngine = (() => {
     }
 
     try {
-      // カメラアクセス要求（背面カメラ優先 = お散歩・現場向け）
+      // v1.3変更 - 高精細モードならカメラ取得解像度も上げる
+      const camPreset = RESOLUTION_PRESETS[_currentPreset];
+      const idealWidth = camPreset.width >= 1280 ? 1280 : 640;
+      const idealHeight = camPreset.height >= 720 ? 720 : 480;
+
       _stream = await navigator.mediaDevices.getUserMedia({
         video: {
-          facingMode: { ideal: 'environment' }, // 背面カメラ優先
-          width: { ideal: 640 },   // プレビューは少し高めでOK
-          height: { ideal: 480 },
+          facingMode: { ideal: 'environment' },
+          width: { ideal: idealWidth },
+          height: { ideal: idealHeight },
         },
-        audio: false, // 音声は不要（STTは別系統で処理）
+        audio: false,
       });
 
       _videoEl = videoElement;
@@ -90,6 +92,9 @@ const VisionEngine = (() => {
       _canvas.width = preset.width;
       _canvas.height = preset.height;
 
+      // v1.3追加 - オートフォーカス設定
+      await _initAutoFocus();
+
       _isActive = true;
       _captureCount = 0;
       console.log('[VisionEngine] カメラ起動完了');
@@ -104,6 +109,37 @@ const VisionEngine = (() => {
         throw new Error('カメラが見つからないよ。カメラが付いてるか確認してね');
       }
       throw new Error(`カメラの起動に失敗したよ: ${err.message}`);
+    }
+  }
+
+  /**
+   * v1.3追加 - オートフォーカスを初期化
+   * continuous AFをデフォルトで有効にする（対応デバイスのみ）
+   */
+  async function _initAutoFocus() {
+    _focusSupported = false;
+    _currentFocusMode = null;
+    if (!_stream) return;
+    const track = _stream.getVideoTracks()[0];
+    if (!track) return;
+    try {
+      const caps = track.getCapabilities();
+      if (caps.focusMode && caps.focusMode.length > 0) {
+        _focusSupported = true;
+        console.log('[VisionEngine] フォーカスモード対応:', caps.focusMode.join(', '));
+        if (caps.focusMode.includes('continuous')) {
+          await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+          _currentFocusMode = 'continuous';
+          console.log('[VisionEngine] continuous AF 有効化');
+        } else if (caps.focusMode.includes('single-shot')) {
+          _currentFocusMode = 'single-shot';
+          console.log('[VisionEngine] single-shot AF のみ対応');
+        }
+      } else {
+        console.log('[VisionEngine] focusModeは非対応（固定フォーカス）');
+      }
+    } catch (err) {
+      console.warn('[VisionEngine] フォーカス設定失敗（無視して続行）:', err.message);
     }
   }
 
@@ -129,6 +165,8 @@ const VisionEngine = (() => {
     _zoomLevel = ZOOM_DEFAULT; // v1.1追加 - ズームリセット
     _currentPreset = 'eco'; // v1.2追加 - 解像度リセット
     _zoomMax = RESOLUTION_PRESETS.eco.zoomMax; // v1.2追加
+    _focusSupported = false;  // v1.3追加
+    _currentFocusMode = null; // v1.3追加
     console.log('[VisionEngine] カメラ停止完了');
   }
 
@@ -187,6 +225,41 @@ const VisionEngine = (() => {
   }
 
   /**
+   * v1.3追加 - ピントを合わせてからキャプチャする（📌ボタン用）
+   * @returns {Promise<Object|null>} 添付オブジェクト
+   */
+  async function focusAndCapture() {
+    if (!_isActive || !_videoEl || !_canvas) {
+      console.warn('[VisionEngine] カメラが起動していません');
+      return null;
+    }
+    if (_focusSupported) {
+      const track = _stream?.getVideoTracks()[0];
+      if (track) {
+        try {
+          const caps = track.getCapabilities();
+          if (caps.focusMode && caps.focusMode.includes('single-shot')) {
+            await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+            console.log('[VisionEngine] single-shot AF 発動 → フォーカス中...');
+            await new Promise(r => setTimeout(r, 500));
+          }
+        } catch (err) {
+          console.warn('[VisionEngine] single-shot AF失敗（通常キャプチャにフォールバック）:', err.message);
+        }
+      }
+    }
+    const result = captureAndAttach();
+    // continuous AFに戻す
+    if (_focusSupported && _currentFocusMode === 'continuous') {
+      const track = _stream?.getVideoTracks()[0];
+      if (track) {
+        try { await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch (_) { /* 無視 */ }
+      }
+    }
+    return result;
+  }
+
+  /**
    * キャプチャのみ実行（添付登録なし、変化検出やプレビュー用）
    * @returns {ImageData|null} Canvas上のピクセルデータ
    */
@@ -205,41 +278,20 @@ const VisionEngine = (() => {
     return ctx.getImageData(0, 0, preset.width, preset.height);
   }
 
-  // ============================================
-  // Step2用: 変化検出（今は骨格だけ、将来有効化）
-  // ============================================
-
-  /**
-   * 2つのフレーム間の変化率を計算（ピクセル差分比較）
-   * @param {ImageData} frame1 - 前のフレーム
-   * @param {ImageData} frame2 - 今のフレーム
-   * @returns {number} 変化率（0.0〜1.0）
-   */
+  // Step2用: 変化検出（骨格、将来有効化）
+  /** 2フレーム間の変化率を計算（0.0〜1.0） */
   function _calcChangeRate(frame1, frame2) {
-    if (!frame1 || !frame2) return 1.0; // 初回は必ず「変化あり」
-    const d1 = frame1.data;
-    const d2 = frame2.data;
-    const len = d1.length;
+    if (!frame1 || !frame2) return 1.0;
+    const d1 = frame1.data, d2 = frame2.data, len = d1.length;
     let diffCount = 0;
-    // RGBの差の合計が閾値を超えるピクセルをカウント（Aチャンネルはスキップ）
-    const threshold = 30; // 1ピクセルあたりの差分閾値
+    const threshold = 30;
     for (let i = 0; i < len; i += 4) {
-      const dr = Math.abs(d1[i] - d2[i]);
-      const dg = Math.abs(d1[i + 1] - d2[i + 1]);
-      const db = Math.abs(d1[i + 2] - d2[i + 2]);
-      if (dr + dg + db > threshold) {
-        diffCount++;
-      }
+      if (Math.abs(d1[i] - d2[i]) + Math.abs(d1[i+1] - d2[i+1]) + Math.abs(d1[i+2] - d2[i+2]) > threshold) diffCount++;
     }
-    const totalPixels = len / 4;
-    return diffCount / totalPixels;
+    return diffCount / (len / 4);
   }
 
-  /**
-   * 自動キャプチャ開始（変化検出モード）
-   * @param {number} intervalMs - チェック間隔（ミリ秒、デフォルト30秒）
-   * @param {number} changeThreshold - 変化率の閾値（デフォルト0.3 = 30%変化で送信）
-   */
+  /** 自動キャプチャ開始（変化検出モード） */
   function startAutoCapture(intervalMs = 30000, changeThreshold = 0.3) {
     if (_autoTimer) {
       console.log('[VisionEngine] 自動キャプチャは既に動作中');
@@ -375,6 +427,12 @@ const VisionEngine = (() => {
     return _isActive;
   }
 
+  /** v1.3追加 - フォーカス制御がサポートされているか */
+  function isFocusSupported() { return _focusSupported; }
+
+  /** v1.3追加 - 現在のフォーカスモードを取得 */
+  function getFocusMode() { return _currentFocusMode; }
+
   /**
    * キャプチャ回数を取得
    */
@@ -419,8 +477,11 @@ const VisionEngine = (() => {
 
     // 新しい向きで再起動
     try {
+      const camPreset = RESOLUTION_PRESETS[_currentPreset];
+      const idealW = camPreset.width >= 1280 ? 1280 : 640;
+      const idealH = camPreset.height >= 720 ? 720 : 480;
       _stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: { ideal: newFacing }, width: { ideal: 640 }, height: { ideal: 480 } },
+        video: { facingMode: { ideal: newFacing }, width: { ideal: idealW }, height: { ideal: idealH } },
         audio: false,
       });
       _videoEl = videoEl;
@@ -435,6 +496,9 @@ const VisionEngine = (() => {
       _canvas.width = preset.width;
       _canvas.height = preset.height;
       _isActive = true;
+
+      // v1.3追加 - カメラ切替後もフォーカス再初期化
+      await _initAutoFocus();
 
       // v1.1追加 - ズーム倍率を維持（カメラ切替後も同じズームレベル）
       if (_zoomLevel !== ZOOM_DEFAULT && _videoEl) {
@@ -459,6 +523,9 @@ const VisionEngine = (() => {
     stopAutoCapture,
     setZoom,      // v1.1追加
     getZoom,      // v1.1追加
+    focusAndCapture,  // v1.3追加
+    isFocusSupported, // v1.3追加
+    getFocusMode,     // v1.3追加
     setResolution,    // v1.2追加
     cycleResolution,  // v1.2追加
     getResolution,    // v1.2追加
