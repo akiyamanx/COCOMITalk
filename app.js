@@ -4,6 +4,7 @@
 // v1.3 2026-03-09 - 音声コントローラー初期化＋姉妹タブ連動（Step 5b）
 // v1.6 2026-03-10 - 設定関連をapp-settings.jsに分離（余裕確保）
 // v1.7 2026-04-05 - ワイワイモード: スタイル切替ボタン初期化追加
+// v1.8 2026-04-05 - ビジョンエンジンUI統合: カメラON/OFF・キャプチャ・切替ボタン初期化
 'use strict';
 /** アプリケーションモジュール */
 const App = (() => {
@@ -34,6 +35,8 @@ const App = (() => {
     _setupContinueTalkButton();
     // v1.7追加 - ワイワイモード: スタイル切替ボタン初期化
     _initStyleButton();
+    // v1.8追加 - ビジョンエンジン: カメラUIボタン初期化
+    _initVisionButtons();
     if (typeof MeetingUI !== 'undefined') MeetingUI.init();
     // v1.0追加 - 会議アーカイブUI初期化
     if (typeof MeetingArchiveUI !== 'undefined') MeetingArchiveUI.init();
@@ -217,6 +220,72 @@ const App = (() => {
     const info = ChatStyleModes.getStyleInfo(style);
     btn.textContent = info.label;
     btn.classList.toggle('style-waiwai', style === 'waiwai');
+  }
+
+  // v1.8追加 - ビジョンエンジン: カメラUI初期化
+  function _initVisionButtons() {
+    if (typeof VisionEngine === 'undefined') {
+      console.log('[App] VisionEngine未読み込み、スキップ');
+      return;
+    }
+
+    const btnToggle = document.getElementById('btn-vision-toggle');
+    const btnCapture = document.getElementById('btn-vision-capture');
+    const btnSwitch = document.getElementById('btn-vision-switch');
+    const visionPanel = document.getElementById('vision-panel');
+    const videoEl = document.getElementById('vision-preview');
+
+    if (!btnToggle || !visionPanel || !videoEl) return;
+
+    // カメラON/OFFトグル
+    btnToggle.addEventListener('click', async () => {
+      if (VisionEngine.isActive()) {
+        // カメラ停止
+        VisionEngine.stopCamera();
+        visionPanel.classList.add('hidden');
+        btnToggle.classList.remove('vision-active');
+        btnToggle.title = '📷 カメラを起動';
+        console.log('[App] ビジョンエンジン: カメラOFF');
+      } else {
+        // カメラ起動
+        try {
+          await VisionEngine.startCamera(videoEl);
+          visionPanel.classList.remove('hidden');
+          btnToggle.classList.add('vision-active');
+          btnToggle.title = '📷 カメラを停止';
+          console.log('[App] ビジョンエンジン: カメラON');
+        } catch (err) {
+          alert(err.message);
+        }
+      }
+    });
+
+    // 📸キャプチャボタン
+    if (btnCapture) {
+      btnCapture.addEventListener('click', () => {
+        if (!VisionEngine.isActive()) return;
+        const att = VisionEngine.captureAndAttach();
+        if (att) {
+          // キャプチャ成功のフィードバック
+          btnCapture.style.transform = 'scale(1.2)';
+          setTimeout(() => { btnCapture.style.transform = ''; }, 200);
+          console.log(`[App] ビジョンキャプチャ完了: ${att.name} (${att.size}bytes)`);
+        }
+      });
+    }
+
+    // 🔄カメラ前後切替
+    if (btnSwitch) {
+      btnSwitch.addEventListener('click', async () => {
+        if (!VisionEngine.isActive()) return;
+        btnSwitch.disabled = true;
+        const ok = await VisionEngine.switchCamera();
+        btnSwitch.disabled = false;
+        if (ok) {
+          console.log('[App] ビジョンエンジン: カメラ切替完了');
+        }
+      });
+    }
   }
 
   // テーマカラーを適用

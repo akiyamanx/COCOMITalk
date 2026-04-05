@@ -2,6 +2,7 @@
 <!-- v1.7 相談トピック連携 - consultation-ui.js + consultation-styles.css 追加 -->
 <!-- v1.8 2026-04-05 - ワイワイモード: スタイル切替ボタン + script追加 -->
 <!-- v1.9 2026-04-05 - エスケープハッチ追加 (Sprint 2+3統合) -->
+<!-- v2.0 2026-04-05 - ビジョンエンジンUI統合（カメラ起動/キャプチャ/切替） -->
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -78,10 +79,23 @@
         <p class="welcome-hint">下のメッセージ欄に話しかけてね</p>
       </div>
     </main>
+    <!-- ========== v2.0追加 - ビジョンエンジンUI ========== -->
+    <div id="vision-panel" class="vision-panel hidden">
+      <div class="vision-preview-wrapper">
+        <video id="vision-preview" class="vision-preview" playsinline autoplay muted></video>
+        <div class="vision-controls">
+          <button id="btn-vision-capture" class="vision-btn vision-btn-capture" aria-label="キャプチャ" title="📸 今の映像をキャプチャ">📸</button>
+          <button id="btn-vision-switch" class="vision-btn vision-btn-switch" aria-label="カメラ切替" title="🔄 前面/背面カメラ切替">🔄</button>
+        </div>
+      </div>
+    </div>
     <footer class="input-area">
       <div id="doc-gen-status" class="doc-gen-status hidden"></div>
       <div id="file-preview" class="file-preview hidden"></div>
       <div class="input-wrapper">
+        <button id="btn-vision-toggle" class="btn-vision-toggle" aria-label="カメラON/OFF" title="📷 カメラを起動">
+          <span>📷</span>
+        </button>
         <button id="btn-attach" class="btn-attach" aria-label="ファイル添付" title="📎 ファイルを添付">
           <span>📎</span>
         </button>
@@ -340,6 +354,8 @@
   <script src="style-resolver.js"></script>
   <!-- v1.9追加 - エスケープハッチ検出 (Sprint 2+3統合) -->
   <script src="escape-hatch-detector.js"></script>
+  <!-- v2.0追加 - ビジョンエンジン（三姉妹の目） -->
+  <script src="vision-engine.js"></script>
   <!-- v1.7追加 - 相談トピック連携UI -->
   <script src="consultation-ui.js"></script>
   <script src="meeting-voice.js"></script>
