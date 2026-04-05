@@ -3,7 +3,8 @@
 /* v1.0 2026-04-05 - styles.cssから分離（カメラUI+ズーム+解像度ボタン） */
 /* v1.1 2026-04-06 - ピント（オートフォーカス）ボタン＋AFインジケーター追加 */
 /* v1.2 2026-04-06 - お散歩モードUI（トグルボタン + ステータス表示） */
-/* v1.3 2026-04-06 - お散歩ボタン長押し対策（コンテキストメニュー抑止） */
+/* v1.3 2026-04-06 - ビジョンボタン長押し対策 */
+/* v1.4 2026-04-06 - ステータスバッジをタップ可能に（間隔変更用、長押し廃止） */
 
 /* ===== カメラON/OFFトグルボタン（入力エリア内） ===== */
 .btn-vision-toggle {
@@ -83,7 +84,6 @@
   justify-content: center;
   transition: transform 0.15s, background 0.2s;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-  /* v1.3追加 - 長押し対策（全ビジョンボタン共通） */
   -webkit-touch-callout: none;
   -webkit-user-select: none;
   user-select: none;
@@ -235,7 +235,7 @@
   50% { transform: scale(1.08); }
 }
 
-/* お散歩ステータス表示 */
+/* v1.4変更 - お散歩ステータス表示（タップで間隔変更） */
 .vision-walk-status {
   font-size: 10px;
   font-weight: 700;
@@ -243,9 +243,19 @@
   background: rgba(33, 150, 243, 0.15);
   border: 1px solid rgba(33, 150, 243, 0.3);
   border-radius: var(--radius-full);
-  padding: 1px 8px;
+  padding: 2px 10px;
   flex-shrink: 0;
+  cursor: pointer;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
+  transition: transform 0.15s, background 0.2s;
   animation: fadeIn 0.3s ease;
+}
+.vision-walk-status:active {
+  transform: scale(0.93);
+  background: rgba(33, 150, 243, 0.3);
 }
 @keyframes fadeIn {
   from { opacity: 0; }
