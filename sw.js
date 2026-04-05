@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.31 2026-04-05 - chat-style-modes.js v1.2（ワイワイ短文強化）
-const CACHE_NAME = 'cocomitalk-v3.46';
+// v3.32 2026-04-05 - chat-style-modes.js v1.3（Gemini few-shot例文追加）
+const CACHE_NAME = 'cocomitalk-v3.47';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
