@@ -1,0 +1,173 @@
+/* COCOMITalk - ビジョンエンジンスタイル */
+/* このファイルはカメラプレビュー・ズーム・解像度切替のスタイルを定義する */
+/* v1.0 2026-04-05 - styles.cssから分離（カメラUI+ズーム+解像度ボタン） */
+
+/* ===== カメラON/OFFトグルボタン（入力エリア内） ===== */
+.btn-vision-toggle {
+  background: none;
+  border: none;
+  font-size: 1.2rem;
+  padding: 6px;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.2s, transform 0.15s;
+  flex-shrink: 0;
+}
+.btn-vision-toggle:hover,
+.btn-vision-toggle:active { opacity: 1; }
+.btn-vision-toggle.vision-active {
+  opacity: 1;
+  animation: pulse-vision 1.5s ease-in-out infinite;
+}
+@keyframes pulse-vision {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.1); }
+}
+
+/* ===== ビジョンパネル（カメラプレビューエリア） ===== */
+.vision-panel {
+  max-width: var(--max-width);
+  margin: 0 auto;
+  background: #1a1a24;
+  border-top: 1px solid var(--border);
+  overflow: hidden;
+  animation: slideDown 0.3s ease-out;
+}
+@keyframes slideDown {
+  from { max-height: 0; opacity: 0; }
+  to { max-height: 300px; opacity: 1; }
+}
+
+/* プレビューラッパー — videoのscaleがはみ出さないようクリップ */
+.vision-preview-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px;
+  overflow: hidden;
+  max-height: 200px;
+}
+
+/* カメラプレビュー映像 */
+.vision-preview {
+  width: 100%;
+  max-height: 200px;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: #000;
+  transition: transform 0.15s ease-out;
+}
+
+/* キャプチャ・切替ボタン群 */
+.vision-controls {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  display: flex;
+  gap: 8px;
+}
+.vision-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-full);
+  background: rgba(255, 255, 255, 0.9);
+  border: none;
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s, background 0.2s;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+.vision-btn:hover { transform: scale(1.1); }
+.vision-btn:active { transform: scale(0.95); }
+.vision-btn-capture {
+  background: rgba(255, 107, 157, 0.9);
+  color: white;
+}
+.vision-btn-capture:hover {
+  background: rgba(255, 107, 157, 1);
+}
+
+/* ===== ズームバー ===== */
+.vision-zoom-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #1a1a24;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+.vision-zoom-label {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+.vision-zoom-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+.vision-zoom-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--koko-primary);
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  cursor: pointer;
+  transition: transform 0.15s;
+}
+.vision-zoom-slider::-webkit-slider-thumb:active {
+  transform: scale(1.2);
+}
+.vision-zoom-slider::-moz-range-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--koko-primary);
+  border: 2px solid white;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.4);
+  cursor: pointer;
+}
+.vision-zoom-value {
+  font-size: 12px;
+  font-weight: 700;
+  color: white;
+  min-width: 36px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ===== 解像度切替ボタン ===== */
+.vision-resolution-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white;
+  border-radius: var(--radius-full);
+  padding: 2px 10px;
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.vision-resolution-btn:active {
+  transform: scale(0.95);
+}
+.vision-resolution-btn.res-standard {
+  background: rgba(107, 92, 231, 0.4);
+  border-color: rgba(107, 92, 231, 0.6);
+}
+.vision-resolution-btn.res-hd {
+  background: rgba(230, 120, 62, 0.4);
+  border-color: rgba(230, 120, 62, 0.6);
+}

@@ -1,11 +1,11 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.36 2026-04-05 - 解像度切替機能キャッシュ更新
-const CACHE_NAME = 'cocomitalk-v3.51';
+// v3.37 2026-04-05 - vision-styles.css分離キャッシュ更新
+const CACHE_NAME = 'cocomitalk-v3.52';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
-  './meeting-archive-styles.css', './consultation-styles.css',
+  './meeting-archive-styles.css', './consultation-styles.css', './vision-styles.css',
   './app.js', './chat-ui.js',
   './chat-core.js', './chat-group.js', './chat-history.js',
   './token-monitor.js', './api-common.js', './api-gemini.js',
