@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.28 2026-04-04 - whisper-provider.js v1.6（最大録音時間15秒→25秒延長）
-const CACHE_NAME = 'cocomitalk-v3.43';
+// v3.29 2026-04-05 - whisper-provider.js v1.7（AudioContext suspend対策）
+const CACHE_NAME = 'cocomitalk-v3.44';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
@@ -24,6 +24,7 @@ const CACHE_FILES = [
   './voice-output.js', './voice-ui.js', './audio-health.js',
   './voice-state.js', './voice-command.js', './voice-input.js',
   './voice-sender.js', './app-settings.js',
+  './chat-style-modes.js', './style-resolver.js',
   './prompts/koko-system.js', './prompts/gpt-system.js',
   './prompts/claude-system.js', './manifest.json',
 ];
