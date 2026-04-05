@@ -1,8 +1,9 @@
-// whisper-provider.js v1.6
+// whisper-provider.js v1.7
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
 // ピコン音なし・高精度・ブラウザ非依存
+// v1.7 2026-04-05 - resume後AudioContext suspend対策（モバイルChrome無音放置で発話検出不能になるバグ修正）
 // v1.6 2026-04-04 - 最大録音時間を15秒→25秒に延長（長めの発話対応）
 // v1.5 2026-04-04 - ハルシネーションフィルタ追加（「以上で終わりです」等）
 // v1.4 2026-03-27 - ハルシネーションフィルタ追加（おやすみなさい等）＋無音判定2500→3000ms延長
@@ -39,6 +40,9 @@ class WhisperProvider extends SpeechProvider {
     this._VOLUME_CHECK_MS = 100;
     this._VOICE_START_COUNT = 3;
     this._voiceCount = 0;
+    // v1.7追加 - AudioContext suspend検出カウンター
+    this._zeroVolumeCount = 0;
+    this._ZERO_VOLUME_THRESHOLD = 50; // 5秒間（100ms×50回）連続ゼロでresume試行
 
     this._debugVisible = false;
     this._debugEl = null;
@@ -130,12 +134,26 @@ class WhisperProvider extends SpeechProvider {
     this._stopRecording(false);
   }
 
+  // v1.7修正 - resume時にAudioContext.resume()を強制呼び出し（モバイルChrome suspend対策）
   async resume() {
     if (!this._listening || !this._stream) return;
     this._paused = false;
     this._debugLog('再開（ガード期間付き）');
     this._hasVoiceStarted = false;
     this._voiceCount = 0;
+    this._zeroVolumeCount = 0; // v1.7追加 - ゼロカウンターリセット
+
+    // v1.7追加 - AudioContextがsuspendedなら強制resume
+    if (this._audioCtx && this._audioCtx.state !== 'running') {
+      this._debugLog(`AudioContext状態: ${this._audioCtx.state} → resume()試行`);
+      try {
+        await this._audioCtx.resume();
+        this._debugLog(`AudioContext復帰成功: ${this._audioCtx.state}`);
+      } catch (e) {
+        this._debugLog(`AudioContext resume失敗: ${e.message}`);
+      }
+    }
+
     await new Promise(r => setTimeout(r, 300));
     this._chunks = [];
     this._hasVoiceStarted = false;
@@ -157,6 +175,7 @@ class WhisperProvider extends SpeechProvider {
     this._chunks = [];
     this._processing = false;
     if (!isContinuation) { this._hasVoiceStarted = false; this._voiceCount = 0; }
+    this._zeroVolumeCount = 0; // v1.7追加 - 録音開始時にゼロカウンターリセット
     const mimeType = this._getSupportedMimeType();
     this._debugLog(`MIMEタイプ: ${mimeType}`);
     this._recorder = new MediaRecorder(this._stream, { mimeType: mimeType, audioBitsPerSecond: 32000 });
@@ -189,16 +208,37 @@ class WhisperProvider extends SpeechProvider {
     this._analyser = null; this._recorder = null; this._chunks = [];
   }
 
+  // v1.7修正 - ボリュームモニターにAudioContext suspend自動検出＋復帰処理を追加
   _startVolumeMonitor() {
     if (!this._analyser) return;
     const dataArray = new Uint8Array(this._analyser.frequencyBinCount);
     this._volumeCheckInterval = setInterval(() => {
       if (!this._analyser) return;
+
+      // v1.7追加 - AudioContextがsuspendedなら即座にresume試行
+      if (this._audioCtx && this._audioCtx.state === 'suspended') {
+        this._debugLog('AudioContext suspended検出 → resume()試行');
+        this._audioCtx.resume().then(() => {
+          this._debugLog(`AudioContext復帰: ${this._audioCtx.state}`);
+        }).catch(e => {
+          this._debugLog(`AudioContext resume失敗: ${e.message}`);
+        });
+        return; // resume完了を待って次のインターバルで再チェック
+      }
+
       this._analyser.getByteFrequencyData(dataArray);
       let sum = 0;
       for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
       const avgVolume = sum / dataArray.length;
+
+      // v1.7追加 - 最大値もチェック（suspend時は全要素0になる）
+      let maxVolume = 0;
+      for (let i = 0; i < dataArray.length; i++) {
+        if (dataArray[i] > maxVolume) maxVolume = dataArray[i];
+      }
+
       if (avgVolume > this._SILENCE_THRESHOLD) {
+        this._zeroVolumeCount = 0; // v1.7追加 - 音声検出でリセット
         if (!this._hasVoiceStarted) {
           this._voiceCount++;
           if (this._voiceCount >= this._VOICE_START_COUNT) {
@@ -210,6 +250,40 @@ class WhisperProvider extends SpeechProvider {
         if (this._hasVoiceStarted && this.onInterim) this.onInterim('🎤 ...');
       } else {
         this._voiceCount = 0;
+
+        // v1.7追加 - 連続ゼロボリューム検出（AudioContext死亡の可能性）
+        if (maxVolume === 0) {
+          this._zeroVolumeCount++;
+          if (this._zeroVolumeCount === this._ZERO_VOLUME_THRESHOLD) {
+            this._debugLog(`⚠️ ${this._ZERO_VOLUME_THRESHOLD}回連続ゼロボリューム → AudioContext復帰試行`);
+            if (this._audioCtx && this._audioCtx.state !== 'closed') {
+              this._audioCtx.resume().then(() => {
+                this._debugLog(`AudioContext強制resume: ${this._audioCtx.state}`);
+                this._zeroVolumeCount = 0;
+              }).catch(e => {
+                this._debugLog(`AudioContext強制resume失敗: ${e.message}`);
+              });
+
+              // v1.7追加 - AnalyserNodeも再接続（sourceが切断されてる可能性）
+              try {
+                if (this._stream && this._audioCtx.state === 'running') {
+                  const source = this._audioCtx.createMediaStreamSource(this._stream);
+                  const newAnalyser = this._audioCtx.createAnalyser();
+                  newAnalyser.fftSize = 512;
+                  source.connect(newAnalyser);
+                  this._analyser = newAnalyser;
+                  this._debugLog('AnalyserNode再生成＋再接続完了');
+                }
+              } catch (e) {
+                this._debugLog(`AnalyserNode再接続エラー: ${e.message}`);
+              }
+            }
+          }
+        } else {
+          // maxVolume > 0 だけどavgが閾値以下 = 本当に静かなだけ（正常）
+          this._zeroVolumeCount = 0;
+        }
+
         if (this._hasVoiceStarted && !this._silenceTimer && !this._processing) {
           this._silenceTimer = setTimeout(() => {
             this._debugLog(`無音${this._SILENCE_DURATION}ms検出 → セグメント送信`);
@@ -220,10 +294,30 @@ class WhisperProvider extends SpeechProvider {
     }, this._VOLUME_CHECK_MS);
   }
 
+  // v1.7修正 - _onSegmentEnd後に_afterWhisperResponseが確実に呼ばれるようにする
   _onSegmentEnd() {
     if (this._processing) return;
     this._processing = true;
-    this._stopRecording(true);
+    if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
+    if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
+    if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
+
+    if (this._recorder && this._recorder.state !== 'inactive') {
+      this._recorder.stop();
+    }
+
+    // v1.7修正 - _hasVoiceStartedに関わらず_afterWhisperResponseを呼ぶ
+    // （無音のまま_maxTimerが到達した場合も録音を再起動するため）
+    if (this._chunks.length > 0 && this._hasVoiceStarted) {
+      const duration = Date.now() - (this._recordStartTime || Date.now());
+      if (duration >= this._MIN_RECORD_TIME) {
+        this._sendToWhisper();
+        return; // _sendToWhisper内で_afterWhisperResponseが呼ばれる
+      }
+    }
+    // v1.7追加 - 発話なし/短すぎの場合も録音を再起動
+    this._debugLog('セグメント終了（発話なし/短すぎ）→ 録音再起動');
+    this._afterWhisperResponse();
   }
 
   async _sendToWhisper() {
