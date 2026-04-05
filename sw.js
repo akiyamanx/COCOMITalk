@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.30 2026-04-05 - escape-hatch-detector.js追加 (Sprint 2+3統合)
-const CACHE_NAME = 'cocomitalk-v3.45';
+// v3.31 2026-04-05 - chat-style-modes.js v1.2（ワイワイ短文強化）
+const CACHE_NAME = 'cocomitalk-v3.46';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
