@@ -4,6 +4,7 @@
 // v1.0 2026-04-06 - app.jsからビジョンUI分離 + お散歩モード（自動キャプチャ→自動送信）
 // v1.1 2026-04-06 - お散歩ボタン長押し修正（ブラウザ長押しメニュー抑止）
 // v1.2 2026-04-06 - 間隔変更をステータスバッジタップに変更（長押し廃止、スマホブラウザ対応）
+// v1.3 2026-04-06 - お散歩モード自動送信メッセージに短縮指示追加（TTS被り対策）
 
 'use strict';
 
@@ -17,7 +18,10 @@ const VisionUIController = (() => {
   ];
   const WALK_DEFAULT_INDEX = 1; // 30秒
   const WALK_CHANGE_THRESHOLD = 0.15; // 変化率15%で自動キャプチャ
-  const WALK_AUTO_MESSAGE = '今、何が見える？気になるものがあったら教えて！';
+
+  // v1.3変更 - お散歩モード用メッセージ（短く答えるよう指示）
+  // TTS被り防止のため、2〜3文で簡潔に答えてもらう
+  const WALK_AUTO_MESSAGE = '今何が見える？お散歩モード中だから、2〜3文くらいで短く教えてね！';
 
   let _walkIntervalIndex = WALK_DEFAULT_INDEX;
   let _isWalkMode = false;
@@ -207,12 +211,11 @@ const VisionUIController = (() => {
   // 🚶 お散歩モード（自動キャプチャ）
   // ==============================
 
-  // v1.2変更 - 長押し廃止、🚶ボタンはON/OFFのみ。間隔変更はステータスバッジタップ
   function _initWalkModeUI() {
     const btnWalk = document.getElementById('btn-vision-walk');
     if (!btnWalk) return;
 
-    // 🚶ボタン = ON/OFF切替のみ（シンプル！）
+    // 🚶ボタン = ON/OFF切替のみ
     btnWalk.addEventListener('click', () => {
       if (!VisionEngine.isActive()) {
         alert('先にカメラを起動してね📷');
@@ -225,7 +228,7 @@ const VisionUIController = (() => {
       }
     });
 
-    // v1.2追加 - ステータスバッジ「🚶 30秒」タップで間隔変更
+    // ステータスバッジ「🚶 30秒」タップで間隔変更
     const walkStatus = document.getElementById('vision-walk-status');
     if (walkStatus) {
       walkStatus.addEventListener('click', () => {
@@ -284,7 +287,6 @@ const VisionUIController = (() => {
     const walkStatus = document.getElementById('vision-walk-status');
     if (walkStatus) {
       walkStatus.textContent = `🚶 ${interval.label}`;
-      // タップフィードバック
       walkStatus.style.transform = 'scale(1.15)';
       setTimeout(() => { walkStatus.style.transform = ''; }, 200);
     }
@@ -303,7 +305,7 @@ const VisionUIController = (() => {
     });
   }
 
-  /** 自動キャプチャされた画像をここちゃんに自動送信 */
+  /** v1.3変更 - 自動キャプチャされた画像をここちゃんに自動送信（短縮指示付き） */
   function _autoSendToSister() {
     const msgInput = document.getElementById('msg-input');
     const btnSend = document.getElementById('btn-send');
@@ -317,7 +319,6 @@ const VisionUIController = (() => {
 
     msgInput.value = WALK_AUTO_MESSAGE;
     msgInput.dispatchEvent(new Event('input'));
-    // 少し待ってから送信（UIの更新を待つ）
     setTimeout(() => {
       if (!btnSend.disabled) {
         btnSend.click();
