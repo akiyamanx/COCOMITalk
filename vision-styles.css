@@ -2,6 +2,7 @@
 /* このファイルはカメラプレビュー・ズーム・解像度切替のスタイルを定義する */
 /* v1.0 2026-04-05 - styles.cssから分離（カメラUI+ズーム+解像度ボタン） */
 /* v1.1 2026-04-06 - ピント（オートフォーカス）ボタン＋AFインジケーター追加 */
+/* v1.2 2026-04-06 - お散歩モードUI（トグルボタン + ステータス表示） */
 
 /* ===== カメラON/OFFトグルボタン（入力エリア内） ===== */
 .btn-vision-toggle {
@@ -208,4 +209,39 @@
 .vision-focus-indicator.af-unsupported {
   color: rgba(255,255,255,0.25);
   text-decoration: line-through;
+}
+
+/* ===== v1.2追加 - お散歩モードUI ===== */
+.vision-btn-walk {
+  background: rgba(33, 150, 243, 0.9);
+  color: white;
+}
+.vision-btn-walk:hover {
+  background: rgba(33, 150, 243, 1);
+}
+.vision-btn-walk.walk-active {
+  background: rgba(33, 150, 243, 1);
+  animation: pulse-walk 2s ease-in-out infinite;
+  box-shadow: 0 0 12px rgba(33, 150, 243, 0.6);
+}
+@keyframes pulse-walk {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.08); }
+}
+
+/* お散歩ステータス表示 */
+.vision-walk-status {
+  font-size: 10px;
+  font-weight: 700;
+  color: #2196F3;
+  background: rgba(33, 150, 243, 0.15);
+  border: 1px solid rgba(33, 150, 243, 0.3);
+  border-radius: var(--radius-full);
+  padding: 1px 8px;
+  flex-shrink: 0;
+  animation: fadeIn 0.3s ease;
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }

@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.39 2026-04-06 - 添付画像プレビューモーダル追加
-const CACHE_NAME = 'cocomitalk-v3.54';
+// v3.40 2026-04-06 - お散歩モード + vision-ui-controller.js追加
+const CACHE_NAME = 'cocomitalk-v3.55';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
@@ -26,7 +26,7 @@ const CACHE_FILES = [
   './voice-sender.js', './app-settings.js',
   './chat-style-modes.js', './style-resolver.js',
   './escape-hatch-detector.js',
-  './vision-engine.js',
+  './vision-engine.js', './vision-ui-controller.js',
   './prompts/koko-system.js', './prompts/gpt-system.js',
   './prompts/claude-system.js', './manifest.json',
 ];

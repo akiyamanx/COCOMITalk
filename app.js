@@ -4,8 +4,7 @@
 // v1.3 2026-03-09 - 音声コントローラー初期化＋姉妹タブ連動（Step 5b）
 // v1.6 2026-03-10 - 設定関連をapp-settings.jsに分離（余裕確保）
 // v1.7 2026-04-05 - ワイワイモード: スタイル切替ボタン初期化追加
-// v1.8 2026-04-05 - ビジョンエンジンUI統合: カメラON/OFF・キャプチャ・切替ボタン初期化
-// v1.9 2026-04-06 - ビジョンエンジン: ピント（AF）ボタン＋AFインジケーター初期化
+// v2.0 2026-04-06 - ビジョンUI関連をvision-ui-controller.jsに分離（行数削減）
 'use strict';
 /** アプリケーションモジュール */
 const App = (() => {
@@ -36,8 +35,8 @@ const App = (() => {
     _setupContinueTalkButton();
     // v1.7追加 - ワイワイモード: スタイル切替ボタン初期化
     _initStyleButton();
-    // v1.8追加 - ビジョンエンジン: カメラUIボタン初期化
-    _initVisionButtons();
+    // v2.0変更 - ビジョンUIをvision-ui-controller.jsに委譲
+    if (typeof VisionUIController !== 'undefined') VisionUIController.init();
     if (typeof MeetingUI !== 'undefined') MeetingUI.init();
     // v1.0追加 - 会議アーカイブUI初期化
     if (typeof MeetingArchiveUI !== 'undefined') MeetingArchiveUI.init();
@@ -221,159 +220,6 @@ const App = (() => {
     const info = ChatStyleModes.getStyleInfo(style);
     btn.textContent = info.label;
     btn.classList.toggle('style-waiwai', style === 'waiwai');
-  }
-
-  // v1.9追加 - AFインジケーター更新
-  function _updateFocusIndicator() {
-    const fi = document.getElementById('vision-focus-indicator');
-    if (!fi || typeof VisionEngine === 'undefined') return;
-    fi.classList.remove('af-active', 'af-unsupported');
-    if (VisionEngine.isFocusSupported()) {
-      fi.classList.add('af-active');
-      fi.title = `AF: ${VisionEngine.getFocusMode() || 'active'}`;
-    } else {
-      fi.classList.add('af-unsupported');
-      fi.title = 'AF非対応（固定フォーカス）';
-    }
-  }
-
-  // v1.8追加 - ビジョンエンジン: カメラUI初期化
-  function _initVisionButtons() {
-    if (typeof VisionEngine === 'undefined') {
-      console.log('[App] VisionEngine未読み込み、スキップ');
-      return;
-    }
-
-    const btnToggle = document.getElementById('btn-vision-toggle');
-    const btnCapture = document.getElementById('btn-vision-capture');
-    const btnSwitch = document.getElementById('btn-vision-switch');
-    const visionPanel = document.getElementById('vision-panel');
-    const videoEl = document.getElementById('vision-preview');
-
-    if (!btnToggle || !visionPanel || !videoEl) return;
-
-    // カメラON/OFFトグル
-    btnToggle.addEventListener('click', async () => {
-      if (VisionEngine.isActive()) {
-        // カメラ停止
-        VisionEngine.stopCamera();
-        visionPanel.classList.add('hidden');
-        btnToggle.classList.remove('vision-active');
-        btnToggle.title = '📷 カメラを起動';
-        // v1.1追加 - ズームスライダーリセット
-        const _zs = document.getElementById('vision-zoom-slider');
-        const _zv = document.getElementById('vision-zoom-value');
-        if (_zs) { _zs.value = '1.0'; _zs.max = '4.0'; }
-        if (_zv) { _zv.textContent = '1.0x'; }
-        // v1.2追加 - 解像度ボタンリセット
-        const _rb = document.getElementById('btn-vision-resolution');
-        if (_rb) {
-          _rb.textContent = '🌿エコ';
-          _rb.classList.remove('res-standard', 'res-hd');
-        }
-        // v1.9追加 - AFインジケーターリセット
-        const _fi = document.getElementById('vision-focus-indicator');
-        if (_fi) { _fi.classList.remove('af-active', 'af-unsupported'); }
-        console.log('[App] ビジョンエンジン: カメラOFF');
-      } else {
-        // カメラ起動
-        try {
-          await VisionEngine.startCamera(videoEl);
-          visionPanel.classList.remove('hidden');
-          btnToggle.classList.add('vision-active');
-          btnToggle.title = '📷 カメラを停止';
-          // v1.9追加 - AFインジケーター更新
-          _updateFocusIndicator();
-          console.log('[App] ビジョンエンジン: カメラON');
-        } catch (err) {
-          alert(err.message);
-        }
-      }
-    });
-
-    // 📸キャプチャボタン
-    if (btnCapture) {
-      btnCapture.addEventListener('click', () => {
-        if (!VisionEngine.isActive()) return;
-        const att = VisionEngine.captureAndAttach();
-        if (att) {
-          // キャプチャ成功のフィードバック
-          btnCapture.style.transform = 'scale(1.2)';
-          setTimeout(() => { btnCapture.style.transform = ''; }, 200);
-          console.log(`[App] ビジョンキャプチャ完了: ${att.name} (${att.size}bytes)`);
-        }
-      });
-    }
-
-    // v1.9追加 - 📌ピント合わせてキャプチャボタン
-    const btnFocusCapture = document.getElementById('btn-vision-focus-capture');
-    if (btnFocusCapture) {
-      btnFocusCapture.addEventListener('click', async () => {
-        if (!VisionEngine.isActive()) return;
-        btnFocusCapture.classList.add('focusing');
-        btnFocusCapture.disabled = true;
-        try {
-          const att = await VisionEngine.focusAndCapture();
-          if (att) { console.log(`[App] ピントキャプチャ完了: ${att.name}`); }
-        } finally {
-          btnFocusCapture.classList.remove('focusing');
-          btnFocusCapture.disabled = false;
-        }
-      });
-    }
-
-    // v1.1追加 - ズームスライダー
-    const zoomSlider = document.getElementById('vision-zoom-slider');
-    const zoomValue = document.getElementById('vision-zoom-value');
-    if (zoomSlider) {
-      zoomSlider.addEventListener('input', () => {
-        const level = parseFloat(zoomSlider.value);
-        VisionEngine.setZoom(level);
-        if (zoomValue) zoomValue.textContent = `${level.toFixed(1)}x`;
-      });
-    }
-
-    // v1.2追加 - 解像度切替ボタン
-    const btnResolution = document.getElementById('btn-vision-resolution');
-    if (btnResolution) {
-      btnResolution.addEventListener('click', () => {
-        if (!VisionEngine.isActive()) return;
-        const result = VisionEngine.cycleResolution();
-        if (!result) return;
-
-        // ボタン表示更新
-        btnResolution.textContent = result.label;
-        // スタイルクラス切替
-        btnResolution.classList.remove('res-standard', 'res-hd');
-        if (result.key === 'standard') btnResolution.classList.add('res-standard');
-        if (result.key === 'hd') btnResolution.classList.add('res-hd');
-
-        // ズームスライダーの上限を更新
-        if (zoomSlider) {
-          zoomSlider.max = String(result.currentZoomMax);
-          // 現在値が新上限を超えてたらクランプ
-          if (parseFloat(zoomSlider.value) > result.currentZoomMax) {
-            zoomSlider.value = String(result.currentZoomMax);
-            if (zoomValue) zoomValue.textContent = `${result.currentZoomMax.toFixed(1)}x`;
-          }
-        }
-
-        console.log(`[App] 解像度切替: ${result.label} (${result.desc}) / ズーム上限: ${result.currentZoomMax}x`);
-      });
-    }
-
-    // 🔄カメラ前後切替
-    if (btnSwitch) {
-      btnSwitch.addEventListener('click', async () => {
-        if (!VisionEngine.isActive()) return;
-        btnSwitch.disabled = true;
-        const ok = await VisionEngine.switchCamera();
-        btnSwitch.disabled = false;
-        if (ok) {
-          console.log('[App] ビジョンエンジン: カメラ切替完了');
-        }
-      });
-    }
   }
 
   // テーマカラーを適用
