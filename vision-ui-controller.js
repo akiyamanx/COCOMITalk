@@ -2,6 +2,7 @@
 // このファイルはカメラUI（ON/OFF・キャプチャ・ズーム・解像度・AF・お散歩モード）を管理する
 // app.jsから分離（行数削減）+ お散歩モードUI追加
 // v1.0 2026-04-06 - app.jsからビジョンUI分離 + お散歩モード（自動キャプチャ→自動送信）
+// v1.1 2026-04-06 - お散歩ボタン長押し修正（ブラウザ長押しメニュー抑止）
 
 'use strict';
 
@@ -209,28 +210,43 @@ const VisionUIController = (() => {
     const btnWalk = document.getElementById('btn-vision-walk');
     if (!btnWalk) return;
 
-    btnWalk.addEventListener('click', () => {
-      if (!VisionEngine.isActive()) {
-        alert('先にカメラを起動してね📷');
-        return;
-      }
-      if (_isWalkMode) {
-        _stopWalkMode();
-      } else {
-        _startWalkMode();
-      }
-    });
+    // v1.1修正 - ブラウザの長押しコンテキストメニューを完全抑止
+    btnWalk.addEventListener('contextmenu', (e) => e.preventDefault());
 
-    // 長押しでインターバル変更
+    // v1.1修正 - 長押し判定の改善
+    // タップ（短押し）= ON/OFF切替、長押し（600ms以上）= インターバル変更
     let holdTimer = null;
+    let isLongPress = false;
+
     btnWalk.addEventListener('touchstart', (e) => {
+      e.preventDefault(); // v1.1修正 - 即座にブラウザデフォルト動作を抑止
+      isLongPress = false;
       holdTimer = setTimeout(() => {
-        e.preventDefault();
+        isLongPress = true;
         _cycleWalkInterval();
       }, 600);
     }, { passive: false });
-    btnWalk.addEventListener('touchend', () => { clearTimeout(holdTimer); });
-    btnWalk.addEventListener('touchcancel', () => { clearTimeout(holdTimer); });
+
+    btnWalk.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      clearTimeout(holdTimer);
+      // 長押しでなければ通常のクリック動作（ON/OFF切替）
+      if (!isLongPress) {
+        if (!VisionEngine.isActive()) {
+          alert('先にカメラを起動してね📷');
+          return;
+        }
+        if (_isWalkMode) {
+          _stopWalkMode();
+        } else {
+          _startWalkMode();
+        }
+      }
+    });
+
+    btnWalk.addEventListener('touchcancel', () => {
+      clearTimeout(holdTimer);
+    });
   }
 
   function _startWalkMode() {
