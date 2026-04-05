@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.40 2026-04-06 - お散歩モード + vision-ui-controller.js追加
-const CACHE_NAME = 'cocomitalk-v3.55';
+// v3.41 2026-04-06 - お散歩ボタン長押し修正対応キャッシュ更新
+const CACHE_NAME = 'cocomitalk-v3.56';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
