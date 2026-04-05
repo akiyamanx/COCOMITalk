@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.41 2026-04-06 - お散歩ボタン長押し修正対応キャッシュ更新
-const CACHE_NAME = 'cocomitalk-v3.56';
+// v3.42 2026-04-06 - お散歩ステータスバッジタップ対応キャッシュ更新
+const CACHE_NAME = 'cocomitalk-v3.57';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
