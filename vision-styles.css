@@ -3,6 +3,7 @@
 /* v1.0 2026-04-05 - styles.cssから分離（カメラUI+ズーム+解像度ボタン） */
 /* v1.1 2026-04-06 - ピント（オートフォーカス）ボタン＋AFインジケーター追加 */
 /* v1.2 2026-04-06 - お散歩モードUI（トグルボタン + ステータス表示） */
+/* v1.3 2026-04-06 - お散歩ボタン長押し対策（コンテキストメニュー抑止） */
 
 /* ===== カメラON/OFFトグルボタン（入力エリア内） ===== */
 .btn-vision-toggle {
@@ -82,6 +83,11 @@
   justify-content: center;
   transition: transform 0.15s, background 0.2s;
   box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  /* v1.3追加 - 長押し対策（全ビジョンボタン共通） */
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: manipulation;
 }
 .vision-btn:hover { transform: scale(1.1); }
 .vision-btn:active { transform: scale(0.95); }
