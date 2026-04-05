@@ -12,6 +12,7 @@
 // v1.6 2026-03-30 - Sprint 2代弁問題本命: ownerベース記憶注入制御（他姉妹の個人記憶→メタ情報化）
 // v1.6.1 2026-03-30 - テンプレート修正: グループで本人が既に答えた場合は自然に受ける指示を追加
 // v1.7 2026-04-05 - ワイワイモード: スタイルプロンプト末尾アペンド（ChatStyleModes連携）
+// v1.8 2026-04-05 - エスケープハッチ統合: ユーザー発話からトリガー検出→一時的にじっくりモードで回答（Sprint 2+3統合）
 'use strict';
 
 const PromptBuilder = (() => {
@@ -118,13 +119,28 @@ const PromptBuilder = (() => {
       extra += await _getChatMemoryText(options.chatMemoryLimit || 3);
     }
 
-    // v1.7追加 - ワイワイモード: スタイルプロンプト末尾アペンド
+    // v1.8更新 - ワイワイモード + エスケープハッチ統合
     if (typeof ChatStyleModes !== 'undefined' && sister) {
       const chatStyle = ChatStyleModes.getStyle();
-      const stylePrompt = ChatStyleModes.getStylePrompt(chatStyle, sister);
+
+      // v1.8追加 - エスケープハッチ検出: ワイワイモード中にトリガーワードがあれば一時解除
+      let escaped = false;
+      if (chatStyle === 'waiwai' && options.userText && typeof EscapeHatchDetector !== 'undefined') {
+        if (EscapeHatchDetector.detect(options.userText)) {
+          escaped = true;
+          console.log('[PromptBuilder] エスケープハッチ発動 → 今回だけじっくりモードで回答');
+        } else {
+          // detect()を呼んだ後、前回のエスケープが残っていたら消費する
+          // （前回エスケープ発動 → 今回は通常トリガーなし → ワイワイに戻る）
+          EscapeHatchDetector.consumeEscape();
+        }
+      }
+
+      const stylePrompt = ChatStyleModes.getStylePrompt(chatStyle, sister, escaped);
       if (stylePrompt) {
         extra += stylePrompt;
-        console.log(`[PromptBuilder] スタイルプロンプト注入OK（${chatStyle}, ${sister}）`);
+        const modeLabel = escaped ? `${chatStyle}→escape` : chatStyle;
+        console.log(`[PromptBuilder] スタイルプロンプト注入OK（${modeLabel}, ${sister}）`);
       }
     }
 
