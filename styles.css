@@ -379,3 +379,37 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
   cursor: not-allowed;
 }
 
+/* ===== v1.1追加 - 添付画像プレビューモーダル（拡大表示） ===== */
+.image-preview-modal {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  z-index: 9999; display: flex; align-items: center; justify-content: center;
+  opacity: 0; transition: opacity 0.2s ease;
+}
+.image-preview-modal.visible { opacity: 1; }
+.image-preview-modal-bg {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.85);
+}
+.image-preview-modal-content {
+  position: relative; z-index: 1; max-width: 95vw; max-height: 90vh;
+  display: flex; flex-direction: column; align-items: center;
+}
+.image-preview-modal-img {
+  max-width: 95vw; max-height: 80vh; object-fit: contain;
+  border-radius: 8px; box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
+}
+.image-preview-modal-footer {
+  display: flex; align-items: center; gap: 12px; margin-top: 12px;
+}
+.image-preview-modal-name { color: rgba(255, 255, 255, 0.7); font-size: 13px; }
+.image-preview-modal-close {
+  background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3);
+  color: white; border-radius: 20px; padding: 6px 16px; font-size: 13px;
+  cursor: pointer; transition: background 0.2s;
+}
+.image-preview-modal-close:active { background: rgba(255, 255, 255, 0.3); }
+.file-preview-zoomable {
+  cursor: pointer; transition: transform 0.15s, box-shadow 0.15s;
+}
+.file-preview-zoomable:active { transform: scale(0.95); }
+

@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.38 2026-04-06 - オートフォーカス機能キャッシュ更新
-const CACHE_NAME = 'cocomitalk-v3.53';
+// v3.39 2026-04-06 - 添付画像プレビューモーダル追加
+const CACHE_NAME = 'cocomitalk-v3.54';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',

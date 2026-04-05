@@ -1,6 +1,7 @@
 // COCOMITalk - ファイル入出力ハンドラー
 // このファイルはファイル添付（📎）とダウンロード（💾）を管理する
 // v1.0 Phase 1 - テキスト＋画像の読み込み＋テキストダウンロード
+// v1.1 2026-04-06 - 添付画像タップで拡大プレビュー表示（モーダルオーバーレイ）
 
 'use strict';
 
@@ -148,9 +149,9 @@ const FileHandler = (() => {
     let html = '';
 
     if (att.type === 'image') {
-      // 画像プレビュー（サムネイル）
+      // v1.1変更 - 画像プレビュー（タップで拡大表示対応）
       html = `<div class="file-preview-item">
-        <img src="${att.dataUrl}" alt="${att.name}" class="file-preview-thumb">
+        <img src="${att.dataUrl}" alt="${att.name}" class="file-preview-thumb file-preview-zoomable" data-full-src="${att.dataUrl}">
         <span class="file-preview-name">${att.name}</span>
         <button class="file-preview-remove" aria-label="添付解除">✕</button>
       </div>`;
@@ -171,6 +172,47 @@ const FileHandler = (() => {
     const removeBtn = preview.querySelector('.file-preview-remove');
     if (removeBtn) {
       removeBtn.addEventListener('click', clearAttachment);
+    }
+
+    // v1.1追加 - 画像サムネイルタップで拡大表示
+    const zoomThumb = preview.querySelector('.file-preview-zoomable');
+    if (zoomThumb) {
+      zoomThumb.addEventListener('click', () => {
+        _showImageModal(zoomThumb.dataset.fullSrc, att.name);
+      });
+    }
+  }
+
+  /**
+   * v1.1追加 - 添付画像をフルスクリーンモーダルで拡大表示
+   */
+  function _showImageModal(src, name) {
+    _closeImageModal();
+    const overlay = document.createElement('div');
+    overlay.id = 'image-preview-modal';
+    overlay.className = 'image-preview-modal';
+    overlay.innerHTML = `
+      <div class="image-preview-modal-bg"></div>
+      <div class="image-preview-modal-content">
+        <img src="${src}" alt="${name}" class="image-preview-modal-img">
+        <div class="image-preview-modal-footer">
+          <span class="image-preview-modal-name">${name}</span>
+          <button class="image-preview-modal-close" aria-label="閉じる">✕ 閉じる</button>
+        </div>
+      </div>
+    `;
+    document.body.appendChild(overlay);
+    overlay.querySelector('.image-preview-modal-bg').addEventListener('click', _closeImageModal);
+    overlay.querySelector('.image-preview-modal-close').addEventListener('click', _closeImageModal);
+    requestAnimationFrame(() => overlay.classList.add('visible'));
+  }
+
+  /** v1.1追加 - 画像プレビューモーダルを閉じる */
+  function _closeImageModal() {
+    const modal = document.getElementById('image-preview-modal');
+    if (modal) {
+      modal.classList.remove('visible');
+      setTimeout(() => modal.remove(), 200);
     }
   }
 
