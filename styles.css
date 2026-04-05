@@ -5,6 +5,7 @@
 /* v1.3 2026-04-05 - ワイワイモード: スタイル切替ボタン追加 */
 /* v1.4 2026-04-05 - ビジョンエンジンUI: カメラプレビュー・ボタンスタイル追加 */
 /* v1.5 2026-04-05 - ビジョンエンジン ズームスライダースタイル追加 */
+/* v1.5.1 2026-04-05 - ズームバー位置修正（wrapper外配置でscale影響回避） */
 
 /* ===== CSS変数 ===== */
 :root {
@@ -418,22 +419,25 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
   to { max-height: 300px; opacity: 1; }
 }
 
-/* プレビューラッパー */
+/* プレビューラッパー — videoのscaleがはみ出さないようクリップ */
 .vision-preview-wrapper {
   position: relative;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 8px;
+  overflow: hidden;
+  max-height: 200px;
 }
 
-/* カメラプレビュー映像 */
+/* カメラプレビュー映像 — ズーム時にwrapperからはみ出さないようクリップ */
 .vision-preview {
   width: 100%;
   max-height: 200px;
   border-radius: var(--radius-sm);
   object-fit: cover;
   background: #000;
+  transition: transform 0.15s ease-out;
 }
 
 /* キャプチャ・切替ボタン群 */
@@ -470,14 +474,14 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
   background: rgba(255, 107, 157, 1);
 }
 
-/* v1.5追加 - ズームスライダー */
+/* v1.5修正 - ズームバー（wrapper外に配置、videoのscale影響を受けない） */
 .vision-zoom-bar {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 12px 8px;
-  background: rgba(26, 26, 36, 0.8);
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding: 6px 12px;
+  background: #1a1a24;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .vision-zoom-label {
@@ -532,7 +536,3 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
   flex-shrink: 0;
 }
 
-/* プレビュー映像のズーム時にはみ出さないようクリップ */
-.vision-preview-wrapper {
-  overflow: hidden;
-}

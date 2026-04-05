@@ -1,7 +1,7 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
-// v3.34 2026-04-05 - ズーム機能追加キャッシュ更新
-const CACHE_NAME = 'cocomitalk-v3.49';
+// v3.35 2026-04-05 - ズームバー位置修正キャッシュ更新
+const CACHE_NAME = 'cocomitalk-v3.50';
 
 const CACHE_FILES = [
   './', './index.html', './styles.css', './meeting-styles.css',
