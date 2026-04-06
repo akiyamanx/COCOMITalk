@@ -5,6 +5,7 @@
 // v1.1 2026-04-06 - お散歩ボタン長押し修正（ブラウザ長押しメニュー抑止）
 // v1.2 2026-04-06 - 間隔変更をステータスバッジタップに変更（長押し廃止、スマホブラウザ対応）
 // v1.3 2026-04-06 - お散歩モード自動送信メッセージに短縮指示追加（TTS被り対策）
+// v1.4 2026-04-06 - 会話ラリー中の自動キャプチャ一時停止 + 表示/送信分離（カスタムイベント方式）
 
 'use strict';
 
@@ -19,12 +20,16 @@ const VisionUIController = (() => {
   const WALK_DEFAULT_INDEX = 1; // 30秒
   const WALK_CHANGE_THRESHOLD = 0.15; // 変化率15%で自動キャプチャ
 
-  // v1.3変更 - お散歩モード用メッセージ（短く答えるよう指示）
-  // TTS被り防止のため、2〜3文で簡潔に答えてもらう
-  const WALK_AUTO_MESSAGE = '今何が見える？お散歩モード中だから、2〜3文くらいで短く教えてね！';
+  // v1.4変更 - 表示用とAPI送信用を分離
+  const WALK_DISPLAY_MESSAGE = '📸 写真見たよ！';
+  const WALK_API_MESSAGE = '今何が見える？お散歩モード中だから、2〜3文くらいで短く教えてね！';
 
   let _walkIntervalIndex = WALK_DEFAULT_INDEX;
   let _isWalkMode = false;
+
+  // v1.4追加 - 会話ラリー一時停止用
+  let _pauseResumeTimer = null;
+  let _isPaused = false;
 
   /**
    * ビジョンUI全体の初期化（app.jsのinit()から呼ばれる）
@@ -40,6 +45,7 @@ const VisionUIController = (() => {
     _initFocusCaptureButton();
     _initWalkModeUI();
     _listenAutoCapture();
+    _listenUserInput();
   }
 
   // ==============================
@@ -260,6 +266,11 @@ const VisionUIController = (() => {
   function _stopWalkMode() {
     VisionEngine.stopAutoCapture();
     _isWalkMode = false;
+    _isPaused = false;
+    if (_pauseResumeTimer) {
+      clearTimeout(_pauseResumeTimer);
+      _pauseResumeTimer = null;
+    }
 
     const btnWalk = document.getElementById('btn-vision-walk');
     const walkStatus = document.getElementById('vision-walk-status');
@@ -305,25 +316,64 @@ const VisionUIController = (() => {
     });
   }
 
-  /** v1.3変更 - 自動キャプチャされた画像をここちゃんに自動送信（短縮指示付き） */
+  /**
+   * v1.4変更 - 自動キャプチャ画像をカスタムイベントで送信
+   * 表示用テキストとAPI送信用テキストを分離する
+   */
   function _autoSendToSister() {
+    if (_isPaused) {
+      console.log('[VisionUI] 会話ラリー中のため自動送信スキップ');
+      return;
+    }
     const msgInput = document.getElementById('msg-input');
-    const btnSend = document.getElementById('btn-send');
-    if (!msgInput || !btnSend) return;
-
-    // 既に入力中なら上書きしない
-    if (msgInput.value.trim().length > 0) {
+    if (msgInput && msgInput.value.trim().length > 0) {
       console.log('[VisionUI] 入力欄にテキストがあるため自動送信スキップ');
       return;
     }
+    const event = new CustomEvent('vision-auto-send', {
+      detail: { displayText: WALK_DISPLAY_MESSAGE, apiText: WALK_API_MESSAGE }
+    });
+    document.dispatchEvent(event);
+    console.log('[VisionUI] 自動送信イベント発火');
+  }
 
-    msgInput.value = WALK_AUTO_MESSAGE;
-    msgInput.dispatchEvent(new Event('input'));
-    setTimeout(() => {
-      if (!btnSend.disabled) {
-        btnSend.click();
-      }
-    }, 100);
+  /**
+   * v1.4追加 - ユーザーが手入力で送信したら自動キャプチャを一時停止
+   */
+  function _listenUserInput() {
+    const btnSend = document.getElementById('btn-send');
+    if (!btnSend) return;
+    btnSend.addEventListener('click', () => {
+      if (!_isWalkMode || _isPaused) return;
+      const msgInput = document.getElementById('msg-input');
+      if (msgInput && (msgInput.value === WALK_DISPLAY_MESSAGE || msgInput.value === WALK_API_MESSAGE)) return;
+      _pauseWalkMode();
+    }, true);
+  }
+
+  /** v1.4追加 - お散歩モードを一時停止 */
+  function _pauseWalkMode() {
+    if (!_isWalkMode) return;
+    _isPaused = true;
+    VisionEngine.stopAutoCapture();
+    if (_pauseResumeTimer) clearTimeout(_pauseResumeTimer);
+    const interval = WALK_INTERVALS[_walkIntervalIndex];
+    _pauseResumeTimer = setTimeout(() => { _resumeWalkMode(); }, interval.ms);
+    const walkStatus = document.getElementById('vision-walk-status');
+    if (walkStatus) { walkStatus.textContent = '💬 会話中...'; }
+    console.log(`[VisionUI] 会話ラリー検知 → 自動キャプチャ一時停止（${interval.label}後に再開）`);
+  }
+
+  /** v1.4追加 - お散歩モードを再開 */
+  function _resumeWalkMode() {
+    if (!_isWalkMode) return;
+    _isPaused = false;
+    if (_pauseResumeTimer) { clearTimeout(_pauseResumeTimer); _pauseResumeTimer = null; }
+    const interval = WALK_INTERVALS[_walkIntervalIndex];
+    VisionEngine.startAutoCapture(interval.ms, WALK_CHANGE_THRESHOLD);
+    const walkStatus = document.getElementById('vision-walk-status');
+    if (walkStatus) { walkStatus.textContent = `🚶 ${interval.label}`; }
+    console.log('[VisionUI] 自動キャプチャ再開');
   }
 
   // --- 公開API ---

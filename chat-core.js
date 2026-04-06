@@ -8,6 +8,7 @@
 // v1.8 2026-03-13 - AI自発的記憶保存マーカー検知（💾SAVE:対応）
 // v1.9 2026-03-16 - グループモードにattachment引数を追加（方針C: テキスト全員・画像リードのみ）
 // v2.0 2026-03-30 - Sprint 2: PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
+// v2.1 2026-04-06 - お散歩モード自動送信対応（vision-auto-sendイベント受信、表示/送信テキスト分離）
 'use strict';
 
 /** チャットコアモジュール */
@@ -93,7 +94,10 @@ const ChatCore = (() => {
       sessionStartIndex[key] = chatHistories[key].length;
     }
 
-    console.log('[ChatCore] 初期化完了 v2.0');
+    // v2.1追加 - お散歩モード自動送信イベントリスナー
+    _setupVisionAutoSend();
+
+    console.log('[ChatCore] 初期化完了 v2.1');
   }
 
   function _setupInputEvents() {
@@ -128,6 +132,46 @@ const ChatCore = (() => {
         _handleCancel();
       } else if (!btnSend.disabled) {
         _handleSend();
+      }
+    });
+  }
+
+  /**
+   * v2.1追加 - お散歩モード自動送信
+   * vision-ui-controller.jsからのカスタムイベントを受信し、
+   * 画面にはdisplayTextを表示、APIにはapiText+添付画像を送信する
+   */
+  function _setupVisionAutoSend() {
+    document.addEventListener('vision-auto-send', (e) => {
+      if (isProcessing) {
+        console.log('[ChatCore] 処理中のため自動送信スキップ');
+        return;
+      }
+      const { displayText, apiText } = e.detail;
+      const attachment = (typeof FileHandler !== 'undefined') ? FileHandler.consumeAttachment() : null;
+      if (!attachment) {
+        console.log('[ChatCore] 添付画像がないため自動送信スキップ');
+        return;
+      }
+      if (welcomeMsg && !welcomeMsg.classList.contains('hidden')) {
+        welcomeMsg.classList.add('hidden');
+      }
+      // 画面表示はdisplayText
+      addMessage('user', `📎 ${attachment.name}\n${displayText}`);
+      // 履歴にはapiTextを保存
+      chatHistories[currentSister].push({ role: 'user', content: apiText });
+      _saveHistory();
+
+      isProcessing = true;
+      _showStopButton();
+      showTyping();
+
+      const sisterAPI = SISTER_API[currentSister];
+      const apiModule = sisterAPI ? sisterAPI.module() : null;
+      if (apiModule && apiModule.hasApiKey()) {
+        _apiReply(apiText, apiModule, sisterAPI.prompt(), attachment);
+      } else {
+        _demoReply(apiText);
       }
     });
   }
