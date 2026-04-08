@@ -1,0 +1,70 @@
+/* design-tokens.css v1.0
+ * COCOMITalk デザイントークン定義ファイル
+ * 役割: UI/UX洗練化Phase1の第一歩。色・余白・角丸・影・フォント等の
+ *       デザインの基本ルールを一元管理する。
+ * 設計方針: 既存styles.cssの:root値を維持しつつ、構想カプセル仕様の
+ *           不足分（余白3段階・統一影）を追加する。styles.cssの:rootは
+ *           本ファイル読込後に上書きするため、当面は二重定義となる
+ *           （既存挙動保護のため、削除は次フェーズで実施）。
+ * 関連: ideas/2026-04-08_cocomitalk-uiux-and-dressup-system.md
+ */
+
+:root {
+  /* ========== 三姉妹カラー（既存維持） ========== */
+  /* ここちゃん（koko）: ピンク系 */
+  --koko-primary: #FF6B9D;
+  --koko-light: #FFE0EB;
+  --koko-dark: #D44A7A;
+  --koko-bg: #FFF5F8;
+
+  /* お姉ちゃん（gpt）: 紫系 */
+  --gpt-primary: #6B5CE7;
+  --gpt-light: #E8E5FF;
+  --gpt-dark: #4A3FC7;
+  --gpt-bg: #F7F5FF;
+
+  /* クロちゃん（claude）: オレンジ系 */
+  --claude-primary: #E6783E;
+  --claude-light: #FFEEE5;
+  --claude-dark: #C45A22;
+  --claude-bg: #FFF8F3;
+
+  /* ========== 背景・テキスト（既存維持） ========== */
+  --bg-main: #FEFCFA;
+  --bg-chat: #FAF7F4;
+  --text-primary: #2D2520;
+  --text-secondary: #8B7E74;
+  --text-light: #B5AAA0;
+  --border: #EDE8E3;
+
+  /* ========== 影（既存＋新規） ========== */
+  --shadow-sm: 0 1px 3px rgba(45, 37, 32, 0.08);
+  /* v1.0新規: 構想カプセル仕様の統一ソフトシャドウ */
+  --shadow-soft: 0 2px 8px rgba(45, 37, 32, 0.10);
+
+  /* ========== アクティブ姉妹（既存維持） ========== */
+  --active-primary: var(--koko-primary);
+  --active-light: var(--koko-light);
+  --active-dark: var(--koko-dark);
+  --active-bg: var(--koko-bg);
+
+  /* ========== フォント（既存維持） ========== */
+  --font-main: 'Zen Maru Gothic', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic Pro', sans-serif;
+
+  /* ========== レイアウト（既存維持） ========== */
+  --header-height: 52px;
+  --tab-height: 48px;
+  --max-width: 640px;
+
+  /* ========== 角丸（既存維持） ========== */
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 24px;
+  --radius-full: 9999px;
+
+  /* ========== 余白（v1.0新規・構想カプセル仕様） ========== */
+  /* Phase2以降で他CSSファイルの直書きpx値をこれに置換していく */
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+}
