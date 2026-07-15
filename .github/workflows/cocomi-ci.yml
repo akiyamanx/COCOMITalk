@@ -1,4 +1,5 @@
 # COCOMI CI - COCOMITalk品質チェック
+# v1.7 - 2026-07-15 LINE通知curlを--fail-with-body化（通知失敗の無言化を撲滅・ADR-053）
 # v1.6 - 2026-03-27 500行制限を段階制に変更（500⚠️警告/550❌エラー）＋ESLint導入（警告のみ）
 
 name: COCOMI CI
@@ -170,7 +171,7 @@ jobs:
           MSG="${{ github.event.head_commit.message }}"
           URL="https://${{ github.repository_owner }}.github.io/${REPO#*/}/"
           TEXT="CI合格! ${REPO} ${SHA}: ${MSG} アプリ: ${URL}"
-          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+          curl -s --fail-with-body -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -d "{\"to\":\"${LINE_USER_ID}\",\"messages\":[{\"type\":\"text\",\"text\":\"${TEXT}\"}]}"
@@ -187,7 +188,7 @@ jobs:
           MSG="${{ github.event.head_commit.message }}"
           ACTIONS_URL="${{ github.server_url }}/${{ github.repository }}/actions"
           TEXT="CI不合格! ${REPO} ${SHA}: ${MSG} 詳細: ${ACTIONS_URL}"
-          curl -s -X POST "https://api.line.me/v2/bot/message/push" \
+          curl -s --fail-with-body -X POST "https://api.line.me/v2/bot/message/push" \
             -H "Content-Type: application/json" \
             -H "Authorization: Bearer ${LINE_TOKEN}" \
             -d "{\"to\":\"${LINE_USER_ID}\",\"messages\":[{\"type\":\"text\",\"text\":\"${TEXT}\"}]}"
