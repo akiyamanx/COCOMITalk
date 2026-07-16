@@ -1,9 +1,11 @@
-// voice-input.js v2.4.1
+// voice-input.js v2.5.0
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
 // UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
 // v2.0〜v2.3.0: 履歴省略（バッファ方式/TTS待機フラグ/voice-state連携/吹き出し読み上げ）
 // v2.4.0 修正 - speakQueueマイク復帰バグ修正（onSisterChange/フェイルセーフ/ガード緩和）
 // v2.4.1 修正 - pause済みWhisperのhealthCheckスキップ（recorder=inactive誤判定回避）
+// v2.5.0 修正 - STT再開ガードを_canResumeSTT()に一元化（isPlaying欠落drift解消）＋
+//   フェイルセーフのTTS再生中誤爆防止＋onPlayError後のマイク復帰経路追加（音声途切れバグ根本修正）
 
 class VoiceController {
   constructor() {
@@ -117,8 +119,8 @@ class VoiceController {
 
     // onEnd: STT終了 → バッファ追記→再開 or 送信
     this._stt.onEnd = () => {
-      if (this._waitingForTTS || this._voiceState.isSpeaking()
-          || this._playback.isPlaying() || this._playback.isQueuePlaying()) {
+      // v2.5.0変更 - ガード判定を_canResumeSTT()に一元化
+      if (!this._canResumeSTT()) {
         console.log('[Voice] onEnd: TTS待ち/再生中 → STT再開を抑制');
         return;
       }
@@ -129,7 +131,8 @@ class VoiceController {
         this._sttRetryCount++;
         console.log(`[Voice] STT即終了(${duration}ms) → リトライ ${this._sttRetryCount}/${this._STT_MAX_RETRY}`);
         setTimeout(() => {
-          if (this._enabled && !this._waitingForTTS) this._stt.start({ language: 'ja-JP' });
+          // v2.5.0変更 - リトライ時もガード一元判定（TTS実再生中の再開を防止）
+          if (this._enabled && this._canResumeSTT()) this._stt.start({ language: 'ja-JP' });
         }, 300);
         return;
       }
@@ -220,6 +223,8 @@ class VoiceController {
       this._ui.highlightSister(sisterId, false);
       this._ui.showStatus(error, 'error');
       this._voiceState.forceReset();
+      // v2.5.0追加 - エラー後もマイク復帰経路を確保（マイクが死んだままになる残穴の修正）
+      if (this._enabled) this._resumeSTTAfterTTS();
     };
 
     this._playback.onFallback = (message) => {
@@ -281,13 +286,20 @@ class VoiceController {
     return false;
   }
 
+  // v2.5.0追加 - STT再開可否の一元判定
+  // 同じガードが3箇所に複製されisPlaying欠落のdriftが起きていた反省から判定ロジックを1本に統一。
+  // onEnd/リトライ/_restartSTT/_resumeSTTAfterTTS/フェイルセーフの全再開経路がこの関数を通る
+  _canResumeSTT() {
+    return !this._waitingForTTS
+      && !this._voiceState.isSpeaking()
+      && !this._playback.isPlaying()
+      && !this._playback.isQueuePlaying();
+  }
+
   _restartSTT() {
     setTimeout(() => {
-      if (this._enabled
-          && !this._waitingForTTS
-          && !this._voiceState.isSpeaking()
-          && !this._playback.isPlaying()
-          && !this._playback.isQueuePlaying()) {
+      // v2.5.0変更 - ガード判定を_canResumeSTT()に一元化
+      if (this._enabled && this._canResumeSTT()) {
         this._stt.start({ language: 'ja-JP' });
       }
     }, 800);
@@ -296,8 +308,9 @@ class VoiceController {
   // v2.4.1修正 - pause済みWhisperはhealthCheckスキップ（recorder=inactiveは正常）
   async _resumeSTTAfterTTS() {
     await new Promise(r => setTimeout(r, 1500));
-    if (this._waitingForTTS || this._voiceState.isSpeaking() || this._playback.isQueuePlaying()) {
-      console.log(`[Voice] _resumeSTTAfterTTS: 復帰中止 (waitTTS=${this._waitingForTTS}, speaking=${this._voiceState.isSpeaking()}, queue=${this._playback.isQueuePlaying()})`);
+    // v2.5.0変更 - ガード一元化＋isPlaying()欠落を修正（TTS実再生中の復帰を確実に中止）
+    if (!this._canResumeSTT()) {
+      console.log(`[Voice] _resumeSTTAfterTTS: 復帰中止 (waitTTS=${this._waitingForTTS}, speaking=${this._voiceState.isSpeaking()}, playing=${this._playback.isPlaying()}, queue=${this._playback.isQueuePlaying()})`);
       return;
     }
     // v2.4.1変更: Whisperがpause済みの場合、resume()が自前で録音再開するのでhealthCheckは不要。
@@ -311,7 +324,8 @@ class VoiceController {
         this.startListening();
         return;
       }
-      if (this._waitingForTTS || this._voiceState.isSpeaking()) { return; }
+      // v2.5.0変更 - 再ガードも一元判定（resume直前の最終確認）
+      if (!this._canResumeSTT()) { return; }
       this._voiceState.transition('listening');
       this._stt.resume();
       return;
@@ -372,7 +386,7 @@ class VoiceController {
       if (meetingMic) { meetingMic.disabled = true; meetingMic.style.opacity = '0.4'; }
       return;
     }
-    console.log(`[Voice] 初期化完了（v2.4.1） stt=${this._stt.name} cmd=${!!this._voiceCmd}`);
+    console.log(`[Voice] 初期化完了（v2.5.0） stt=${this._stt.name} cmd=${!!this._voiceCmd}`);
   }
 
   toggleListening() {
@@ -431,6 +445,12 @@ class VoiceController {
     this._recoverySafetyTimer = setTimeout(() => {
       this._recoverySafetyTimer = null;
       if (this._voiceState.isRecovering() && this._enabled) {
+        // v2.5.0追加 - TTS実再生中は発動を見送り（看板と実態の乖離時に再生中へ強制マイクONする誤爆の防止。
+        // 正規の復帰はTTS完了時のonPlayEnd/onQueueEndに任せる）
+        if (!this._canResumeSTT()) {
+          console.log('[Voice] フェイルセーフ: TTS再生中のため発動見送り');
+          return;
+        }
         console.warn('[Voice] フェイルセーフ発動: recovering 7秒超過 → 強制STT再開');
         this._waitingForTTS = false;
         ['koko', 'gpt', 'claude'].forEach(id => this._ui.highlightSister(id, false));
