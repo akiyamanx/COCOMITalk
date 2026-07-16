@@ -4,6 +4,7 @@
 // v0.6 2026-03-10 - AbortController対応（送信キャンセル機能）
 // v0.7 2026-03-24 - タイムアウト検出＋エラーメッセージ強化（30秒制限の原因特定支援）
 // v0.8 2026-07-16 - 送信直前JSON記録デバッグログ追加（お姉ちゃんJSON破損バグ調査用・DebugLogger稼働時のみ）
+// v0.9 2026-07-17 - 孤立サロゲート検知＋消毒（絵文字の片割れによる400対策・検知時は必ずログ）
 
 'use strict';
 
@@ -17,6 +18,56 @@ const ApiCommon = (() => {
 
   // v0.6追加 - 現在進行中のAbortControllerを保持
   let _activeControllers = [];
+
+  // --- v0.9 孤立サロゲート消毒ここから ---
+  // v0.9追加 - 孤立サロゲート（絵文字の片割れ）の検知と除去
+  // 絵文字などは内部的に2文字ペア（サロゲートペア）で表現される。
+  // 片割れだけが混入するとOpenAI/ClaudeがJSON不正(400)として拒否するため、
+  // 送信直前に除去する。除去した時は必ずログに残す（無言で直さない）。
+  function _sanitizeLoneSurrogates(s) {
+    const hits = [];
+    let out = '';
+    for (let i = 0; i < s.length; i++) {
+      const c = s.charCodeAt(i);
+      if (c >= 0xD800 && c <= 0xDBFF) {
+        const n = (i + 1 < s.length) ? s.charCodeAt(i + 1) : -1;
+        if (n >= 0xDC00 && n <= 0xDFFF) { out += s[i] + s[i + 1]; i++; continue; }
+        hits.push({ index: i, around: s.slice(Math.max(0, i - 40), i) + '◆' + s.slice(i + 1, i + 41) });
+        continue;
+      }
+      if (c >= 0xDC00 && c <= 0xDFFF) {
+        hits.push({ index: i, around: s.slice(Math.max(0, i - 40), i) + '◆' + s.slice(i + 1, i + 41) });
+        continue;
+      }
+      out += s[i];
+    }
+    return { text: hits.length ? out : s, hits: hits };
+  }
+
+  // v0.9追加 - 消毒付きJSON化（全API送信のチョークポイント）
+  function _stringifyWithSanitize(body, endpoint) {
+    const totalHits = [];
+    const json = JSON.stringify(body, (key, val) => {
+      if (typeof val !== 'string') return val;
+      const r = _sanitizeLoneSurrogates(val);
+      for (const h of r.hits) totalHits.push({ key: key, index: h.index, around: h.around });
+      return r.text;
+    });
+    if (totalHits.length) {
+      try {
+        console.warn('[ApiCommon] 孤立サロゲート' + totalHits.length + '件を消毒して送信 [' + endpoint + ']', totalHits);
+        if (typeof window !== 'undefined' && window.DebugLogger && window.DebugLogger.isActive()) {
+          const ts = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+          window.DebugLogger.addLog('[' + ts + '] 🧹孤立サロゲート消毒 [' + endpoint + '] ' + totalHits.length + '件');
+          for (const h of totalHits.slice(0, 3)) {
+            window.DebugLogger.addLog('[' + ts + '] 　key=' + h.key + ' 位置=' + h.index + ' 前後: ' + h.around);
+          }
+        }
+      } catch (_e) { /* ログ失敗は送信に影響させない */ }
+    }
+    return json;
+  }
+  // --- v0.9 孤立サロゲート消毒ここまで ---
 
   function getAuthToken() {
     try {
@@ -52,7 +103,8 @@ const ApiCommon = (() => {
       fetchBody = body;
     } else {
       headers['Content-Type'] = 'application/json';
-      fetchBody = JSON.stringify(body);
+      // v0.9変更 - 消毒付きJSON化（孤立サロゲート対策）
+      fetchBody = _stringifyWithSanitize(body, endpoint);
     }
 
     // v0.8追加 - 送信直前JSON記録（お姉ちゃんJSON破損バグ調査用・DebugLogger稼働時のみ記録）
@@ -134,7 +186,7 @@ const ApiCommon = (() => {
           'Content-Type': 'application/json',
           'X-COCOMI-AUTH': authToken,
         },
-        body: JSON.stringify(body),
+        body: _stringifyWithSanitize(body, endpoint), // v0.9変更 - 消毒付きJSON化
         signal: controller.signal,
       });
 
