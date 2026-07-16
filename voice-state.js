@@ -1,9 +1,11 @@
-// voice-state.js v1.0
+// voice-state.js v1.1
 // 音声入出力の単一状態機械（ステートマシン）＋ sessionID管理
 // 全モジュール（voice-input / whisper-provider / voice-ui）はこのクラスを参照する
 // 三姉妹会議決定: 「録音を止める」ではなく「このターンの入力を世界から無効にする」
 
 // v1.0 新規作成 - 実装指示書 Step 1
+// v1.1 2026-07-16 修正 - TRANSITIONSにspeaking遷移3本追加（recovering_input/idle/blocked-needs-tap→speaking）
+//   連続発話時にTTS開始の状態遷移が拒否され、状態機械が実態（再生中）と乖離するバグの根本修正
 
 /**
  * VoiceStateMachine
@@ -51,12 +53,15 @@ class VoiceStateMachine {
    */
   static get TRANSITIONS() {
     return {
-      'idle':              ['listening'],
+      // v1.1修正 - idle/recovering_input/blocked-needs-tapからspeakingへの遷移を追加
+      // 理由: TTSは復帰待ち中・待機中でも始まりうる（連続発話）。従来は遷移拒否で
+      //       状態機械が「復帰中」のまま実態（再生中）と乖離し、復帰ガードが誤通過していた
+      'idle':              ['listening', 'speaking'],
       'listening':         ['transcribing', 'speaking', 'idle', 'error'],
       'transcribing':      ['speaking', 'listening', 'idle', 'error'],
       'speaking':          ['recovering_input', 'idle', 'error'],
-      'recovering_input':  ['listening', 'blocked-needs-tap', 'error'],
-      'blocked-needs-tap': ['recovering_input', 'listening', 'idle', 'error'],
+      'recovering_input':  ['listening', 'blocked-needs-tap', 'speaking', 'error'],
+      'blocked-needs-tap': ['recovering_input', 'listening', 'idle', 'speaking', 'error'],
       'error':             ['idle'],
     };
   }
