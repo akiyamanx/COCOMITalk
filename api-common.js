@@ -3,6 +3,7 @@
 // v0.5 Step 2 - 共通ヘルパー新規作成
 // v0.6 2026-03-10 - AbortController対応（送信キャンセル機能）
 // v0.7 2026-03-24 - タイムアウト検出＋エラーメッセージ強化（30秒制限の原因特定支援）
+// v0.8 2026-07-16 - 送信直前JSON記録デバッグログ追加（お姉ちゃんJSON破損バグ調査用・DebugLogger稼働時のみ）
 
 'use strict';
 
@@ -53,6 +54,21 @@ const ApiCommon = (() => {
       headers['Content-Type'] = 'application/json';
       fetchBody = JSON.stringify(body);
     }
+
+    // v0.8追加 - 送信直前JSON記録（お姉ちゃんJSON破損バグ調査用・DebugLogger稼働時のみ記録）
+    // 既存フローは変更しない。ログ機能自体がAPIを止めないようtry/catchで完全隔離。
+    try {
+      if (!options.isFormData && typeof window !== 'undefined'
+          && window.DebugLogger && window.DebugLogger.isActive()) {
+        const _ts = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+        const _model = (body && body.model) ? body.model : '(model無し)';
+        const _hasTools = !!(body && body.tools);
+        const _len = (typeof fetchBody === 'string') ? fetchBody.length : -1;
+        const _head = (typeof fetchBody === 'string') ? fetchBody.slice(0, 300) : '(非文字列)';
+        window.DebugLogger.addLog(`[${_ts}] 📤送信JSON [${endpoint}] model=${_model} tools=${_hasTools} 長さ=${_len}`);
+        window.DebugLogger.addLog(`[${_ts}] 先頭300字: ${_head}`);
+      }
+    } catch (_e) { /* ログ失敗はAPIに影響させない */ }
 
     // v0.7追加 - リクエスト開始時刻を記録（タイムアウト判定用）
     const startTime = Date.now();
