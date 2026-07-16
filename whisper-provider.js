@@ -1,8 +1,10 @@
-// whisper-provider.js v1.7
+// whisper-provider.js v1.8
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
 // ピコン音なし・高精度・ブラウザ非依存
+// v1.8 2026-07-16 - resume()のガード期間(300ms)中にpause/stopが来た場合の追い越し防止
+//   （TTS開始のpause指示をresumeが追い越して録音再開→TTS中に録音が走るバグの修正）
 // v1.7 2026-04-05 - resume後AudioContext suspend対策（モバイルChrome無音放置で発話検出不能になるバグ修正）
 // v1.6 2026-04-04 - 最大録音時間を15秒→25秒に延長（長めの発話対応）
 // v1.5 2026-04-04 - ハルシネーションフィルタ追加（「以上で終わりです」等）
@@ -155,6 +157,11 @@ class WhisperProvider extends SpeechProvider {
     }
 
     await new Promise(r => setTimeout(r, 300));
+    // v1.8追加 - ガード期間中にpause()/stop()が来ていたら録音再開を中止（追い越し防止）
+    if (this._paused || !this._listening) {
+      this._debugLog('ガード期間中にpause/stop検出 → 録音再開を中止');
+      return;
+    }
     this._chunks = [];
     this._hasVoiceStarted = false;
     this._voiceCount = 0;
