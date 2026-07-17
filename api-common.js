@@ -5,6 +5,7 @@
 // v0.7 2026-03-24 - タイムアウト検出＋エラーメッセージ強化（30秒制限の原因特定支援）
 // v0.8 2026-07-16 - 送信直前JSON記録デバッグログ追加（お姉ちゃんJSON破損バグ調査用・DebugLogger稼働時のみ）
 // v0.9 2026-07-17 - 孤立サロゲート検知＋消毒（絵文字の片割れによる400対策・検知時は必ずログ）
+// v0.10 2026-07-17 - 400番台エラー時のbody全文＋本家エラー詳細ダンプ（真犯人特定用・DebugLogger稼働時のみ）
 
 'use strict';
 
@@ -136,6 +137,22 @@ const ApiCommon = (() => {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
         const errorMsg = errorData?.error?.message || errorData?.error || `HTTP ${response.status}`;
+        // v0.10エラーダンプ - 400番台の時だけ、送信body全文＋本家エラー詳細を記録（真犯人特定用）
+        // 既存のエラー処理フローは変更しない。ログ出力のみ追加。DebugLogger稼働時のみ。
+        try {
+          if (response.status >= 400 && response.status < 500
+              && typeof window !== 'undefined' && window.DebugLogger && window.DebugLogger.isActive()) {
+            const _ts = new Date().toLocaleTimeString('ja-JP', { hour12: false });
+            window.DebugLogger.addLog(`[${_ts}] 🚨${response.status}エラー [${endpoint}] 本家詳細: ${errorMsg}`);
+            if (typeof fetchBody === 'string') {
+              window.DebugLogger.addLog(`[${_ts}] 🚨送信body全長: ${fetchBody.length}字`);
+              // 全文を600字ずつ分割して記録（300字先頭ログの奥まで見るため）
+              for (let _p = 0; _p < fetchBody.length; _p += 600) {
+                window.DebugLogger.addLog(`[${_ts}] body[${_p}]: ${fetchBody.slice(_p, _p + 600)}`);
+              }
+            }
+          }
+        } catch (_e) { /* ログ失敗はエラー処理に影響させない */ }
         // v0.7追加 - 502/504/524はWorkerタイムアウトの可能性を明示
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
         if ([502, 504, 524].includes(response.status)) {
