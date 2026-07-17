@@ -1,21 +1,14 @@
-// whisper-provider.js v1.9
+// whisper-provider.js v1.10
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
-// ピコン音なし・高精度・ブラウザ非依存
-// v1.9 2026-07-17 - AudioContext不完全復帰の根本修正（音声バグ3）: 段階復帰はしご導入
-//   1段=resume完了をawaitしてからAnalyser張替（旧: 同期state判定で張替がほぼスキップ）
-//   2段=AudioContext作り直し（state=runningなのにグラフ死亡の「running詐称」対応）
-//   3段=streamごとフル再取得。番犬は>=判定＋同期リセットで再武装可能に（===50一発判定の修正）。
-//   suspend中の凍結値誤読防止＋recorder世代ガード/ハンドラ切断（放置25秒webm破損の根治）＋
-//   resume()のtimeout化＋track mute/ended観測ログ
-// v1.8 2026-07-16 - resume()のガード期間(300ms)中にpause/stopが来た場合の追い越し防止
-//   （TTS開始のpause指示をresumeが追い越して録音再開→TTS中に録音が走るバグの修正）
-// v1.7 2026-04-05 - resume後AudioContext suspend対策（モバイルChrome無音放置で発話検出不能になるバグ修正）
-// v1.6 2026-04-04 - 最大録音時間を15秒→25秒に延長（長めの発話対応）
-// v1.5 2026-04-04 - ハルシネーションフィルタ追加（「以上で終わりです」等）
-// v1.4 2026-03-27 - ハルシネーションフィルタ追加（おやすみなさい等）＋無音判定2500→3000ms延長
-
+// v1.10 2026-07-17 - 無音セグメント連続送信ループ修正（継続録音のhasVoiceStarted維持を廃止）＋
+//   無発話50秒で予防グラフ張替（maxVol>0で生存判定なのに感度低下する「半死」対策）
+// v1.9 2026-07-17 - 段階復帰はしご（resume待機張替/ctx作直し/フル再取得）＋番犬再武装＋
+//   recorder世代ガード・ハンドラ切断（webm破損根治）＋resume timeout化＋track観測
+// v1.8 2026-07-16 - resumeガード期間中のpause/stop追い越し防止
+// v1.7 2026-04-05 - resume後AudioContext suspend対策
+// v1.4〜v1.6: 履歴省略（ハルシネーションフィルタ/最大録音25秒延長）
 // v1.0〜v1.3: 履歴省略（Whisper STT/sessionIDガード/resumeガード期間/DebugLogger）
 
 /**
@@ -57,6 +50,7 @@ class WhisperProvider extends SpeechProvider {
     this._recorderGen = 0;         // recorder世代番号（旧チャンク混入防止）
     this._sourceNode = null;       // MediaStreamSource（張替時にdisconnectするため保持）
     this._lastSuspendResumeAt = 0; // suspended即応resumeのスロットル
+    this._noVoiceSegments = 0;     // v1.10追加 - 無発話セグメント連続数（予防はしご用）
 
     this._debugVisible = false;
     this._debugEl = null;
@@ -423,12 +417,18 @@ class WhisperProvider extends SpeechProvider {
     if (this._chunks.length > 0 && this._hasVoiceStarted) {
       const duration = Date.now() - (this._recordStartTime || Date.now());
       if (duration >= this._MIN_RECORD_TIME) {
-        this._sendToWhisper();
+        this._noVoiceSegments = 0; this._sendToWhisper(); // v1.10 - 発話ありセグメントでカウンタリセット
         return; // _sendToWhisper内で_afterWhisperResponseが呼ばれる
       }
     }
     // v1.7追加 - 発話なし/短すぎの場合も録音を再起動
     this._debugLog('セグメント終了（発話なし/短すぎ）→ 録音再起動');
+    // v1.10追加 - 無発話2連続（約50秒）で予防張替＝maxVol>0で生存判定なのに感度低下する「半死」対策
+    if (++this._noVoiceSegments >= 2) {
+      this._noVoiceSegments = 0;
+      this._debugLog('🔎 無発話50秒 → 予防はしご（1段目のみ）');
+      this._recoverStage1().catch(e => this._debugLog(`予防はしごNG: ${e.message}`));
+    }
     this._afterWhisperResponse();
   }
 
@@ -465,7 +465,8 @@ class WhisperProvider extends SpeechProvider {
     this._processing = false;
     if (this._paused) { this._debugLog('pause中 → 録音再開スキップ'); return; }
     if (window.voiceState && window.voiceState.isSpeaking()) { this._debugLog('speaking中 → 録音再開スキップ（voiceState）'); return; }
-    if (this._listening && this._stream) { this._startRecording(true); }
+    // v1.10変更 - 継続でも発話検出をリセット（維持すると沈黙中3秒毎に無音送信ループ＝実測7連発の修正）
+    if (this._listening && this._stream) { this._startRecording(false); }
     else { if (this.onEnd) this.onEnd(); }
   }
 
