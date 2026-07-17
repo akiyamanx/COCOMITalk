@@ -6,6 +6,7 @@
 // v1.2 2026-04-06 - 間隔変更をステータスバッジタップに変更（長押し廃止、スマホブラウザ対応）
 // v1.3 2026-04-06 - お散歩モード自動送信メッセージに短縮指示追加（TTS被り対策）
 // v1.4 2026-04-06 - 会話ラリー中の自動キャプチャ一時停止 + 表示/送信分離（カスタムイベント方式）
+// v1.5 2026-07-17 - 音声ターン優先ゲート＋スキップ時の一時画像破棄＋DebugLoggerログ（お姉ちゃんレポートNo.010 PoC A）
 
 'use strict';
 
@@ -316,18 +317,61 @@ const VisionUIController = (() => {
     });
   }
 
+  /** v1.5追加 - お散歩ログ（console＋DebugLogger両方へ。実機のデバッグ書き出しに載せるため） */
+  function _walkLog(msg) {
+    const line = `[VisionUI] ${msg}`;
+    console.log(line);
+    if (window.DebugLogger) window.DebugLogger.addLog(line);
+  }
+
+  /**
+   * v1.5追加 - 音声ターン専有中か判定（お姉ちゃんレポートNo.010 PoC A）
+   * 第一候補はvoiceControllerの公開API（voice-sender v1.1 mixin）。未定義環境ではvoiceState直読みへフォールバック
+   * @returns {string} busyの理由（busyでなければ空文字）
+   */
+  function _getVoiceBusyReason() {
+    const vc = window.voiceController;
+    if (vc && typeof vc.getVoiceTurnBusyReason === 'function') {
+      return vc.getVoiceTurnBusyReason();
+    }
+    const vs = window.voiceState;
+    if (vs) {
+      if (vs.isSpeaking()) return 'speaking(fallback)';
+      if (vs.isRecovering()) return 'recovering(fallback)';
+      if (vs.isTranscribing()) return 'transcribing(fallback)';
+    }
+    return '';
+  }
+
+  /** v1.5追加 - スキップ時に自動キャプチャ済みの一時画像を破棄（残留すると次の送信へ混入するため） */
+  function _discardAutoCapture(cause) {
+    if (typeof FileHandler !== 'undefined' && FileHandler.hasAttachment()) {
+      FileHandler.clearAttachment();
+      _walkLog(`一時画像を破棄（${cause}）`);
+    }
+  }
+
   /**
    * v1.4変更 - 自動キャプチャ画像をカスタムイベントで送信
    * 表示用テキストとAPI送信用テキストを分離する
    */
   function _autoSendToSister() {
+    // v1.5追加 - 音声ターン優先ゲート（アキヤの発話・TTS・マイク復帰・Whisper認識中は画像を送らない）
+    const busyReason = _getVoiceBusyReason();
+    if (busyReason) {
+      _walkLog(`音声ターン中のため自動送信スキップ (${busyReason})`);
+      _discardAutoCapture('voiceBusy');
+      return;
+    }
     if (_isPaused) {
-      console.log('[VisionUI] 会話ラリー中のため自動送信スキップ');
+      _walkLog('会話ラリー中のため自動送信スキップ'); // v1.5変更 - DebugLoggerにも記録
+      _discardAutoCapture('paused'); // v1.5追加
       return;
     }
     const msgInput = document.getElementById('msg-input');
     if (msgInput && msgInput.value.trim().length > 0) {
-      console.log('[VisionUI] 入力欄にテキストがあるため自動送信スキップ');
+      _walkLog('入力欄にテキストがあるため自動送信スキップ'); // v1.5変更
+      _discardAutoCapture('inputText'); // v1.5追加
       return;
     }
     const event = new CustomEvent('vision-auto-send', {
