@@ -9,6 +9,7 @@
 // v1.9 2026-03-16 - グループモードにattachment引数を追加（方針C: テキスト全員・画像リードのみ）
 // v2.0 2026-03-30 - Sprint 2: PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
 // v2.1 2026-04-06 - お散歩モード自動送信対応（vision-auto-sendイベント受信、表示/送信テキスト分離）
+// v2.2 2026-07-17 - お散歩自動送信のisProcessingスキップ時に一時添付を破棄（ゾンビ写真の次送信混入防止・PoC A）
 'use strict';
 
 /** チャットコアモジュール */
@@ -97,7 +98,7 @@ const ChatCore = (() => {
     // v2.1追加 - お散歩モード自動送信イベントリスナー
     _setupVisionAutoSend();
 
-    console.log('[ChatCore] 初期化完了 v2.1');
+    console.log('[ChatCore] 初期化完了 v2.2');
   }
 
   function _setupInputEvents() {
@@ -145,6 +146,8 @@ const ChatCore = (() => {
     document.addEventListener('vision-auto-send', (e) => {
       if (isProcessing) {
         console.log('[ChatCore] 処理中のため自動送信スキップ');
+        // v2.2追加 - 残留した自動キャプチャ画像を破棄（次の送信に混入するのを防ぐ）
+        if (typeof FileHandler !== 'undefined') FileHandler.clearAttachment();
         return;
       }
       const { displayText, apiText } = e.detail;
