@@ -7,6 +7,7 @@
 // v1.3 2026-04-06 - お散歩モード自動送信メッセージに短縮指示追加（TTS被り対策）
 // v1.4 2026-04-06 - 会話ラリー中の自動キャプチャ一時停止 + 表示/送信分離（カスタムイベント方式）
 // v1.5 2026-07-17 - 音声ターン優先ゲート＋スキップ時の一時画像破棄＋DebugLoggerログ（お姉ちゃんレポートNo.010 PoC A）
+// v1.5.1 2026-07-17 - _walkLogに時刻プレフィックス追加（書き出しログの時系列追跡用・whisper-providerと同形式）
 
 'use strict';
 
@@ -319,7 +320,8 @@ const VisionUIController = (() => {
 
   /** v1.5追加 - お散歩ログ（console＋DebugLogger両方へ。実機のデバッグ書き出しに載せるため） */
   function _walkLog(msg) {
-    const line = `[VisionUI] ${msg}`;
+    const ts = new Date().toLocaleTimeString('ja-JP', { hour12: false }); // v1.5.1追加
+    const line = `[${ts}] [VisionUI] ${msg}`;
     console.log(line);
     if (window.DebugLogger) window.DebugLogger.addLog(line);
   }
