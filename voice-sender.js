@@ -1,10 +1,11 @@
-// voice-sender.js v1.0
+// voice-sender.js v1.1
 // このファイルはVoiceControllerの送信処理メソッドを外部ファイルに分離したもの
 // voice-input.jsの行数削減のため、mixinパターンでVoiceController.prototypeに注入
 // voice-input.jsより後に読み込むこと（VoiceControllerクラスが先に定義されている必要あり）
 
 // v1.0 新規作成 - voice-input.js v1.8.3から送信処理を分離（mixin方式）
 // v1.0.1 修正 - 会議マイクもリングウェーブ＋呼吸グローデザインに対応
+// v1.1 2026-07-17 - isVoiceTurnBusy()/getVoiceTurnBusyReason()をmixin追加（お散歩ゲートPoC A。voice-input.jsが既に516行=500行ルール超過のため、行数削減の先例に倣い本ファイルへ配置）
 
 /**
  * VoiceControllerに送信系メソッドをmixin注入
@@ -122,4 +123,30 @@ VoiceController.prototype._updateMeetingMicState = function(state) {
   }
 };
 
-console.log('[VoiceSender] v1.0 mixin注入完了');
+// ═══════════════════════════════════════════
+// v1.1追加 - 音声ターン専有中判定（お散歩モード自動送信ゲート用・お姉ちゃんレポートNo.010 PoC A）
+// voice-input.js v2.5.0の_canResumeSTT()の否定形に「復帰中」「Whisper認識処理中」「発話キャプチャ中」を
+// 加えた広義busy判定。vision-ui-controller v1.5の自動送信ゲートが使う
+// ═══════════════════════════════════════════
+
+/** 音声ターン専有中の理由を返す（busyでなければ空文字）。理由文字列はスキップログの犯人特定用 */
+VoiceController.prototype.getVoiceTurnBusyReason = function() {
+  if (this._waitingForTTS) return 'waitingForTTS';
+  const vs = this._voiceState;
+  if (vs && vs.isSpeaking()) return 'speaking';
+  if (vs && vs.isRecovering()) return 'recovering';
+  if (vs && vs.isTranscribing()) return 'transcribing';
+  if (this._playback.isPlaying()) return 'ttsPlaying';
+  if (this._playback.isQueuePlaying()) return 'ttsQueue';
+  const st = this._stt;
+  if (st && st._processing === true) return 'whisperProcessing';
+  if (st && st._hasVoiceStarted === true && typeof st.isListening === 'function' && st.isListening()) return 'userSpeaking';
+  return '';
+};
+
+/** 音声ターン専有中か（お姉ちゃんレポートNo.010 §7.2の公開API） */
+VoiceController.prototype.isVoiceTurnBusy = function() {
+  return this.getVoiceTurnBusyReason() !== '';
+};
+
+console.log('[VoiceSender] v1.1 mixin注入完了');
