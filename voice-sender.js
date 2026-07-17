@@ -1,4 +1,4 @@
-// voice-sender.js v1.1
+// voice-sender.js v1.2
 // このファイルはVoiceControllerの送信処理メソッドを外部ファイルに分離したもの
 // voice-input.jsの行数削減のため、mixinパターンでVoiceController.prototypeに注入
 // voice-input.jsより後に読み込むこと（VoiceControllerクラスが先に定義されている必要あり）
@@ -6,6 +6,7 @@
 // v1.0 新規作成 - voice-input.js v1.8.3から送信処理を分離（mixin方式）
 // v1.0.1 修正 - 会議マイクもリングウェーブ＋呼吸グローデザインに対応
 // v1.1 2026-07-17 - isVoiceTurnBusy()/getVoiceTurnBusyReason()をmixin追加（お散歩ゲートPoC A。voice-input.jsが既に516行=500行ルール超過のため、行数削減の先例に倣い本ファイルへ配置）
+// v1.2 2026-07-17 - バッファ待ち窓(認識済みテキストの送信待ち約4秒)もbusy扱いに追加（Day117実測: 20:34:44に画像ターンが割り込みアキヤの発話が入力欄に取り残された事故の修正）
 
 /**
  * VoiceControllerに送信系メソッドをmixin注入
@@ -132,6 +133,11 @@ VoiceController.prototype._updateMeetingMicState = function(state) {
 /** 音声ターン専有中の理由を返す（busyでなければ空文字）。理由文字列はスキップログの犯人特定用 */
 VoiceController.prototype.getVoiceTurnBusyReason = function() {
   if (this._waitingForTTS) return 'waitingForTTS';
+  // v1.2追加 - バッファ待ち窓: 認識結果が無音確認3.5秒+確認0.5秒を経て送信されるまでの間。
+  // ここで画像ターンが発車するとChatCore.isProcessing競合で音声送信が静かに失敗する(実測事故)
+  if (this._buffer && this._buffer.length > 0) return 'bufferPending';
+  if (this._bufferTimer !== null) return 'bufferTimer';
+  if (this._confirmTimer !== null) return 'confirmPending';
   const vs = this._voiceState;
   if (vs && vs.isSpeaking()) return 'speaking';
   if (vs && vs.isRecovering()) return 'recovering';
@@ -149,4 +155,4 @@ VoiceController.prototype.isVoiceTurnBusy = function() {
   return this.getVoiceTurnBusyReason() !== '';
 };
 
-console.log('[VoiceSender] v1.1 mixin注入完了');
+console.log('[VoiceSender] v1.2 mixin注入完了');
