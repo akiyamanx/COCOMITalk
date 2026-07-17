@@ -1,7 +1,8 @@
 // COCOMITalk - Service Worker
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v3.43 2026-04-06 - お散歩モード改善（会話ラリー一時停止+表示/送信分離）
-const CACHE_NAME = 'cocomitalk-v3.59';
+// v3.60 2026-07-17 - お散歩ゲートPoC A反映（voice-sender v1.1 / vision-ui v1.5 / chat-core v2.2）
+const CACHE_NAME = 'cocomitalk-v3.60';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
