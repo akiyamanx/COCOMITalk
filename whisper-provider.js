@@ -1,8 +1,14 @@
-// whisper-provider.js v1.8
+// whisper-provider.js v1.9
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
 // ピコン音なし・高精度・ブラウザ非依存
+// v1.9 2026-07-17 - AudioContext不完全復帰の根本修正（音声バグ3）: 段階復帰はしご導入
+//   1段=resume完了をawaitしてからAnalyser張替（旧: 同期state判定で張替がほぼスキップ）
+//   2段=AudioContext作り直し（state=runningなのにグラフ死亡の「running詐称」対応）
+//   3段=streamごとフル再取得。番犬は>=判定＋同期リセットで再武装可能に（===50一発判定の修正）。
+//   suspend中の凍結値誤読防止＋recorder世代ガード/ハンドラ切断（放置25秒webm破損の根治）＋
+//   resume()のtimeout化＋track mute/ended観測ログ
 // v1.8 2026-07-16 - resume()のガード期間(300ms)中にpause/stopが来た場合の追い越し防止
 //   （TTS開始のpause指示をresumeが追い越して録音再開→TTS中に録音が走るバグの修正）
 // v1.7 2026-04-05 - resume後AudioContext suspend対策（モバイルChrome無音放置で発話検出不能になるバグ修正）
@@ -44,7 +50,13 @@ class WhisperProvider extends SpeechProvider {
     this._voiceCount = 0;
     // v1.7追加 - AudioContext suspend検出カウンター
     this._zeroVolumeCount = 0;
-    this._ZERO_VOLUME_THRESHOLD = 50; // 5秒間（100ms×50回）連続ゼロでresume試行
+    this._ZERO_VOLUME_THRESHOLD = 50; // 5秒間（100ms×50回）連続ゼロで復帰はしご発火
+    // v1.9追加 - 段階復帰はしごの状態
+    this._recoveryAttempts = 0;    // 連続復帰試行回数（実音声観測でリセット）
+    this._recovering = false;      // 復帰処理中フラグ（処理中は監視を一時停止）
+    this._recorderGen = 0;         // recorder世代番号（旧チャンク混入防止）
+    this._sourceNode = null;       // MediaStreamSource（張替時にdisconnectするため保持）
+    this._lastSuspendResumeAt = 0; // suspended即応resumeのスロットル
 
     this._debugVisible = false;
     this._debugEl = null;
@@ -106,10 +118,15 @@ class WhisperProvider extends SpeechProvider {
         audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       });
       this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-      const source = this._audioCtx.createMediaStreamSource(this._stream);
-      this._analyser = this._audioCtx.createAnalyser();
-      this._analyser.fftSize = 512;
-      source.connect(this._analyser);
+      this._sourceNode = null;
+      this._rewireAnalyser(); // v1.9変更 - source/analyser構築を共通化（張替と同一経路）
+      // v1.9追加 - trackのmute/ended観測（OS側ミュートの現行犯確保）
+      const track = this._stream.getAudioTracks()[0];
+      if (track) {
+        track.onmute = () => this._debugLog('🔇 audio trackがmute（OS/ブラウザ側）');
+        track.onunmute = () => this._debugLog('🔊 audio trackがunmute');
+        track.onended = () => this._debugLog('⛔ audio trackがended');
+      }
       this._startRecording();
       this._listening = true;
       this._debugLog('=== Whisper録音開始 ===');
@@ -149,10 +166,14 @@ class WhisperProvider extends SpeechProvider {
     if (this._audioCtx && this._audioCtx.state !== 'running') {
       this._debugLog(`AudioContext状態: ${this._audioCtx.state} → resume()試行`);
       try {
-        await this._audioCtx.resume();
+        // v1.9変更 - resumeがpendingのまま返らない端末でresume()全体が固まるのを防止（1.5秒で見切り）
+        await Promise.race([
+          this._audioCtx.resume(),
+          new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 1500ms')), 1500)),
+        ]);
         this._debugLog(`AudioContext復帰成功: ${this._audioCtx.state}`);
       } catch (e) {
-        this._debugLog(`AudioContext resume失敗: ${e.message}`);
+        this._debugLog(`AudioContext resume失敗/未完: ${e.message}（番犬はしごに委ねて続行）`);
       }
     }
 
@@ -173,9 +194,7 @@ class WhisperProvider extends SpeechProvider {
   stopAndGetText() { this.stop(); return ''; }
 
   _startRecording(isContinuation = false) {
-    if (this._recorder && this._recorder.state !== 'inactive') {
-      try { this._recorder.stop(); } catch (e) { /* ignore */ }
-    }
+    this._detachRecorder(); // v1.9変更 - ハンドラ切断してから停止（旧チャンクの次世代混入＝webm破損防止）
     if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
     if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
     if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
@@ -185,8 +204,13 @@ class WhisperProvider extends SpeechProvider {
     this._zeroVolumeCount = 0; // v1.7追加 - 録音開始時にゼロカウンターリセット
     const mimeType = this._getSupportedMimeType();
     this._debugLog(`MIMEタイプ: ${mimeType}`);
+    const gen = ++this._recorderGen; // v1.9追加 - recorder世代番号
     this._recorder = new MediaRecorder(this._stream, { mimeType: mimeType, audioBitsPerSecond: 32000 });
-    this._recorder.ondataavailable = (e) => { if (e.data.size > 0) this._chunks.push(e.data); };
+    this._recorder.ondataavailable = (e) => {
+      // v1.9追加 - 世代ガード（旧recorderの遅延チャンク混入＝Invalid file format根治の二重防御）
+      if (gen !== this._recorderGen) { if (e.data.size > 0) this._debugLog(`🧟 旧recorder(gen${gen})残チャンク破棄 ${e.data.size}B`); return; }
+      if (e.data.size > 0) this._chunks.push(e.data);
+    };
     this._recorder.start(100);
     this._recordStartTime = Date.now();
     this._startVolumeMonitor();
@@ -200,7 +224,7 @@ class WhisperProvider extends SpeechProvider {
     if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
     if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
     if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
-    if (this._recorder && this._recorder.state !== 'inactive') { this._recorder.stop(); }
+    this._detachRecorder(); // v1.9変更 - ハンドラ切断してから停止（stop後の遅延flushが次のchunksを汚染していた）
     if (sendRemaining && this._chunks.length > 0 && this._hasVoiceStarted) {
       const duration = Date.now() - (this._recordStartTime || Date.now());
       if (duration >= this._MIN_RECORD_TIME) { this._sendToWhisper(); }
@@ -212,40 +236,51 @@ class WhisperProvider extends SpeechProvider {
     this._stopRecording(false);
     if (this._stream) { this._stream.getTracks().forEach(t => t.stop()); this._stream = null; }
     if (this._audioCtx && this._audioCtx.state !== 'closed') { this._audioCtx.close().catch(() => {}); this._audioCtx = null; }
-    this._analyser = null; this._recorder = null; this._chunks = [];
+    this._analyser = null; this._sourceNode = null; this._recorder = null; this._chunks = [];
   }
 
-  // v1.7修正 - ボリュームモニターにAudioContext suspend自動検出＋復帰処理を追加
+  // v1.9全面改修 - 番犬の再武装＋段階復帰はしご（穴1: ===50一発判定→>=＋同期リセット /
+  //   穴2: resume直後の同期state判定で張替スキップ→await後に張替 / 穴3: running詐称・凍結値→段階エスカレーション）
   _startVolumeMonitor() {
     if (!this._analyser) return;
     const dataArray = new Uint8Array(this._analyser.frequencyBinCount);
     this._volumeCheckInterval = setInterval(() => {
-      if (!this._analyser) return;
+      if (!this._analyser || this._recovering) return;
 
-      // v1.7追加 - AudioContextがsuspendedなら即座にresume試行
-      if (this._audioCtx && this._audioCtx.state === 'suspended') {
-        this._debugLog('AudioContext suspended検出 → resume()試行');
-        this._audioCtx.resume().then(() => {
-          this._debugLog(`AudioContext復帰: ${this._audioCtx.state}`);
-        }).catch(e => {
-          this._debugLog(`AudioContext resume失敗: ${e.message}`);
-        });
-        return; // resume完了を待って次のインターバルで再チェック
+      // v1.9変更 - ctxがrunning以外なら読まずに死亡疑い扱い（suspend中の凍結値を「静か」と誤読しない）
+      const ctxDead = !this._audioCtx || this._audioCtx.state !== 'running';
+
+      // v1.9変更 - suspendedは即resume試行（1秒スロットル）。ただしreturnせず、はしごカウントも並行して進める
+      //   （v1.7はここでreturnしていたため、resumeが効かない端末で2段目以降へ永遠に進めなかった）
+      if (ctxDead && this._audioCtx && this._audioCtx.state === 'suspended') {
+        const now = Date.now();
+        if (now - this._lastSuspendResumeAt > 1000) {
+          this._lastSuspendResumeAt = now;
+          this._debugLog('AudioContext suspended検出 → resume()試行');
+          this._audioCtx.resume().then(() => {
+            this._debugLog(`AudioContext復帰: ${this._audioCtx.state}`);
+          }).catch(e => { this._debugLog(`AudioContext resume失敗: ${e.message}`); });
+        }
       }
 
-      this._analyser.getByteFrequencyData(dataArray);
-      let sum = 0;
-      for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
-      const avgVolume = sum / dataArray.length;
-
-      // v1.7追加 - 最大値もチェック（suspend時は全要素0になる）
+      let avgVolume = 0;
       let maxVolume = 0;
-      for (let i = 0; i < dataArray.length; i++) {
-        if (dataArray[i] > maxVolume) maxVolume = dataArray[i];
+      if (!ctxDead) {
+        this._analyser.getByteFrequencyData(dataArray);
+        let sum = 0;
+        for (let i = 0; i < dataArray.length; i++) {
+          sum += dataArray[i];
+          if (dataArray[i] > maxVolume) maxVolume = dataArray[i];
+        }
+        avgVolume = sum / dataArray.length;
       }
 
-      if (avgVolume > this._SILENCE_THRESHOLD) {
-        this._zeroVolumeCount = 0; // v1.7追加 - 音声検出でリセット
+      if (!ctxDead && avgVolume > this._SILENCE_THRESHOLD) {
+        this._zeroVolumeCount = 0;
+        if (this._recoveryAttempts > 0) {
+          this._debugLog(`✅ 実音声観測 → はしごリセット（${this._recoveryAttempts}段目で復活）`);
+          this._recoveryAttempts = 0;
+        }
         if (!this._hasVoiceStarted) {
           this._voiceCount++;
           if (this._voiceCount >= this._VOICE_START_COUNT) {
@@ -258,37 +293,20 @@ class WhisperProvider extends SpeechProvider {
       } else {
         this._voiceCount = 0;
 
-        // v1.7追加 - 連続ゼロボリューム検出（AudioContext死亡の可能性）
-        if (maxVolume === 0) {
+        if (ctxDead || maxVolume === 0) {
+          // v1.9変更 - 死亡疑いカウント（>=判定＋同期リセット＝再武装できる番犬）
           this._zeroVolumeCount++;
-          if (this._zeroVolumeCount === this._ZERO_VOLUME_THRESHOLD) {
-            this._debugLog(`⚠️ ${this._ZERO_VOLUME_THRESHOLD}回連続ゼロボリューム → AudioContext復帰試行`);
-            if (this._audioCtx && this._audioCtx.state !== 'closed') {
-              this._audioCtx.resume().then(() => {
-                this._debugLog(`AudioContext強制resume: ${this._audioCtx.state}`);
-                this._zeroVolumeCount = 0;
-              }).catch(e => {
-                this._debugLog(`AudioContext強制resume失敗: ${e.message}`);
-              });
-
-              // v1.7追加 - AnalyserNodeも再接続（sourceが切断されてる可能性）
-              try {
-                if (this._stream && this._audioCtx.state === 'running') {
-                  const source = this._audioCtx.createMediaStreamSource(this._stream);
-                  const newAnalyser = this._audioCtx.createAnalyser();
-                  newAnalyser.fftSize = 512;
-                  source.connect(newAnalyser);
-                  this._analyser = newAnalyser;
-                  this._debugLog('AnalyserNode再生成＋再接続完了');
-                }
-              } catch (e) {
-                this._debugLog(`AnalyserNode再接続エラー: ${e.message}`);
-              }
-            }
+          if (this._zeroVolumeCount >= this._ZERO_VOLUME_THRESHOLD) {
+            this._zeroVolumeCount = 0;
+            this._climbRecoveryLadder(ctxDead ? `ctx=${this._audioCtx ? this._audioCtx.state : 'null'}` : 'maxVol=0');
           }
         } else {
           // maxVolume > 0 だけどavgが閾値以下 = 本当に静かなだけ（正常）
           this._zeroVolumeCount = 0;
+          if (this._recoveryAttempts > 0) {
+            this._debugLog(`✅ 音響グラフ生存確認 → はしごリセット（${this._recoveryAttempts}段目で復活）`);
+            this._recoveryAttempts = 0;
+          }
         }
 
         if (this._hasVoiceStarted && !this._silenceTimer && !this._processing) {
@@ -301,6 +319,95 @@ class WhisperProvider extends SpeechProvider {
     }, this._VOLUME_CHECK_MS);
   }
 
+  // v1.9追加 - 段階復帰はしご本体（1段=resume待機+張替 / 2段=ctx作直し / 3段=streamフル再取得）
+  _climbRecoveryLadder(reason) {
+    this._recoveryAttempts++;
+    const stage = Math.min(this._recoveryAttempts, 3);
+    this._debugLog(`🪜 復帰はしご${stage}段目 発火（${reason}, 通算${this._recoveryAttempts}回）`);
+    this._recovering = true;
+    const safety = setTimeout(() => { this._recovering = false; }, 8000); // 宙吊り保険
+    const done = () => { clearTimeout(safety); this._recovering = false; };
+    if (stage === 1) {
+      this._recoverStage1().catch(e => this._debugLog(`1段目エラー: ${e.message}`)).finally(done);
+    } else if (stage === 2) {
+      this._rebuildAudioGraph().catch(e => this._debugLog(`2段目エラー: ${e.message}`)).finally(done);
+    } else {
+      this._fullRestart().catch(e => this._debugLog(`3段目エラー: ${e.message}`)).finally(done);
+    }
+  }
+
+  // v1.9追加 - はしご1段目: resume完了をtimeout付きで待ってからAnalyser張替
+  async _recoverStage1() {
+    if (!this._audioCtx || this._audioCtx.state === 'closed') return;
+    try {
+      await Promise.race([
+        this._audioCtx.resume(),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout 1000ms')), 1000)),
+      ]);
+      this._debugLog(`1段目: resume完了 state=${this._audioCtx.state}`);
+    } catch (e) {
+      this._debugLog(`1段目: resume未完（${e.message}）`);
+    }
+    if (this._stream && this._audioCtx && this._audioCtx.state === 'running') this._rewireAnalyser();
+  }
+
+  // v1.9追加 - 現在のctx上でsource/analyserを張替（旧sourceはdisconnectしてノードリーク防止）
+  _rewireAnalyser() {
+    try {
+      if (this._sourceNode) { try { this._sourceNode.disconnect(); } catch (e) { /* ignore */ } }
+      this._sourceNode = this._audioCtx.createMediaStreamSource(this._stream);
+      const analyser = this._audioCtx.createAnalyser();
+      analyser.fftSize = 512;
+      this._sourceNode.connect(analyser);
+      this._analyser = analyser;
+      this._debugLog('Analyser張替完了');
+    } catch (e) {
+      this._debugLog(`Analyser張替エラー: ${e.message}`);
+    }
+  }
+
+  // v1.9追加 - はしご2段目: AudioContextごと作り直し（running詐称＝stateは正常なのにグラフ死亡へ対応）
+  async _rebuildAudioGraph() {
+    if (!this._stream) return;
+    this._debugLog('2段目: AudioContext作り直し');
+    if (this._audioCtx && this._audioCtx.state !== 'closed') {
+      try { await this._audioCtx.close(); } catch (e) { /* ignore */ }
+    }
+    this._audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    this._sourceNode = null;
+    this._rewireAnalyser();
+    this._debugLog(`2段目: 再構築完了 state=${this._audioCtx.state}`);
+  }
+
+  // v1.9追加 - はしご3段目: getUserMediaからフル再取得（最終段）。
+  //   pause/stop割込時は見送り＝TTS後はvoice-input側の「stream死亡→フル再起動」既存経路が受け止める
+  async _fullRestart() {
+    if (!this._listening || this._paused) { this._debugLog('3段目: pause/stop中 → 見送り'); return; }
+    this._debugLog('3段目: streamごとフル再取得');
+    this._stopRecording(false);
+    if (this._stream) { this._stream.getTracks().forEach(t => t.stop()); this._stream = null; }
+    if (this._audioCtx && this._audioCtx.state !== 'closed') {
+      try { await this._audioCtx.close(); } catch (e) { /* ignore */ }
+    }
+    this._audioCtx = null;
+    this._analyser = null;
+    this._sourceNode = null;
+    if (!this._listening) { this._debugLog('3段目: stop検出 → 見送り'); return; }
+    if (this._paused) { this._debugLog('3段目: pause検出 → 見送り（TTS後の復帰に委ねる）'); return; }
+    this._listening = false; // start()の二重起動ガードを通すため一旦落とす
+    await this.start({ language: 'ja-JP' });
+  }
+
+  // v1.9追加 - recorderのハンドラを差し替えてから停止（遅延チャンクは破棄しつつ🧟ログで現行犯観測）
+  _detachRecorder() {
+    if (!this._recorder) return;
+    const gen = this._recorderGen;
+    this._recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) this._debugLog(`🧟 旧recorder(gen${gen})の遅延チャンク破棄 ${e.data.size}B`);
+    };
+    if (this._recorder.state !== 'inactive') { try { this._recorder.stop(); } catch (e) { /* ignore */ } }
+  }
+
   // v1.7修正 - _onSegmentEnd後に_afterWhisperResponseが確実に呼ばれるようにする
   _onSegmentEnd() {
     if (this._processing) return;
@@ -309,9 +416,7 @@ class WhisperProvider extends SpeechProvider {
     if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
     if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
 
-    if (this._recorder && this._recorder.state !== 'inactive') {
-      this._recorder.stop();
-    }
+    this._detachRecorder(); // v1.9変更 - ハンドラ切断してから停止
 
     // v1.7修正 - _hasVoiceStartedに関わらず_afterWhisperResponseを呼ぶ
     // （無音のまま_maxTimerが到達した場合も録音を再起動するため）
