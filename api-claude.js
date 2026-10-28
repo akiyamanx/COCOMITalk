@@ -6,6 +6,9 @@
 // v1.5 2026-03-11 - Phase 2c ToolRegistry統合（複数ツール対応）
 // v1.6 2026-03-12 - history末尾のuserMessage二重送信防止
 // v1.7 2026-03-19 - skipToolsオプション追加（会議モードでtool_useエラー防止）
+// v1.8 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定。temperatureは段階表で送信可否を判定（Claude 4.7+は送らない）
+// v1.9 2026-10-28 - 思考の強さ: 設定で選ばれた時だけ output_config.effort を送る（未選択はAPI既定。xhigh/maxは出力枠を16000に拡大）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
 
 'use strict';
 
@@ -16,14 +19,16 @@
 const ApiClaude = (() => {
 
   // --- モデル定義 ---
-  const MODELS = {
-    'haiku' : 'claude-haiku-4-5-20251001',
-    'opus'  : 'claude-opus-4-6',            // v1.2修正 - 正しいモデル名
-    'sonnet': 'claude-sonnet-4-6',
-  };
+  // v1.8変更 - モデルIDは model-tiers.js が唯一の定義元（lite/standard/high。旧キー haiku/sonnet/opus も受け付ける）
+  const PROVIDER = 'anthropic';
 
-  // デフォルトモデル（コスト安全・まず安いモデルでテスト）
-  const DEFAULT_MODEL = 'haiku';
+  // デフォルトモデル（段階名。コスト安全・まず安いモデル）
+  const DEFAULT_MODEL = 'lite';
+
+  /** 思考トークンも max_tokens に含まれるため、xhigh/max では枠を広げる（model-effort.js） */
+  function _maxTokens(effort) {
+    return typeof ModelEffort !== 'undefined' ? ModelEffort.maxTokensFor('anthropic', effort, 4096) : 4096;
+  }
 
   /**
    * Claude APIにメッセージを送信
@@ -39,19 +44,24 @@ const ApiClaude = (() => {
       throw new Error('COCOMI認証トークンが設定されていません。設定画面からトークンを入力してください。');
     }
 
-    const modelKey  = options.model || DEFAULT_MODEL;
-    const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
+    // v1.8変更 - 段階/旧キー → モデルID。不明なキーは軽量にフォールバック
+    const tier      = ModelTiers.resolve(PROVIDER, options.model || DEFAULT_MODEL);
+    const modelName = tier.id;
     const messages  = _buildMessages(userMessage, history, options.attachment);
 
     // リクエストボディ（Anthropic形式、systemは別パラメータ）
     const body = {
       model     : modelName,
-      max_tokens: options.maxTokens || 4096,
+      max_tokens: options.maxTokens || _maxTokens(tier.effort),
       messages  : messages,
     };
 
-    // v1.2修正 - Opus 4.6はtemperatureが使えないため省略、他モデルは0.3
-    if (!modelName.includes('opus')) {
+    // v1.9追加 - 思考の強さ（公式: トップレベル output_config:{effort}。betaヘッダ不要。5.5系は low/medium/high/xhigh/max 有効）【実API未確認】
+    if (tier.effort) body.output_config = { effort: tier.effort };
+
+    // v1.8変更 - Claude 4.7以降は temperature を非デフォルト値で送ると400になる【公式ドキュメント記載・実API未確認】
+    // ため、段階表で sendTemperature:false のモデルには送らない（現在の3段階は全て送らない）
+    if (tier.sendTemperature) {
       body.temperature = 0.3;
     }
 
@@ -204,7 +214,7 @@ const ApiClaude = (() => {
    * 利用可能なモデル一覧を取得
    */
   function getModels() {
-    return { ...MODELS };
+    return ModelTiers.idMap(PROVIDER);
   }
 
   return {

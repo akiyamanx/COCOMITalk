@@ -11,6 +11,10 @@
 // v1.5 2026-03-11 - Phase 2a+ Function Calling対応（web_search自動検索）
 // v1.6 2026-03-11 - Phase 2c ToolRegistry統合（複数ツール対応）
 // v1.7 2026-03-12 - history末尾のuserMessage二重送信防止
+// v1.8 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定。GPT-6系対応（reasoning_effort付与・Terra/Astraはツール不可）
+// v1.9 2026-10-28 - Terra/Astra: 設定スイッチON時は Responses API（api-openai-responses.js）でツール付き。失敗時は従来のChat Completions（ツール無し）へ自動フォールバック
+// v2.0 2026-10-28 - 高頭脳をAstraに。強さ(reasoning_effort)は設定で変更可（tier.params経由）。xhigh/maxは出力枠を32000に拡大。Lunaは強さnone以外だとChat Completionsでツール無し
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
 
 'use strict';
 
@@ -21,14 +25,11 @@
 const ApiOpenAI = (() => {
 
   // --- モデル定義 ---
-  const MODELS = {
-    'gpt54' : 'gpt-5.4',        // v1.1追加 - 会議モード最上位
-    'gpt4o' : 'gpt-4o',
-    'mini'  : 'gpt-4o-mini',
-  };
+  // v1.8変更 - モデルIDは model-tiers.js が唯一の定義元（lite/standard/high。旧キー mini/gpt4o/gpt54 も受け付ける）
+  const PROVIDER = 'openai';
 
-  // デフォルトモデル
-  const DEFAULT_MODEL = 'mini';
+  // デフォルトモデル（段階名）
+  const DEFAULT_MODEL = 'lite';
 
   // v1.3追加 - GPT-5系はdeveloperロール使用（sendMessageで動的に設定）
   let _currentSystemRole = 'system';
@@ -46,13 +47,27 @@ const ApiOpenAI = (() => {
       throw new Error('COCOMI認証トークンが設定されていません。設定画面からトークンを入力してください。');
     }
 
-    const modelKey  = options.model || DEFAULT_MODEL;
-    const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
+    // v1.8変更 - 段階/旧キー → モデルID＋追加パラメータ。不明なキーは軽量にフォールバック
+    const tier      = ModelTiers.resolve(PROVIDER, options.model || DEFAULT_MODEL);
+    const modelName = tier.id;
+    const isReasoning = ModelTiers.isReasoningOpenAI(modelName); // gpt-5 / gpt-6
 
-    // v1.3追加 - GPT-5系はdeveloperロール、それ以外はsystemロール
-    _currentSystemRole = modelName.startsWith('gpt-5') ? 'developer' : 'system';
+    // v1.3追加 - GPT-5/6系はdeveloperロール、それ以外はsystemロール
+    _currentSystemRole = isReasoning ? 'developer' : 'system';
 
     const messages  = _buildMessages(userMessage, systemPrompt, history, options.attachment);
+
+    // v1.9追加 - Terra/Sol＋スイッチON → Responses API（Web検索等のツール可）。【実API未確認】失敗したら下の従来経路へ戻る
+    if (typeof ApiOpenAIResponses !== 'undefined' && ApiOpenAIResponses.isActiveFor(tier)) {
+      try {
+        const viaResponses = await ApiOpenAIResponses.run({ tier, messages, options });
+        if (viaResponses) return viaResponses;
+      } catch (e) {
+        if (e && e.name === 'AbortError') throw e;   // ユーザーの中断は戻さない
+        ApiOpenAIResponses.markFailed();
+        console.warn('[ApiOpenAI] Responses API失敗 → Chat Completionsへフォールバック:', e && e.message);
+      }
+    }
 
     // リクエストボディ
     const body = {
@@ -60,17 +75,23 @@ const ApiOpenAI = (() => {
       messages: messages,
     };
 
+    // v1.8追加 - 段階ごとの追加パラメータ（reasoning_effort等）【実API未確認】
+    Object.assign(body, tier.params);
+
     // v1.6変更 - ToolRegistry経由で全ツール定義を追加（Phase 2c）
     // GPT-5系はreasoningモデルのためFunction Callingの互換性に注意
-    if (typeof ToolRegistry !== 'undefined' && !modelName.startsWith('gpt-5')) {
+    // v1.8変更 - GPT-6: Luna(reasoning_effort=none)だけChat Completionsでツール可。Terra/SolはResponses API必須のためツール無し
+    //   v1.9: Terra/Solのツールは Responses API 経路（上のブロック。既定オフ・中継側の対応が必要）。
+    //   このChat Completions経路ではTerra/Solにツールを付けない（フォールバック時もここ）。
+    if (typeof ToolRegistry !== 'undefined' && (!isReasoning || tier.chatTools) && !modelName.startsWith('gpt-5')) {
       body.tools = ToolRegistry.getOpenAITools();
       body.tool_choice = 'auto';
     }
 
     // v1.4修正 - GPT-5系のmax_completion_tokensを8192に増加
     // リーズニングトークンが3000〜4000消費するため、4096では出力枠が足りない
-    if (modelName.startsWith('gpt-5')) {
-      body.max_completion_tokens = options.maxTokens || 8192;
+    if (isReasoning) {
+      body.max_completion_tokens = options.maxTokens || (typeof ModelEffort !== 'undefined' ? ModelEffort.maxTokensFor('openai', tier.effort, 8192) : 8192);
     } else {
       body.max_tokens = options.maxTokens || 1024;
     }
@@ -237,7 +258,7 @@ const ApiOpenAI = (() => {
    * 利用可能なモデル一覧を取得
    */
   function getModels() {
-    return { ...MODELS };
+    return ModelTiers.idMap(PROVIDER);
   }
 
   return {

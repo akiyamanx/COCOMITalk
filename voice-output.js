@@ -1,4 +1,4 @@
-// voice-output.js v2.3
+// voice-output.js v2.5
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -11,13 +11,18 @@
 // v2.1 修正 - _speakOneChunkにVOICEVOX残りチャンク再生追加（#77読み飛ばし根本修正）
 // v2.2 クリーンアップ - デバッグパネル・ログDL機能削除（本番用）
 // v2.3 修正 - speakQueueマイク復帰バグ修正（onPlayStart/onPlayEndをキュー全体で1回ずつに統一）
+// v2.4 2026-10-28 - Gemini TTS追加（声が未割り当て/失敗時はOpenAIの声へ戻す。_synth()に集約）
+// v2.5 2026-10-28 - 既定をGeminiに。場面の話し方(style)をGeminiへ渡す。Gemini→OpenAI→VOICEVOXの順に戻す。声が使えない時は選択名もOpenAIへ揃える
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
 
 class AudioPlaybackManager {
   constructor() {
     this._openaiProvider = new OpenAITTSProvider();
     this._voicevoxProvider = (typeof VoicevoxTTSProvider !== 'undefined')
       ? new VoicevoxTTSProvider() : null;
+    this._geminiProvider = (typeof GeminiTTSProvider !== 'undefined') ? new GeminiTTSProvider() : null;
     this._ttsProvider = this._openaiProvider;
+    this.switchProvider(typeof getTTSProviderName === 'function' ? getTTSProviderName() : 'gemini');
     this._currentAudio = null;
     this._playing = false;
     this._queue = [];
@@ -33,11 +38,43 @@ class AudioPlaybackManager {
   }
 
   switchProvider(providerName) {
+    let used = 'openai';
     if (providerName === 'voicevox' && this._voicevoxProvider) {
-      this._ttsProvider = this._voicevoxProvider;
+      this._ttsProvider = this._voicevoxProvider; used = 'voicevox';
+    } else if (providerName === 'gemini' && this._geminiProvider) {
+      this._ttsProvider = this._geminiProvider; used = 'gemini';
     } else {
-      this._ttsProvider = this._openaiProvider;
+      this._ttsProvider = this._openaiProvider; // 選んだ方が使えない時もOpenAI
     }
+    // 声の名前の表(getSisterVoice)も実際に使うプロバイダーに揃える（Geminiの声名をOpenAIへ渡さない）
+    if (typeof setTTSProviderName === 'function' && (typeof getTTSProviderName !== 'function' || getTTSProviderName() !== used)) setTTSProviderName(used);
+  }
+
+  /** 読み上げ音声を作る。Gemini選択時だけ、声が未割り当て/失敗ならOpenAIの声 → それも失敗ならVOICEVOXの声へ戻す（OpenAI TTSは2027-01-06停止まで） */
+  async _synth(text, voice, sisterId, speed, style) {
+    try {
+      return await this._ttsProvider.synthesize(text, voice, { speed, style });
+    } catch (e) {
+      if (this._ttsProvider !== this._geminiProvider) throw e;
+      const map = SISTER_VOICE_MAP[sisterId] || {};
+      let err = e;
+      if (this._openaiProvider.isAvailable()) {
+        this._log(`Gemini TTS → OpenAIへ戻す: ${e.message}`);
+        try {
+          return await this._openaiProvider.synthesize(text, map.openai?.voice || 'alloy', { speed });
+        } catch (e2) { err = e2; }
+      }
+      if (this._voicevoxProvider && map.voicevox?.voice) {
+        this._log(`OpenAI TTS → VOICEVOXへ戻す: ${err.message}`);
+        return await this._voicevoxProvider.synthesize(text, map.voicevox.voice, { speed });
+      }
+      throw err;
+    }
+  }
+
+  /** この文のトーンから話し方(style)を決める。tone-style.js が無い/失敗でも読み上げは止めない */
+  _styleFor(text) {
+    try { return (typeof ToneStyle !== 'undefined') ? ToneStyle.styleForText(text) : undefined; } catch (e) { return undefined; }
   }
 
   // v2.2簡素化 - console.logのみ（デバッグパネル削除）
@@ -51,6 +88,7 @@ class AudioPlaybackManager {
 
     const cleanText = this._cleanTextForTTS(text);
     if (cleanText.length === 0) return;
+    if (options.style === undefined) options = { ...options, style: this._styleFor(text) }; // 返信全体で1つのトーン（チャンクごとに変えない）
 
     const CHUNK_LIMIT = 200;
     if (cleanText.length > CHUNK_LIMIT) {
@@ -92,9 +130,7 @@ class AudioPlaybackManager {
   _speakOneChunk(chunkText, voice, sisterId, options = {}) {
     return new Promise(async (resolve, reject) => {
       try {
-        const audio = await this._ttsProvider.synthesize(
-          chunkText, voice, { speed: options.speed || 1.0 }
-        );
+        const audio = await this._synth(chunkText, voice, sisterId, options.speed || 1.0, options.style);
 
         // v2.1追加 - VOICEVOX残りチャンク情報を取得
         const vvRemaining = audio._vvRemainingChunks || [];
@@ -158,7 +194,7 @@ class AudioPlaybackManager {
   async _speakSingle(cleanText, sisterId, options = {}) {
     const vc = getSisterVoice(sisterId);
     try {
-      const audio = await this._ttsProvider.synthesize(cleanText, vc.voice, { speed: options.speed || 1.0 });
+      const audio = await this._synth(cleanText, vc.voice, sisterId, options.speed || 1.0, options.style);
       this._currentAudio = audio; this._playing = true;
       this._speed = options.speed || 1.0; audio.playbackRate = this._speed;
       if (this.onPlayStart) this.onPlayStart(sisterId);
@@ -230,7 +266,7 @@ class AudioPlaybackManager {
       if (!clean) { resolve(); return; }
       const vc = getSisterVoice(sisterId);
       try {
-        const a = await this._ttsProvider.synthesize(clean, vc.voice, { speed: options.speed || 1.0 });
+        const a = await this._synth(clean, vc.voice, sisterId, options.speed || 1.0, options.style !== undefined ? options.style : this._styleFor(text));
         this._currentAudio = a; this._playing = true;
         this._speed = options.speed || 1.0; a.playbackRate = this._speed;
         // v2.3変更 - キュー中のonPlayStartは発火しない（姉妹アイコン切替のみ）
@@ -288,6 +324,8 @@ class AudioPlaybackManager {
   // v1.6追加 - TTS用テキストクリーニング（改行→連続文変換、見出し除去、連続スペース除去）
   _cleanTextForTTS(text) {
     let c = text;
+    // 万一タグが残っていても読み上げない（壊れていても本文はそのまま読む）
+    if (typeof ToneStyle !== 'undefined') { try { c = ToneStyle.parse(c).text; } catch (e) { /* そのまま */ } }
     c = c.replace(/```[\s\S]*?```/g, 'コードブロックは省略します。');
     c = c.replace(/`([^`]+)`/g, '$1');
     c = c.replace(/^#{1,6}\s+.*$/gm, '');

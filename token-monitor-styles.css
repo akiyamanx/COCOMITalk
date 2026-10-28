@@ -1,6 +1,8 @@
 /* COCOMITalk - トークンモニター＋モデル設定UIスタイル */
 /* このファイルはトークン料金表示・モデル選択UIのスタイルを定義する */
 /* v1.0 styles.cssから分離（元: v0.4〜v0.9.5のスタイル） */
+/* v1.1 2026-10-28 - お散歩/準備中ブロックの色、無効行の薄表示を追加 */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 */
 
 /* ===== フッターのトークン料金表示 ===== */
 .token-cost {
@@ -80,6 +82,9 @@
 .model-mode-block[data-mode="normal"] { border-left: 3px solid var(--koko-primary, #FF6B9D); }
 .model-mode-block[data-mode="dev"] { border-left: 3px solid #FF9800; }
 .model-mode-block[data-mode="meeting"] { border-left: 3px solid #F44336; }
+.model-mode-block[data-mode="walk"] { border-left: 3px solid #4CAF50; }
+.model-mode-block[data-mode="soon"] { border-left: 3px solid #9E9E9E; }
+.model-row-disabled { opacity: 0.55; }
 .model-mode-title {
   font-size: 0.85rem;
   font-weight: 700;
@@ -107,7 +112,7 @@
   font-size: 0.78rem;
   font-family: inherit;
   color: var(--text, #333);
-  max-width: 180px;
+  max-width: 230px;
 }
 .setting-hint {
   font-size: 0.72rem;

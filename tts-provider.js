@@ -1,10 +1,15 @@
-// tts-provider.js v1.1
+// tts-provider.js v1.4
 // このファイルはTTS（テキスト→音声）の抽象インターフェースを定義する
 // 将来ElevenLabsやVOICEVOXに差し替える際、このインターフェースに準拠した
 // プロバイダーを作るだけで切り替え可能にする設計
 
 // v1.0 新規作成 - Step 5b TTS抽象層
 // v1.1 追加 - VOICEVOX声割り当て＋プロバイダー切替機能
+// v1.2 2026-10-28 - Gemini TTS追加（声は未割り当て=''。オーナーが後で決める。空のときは再生側がOpenAIへ戻す）
+// v1.3 2026-10-28 - Gemini TTSの声を割り当て（澪=Despina / クロ=Achernar / ここ=Autonoe / 葵=Leda / キミ=Zephyr）。葵・キミ用の枠を追加（Geminiの声のみ）
+// v1.4 2026-10-28 - 既定の読み上げをGeminiに変更（TTS_DEFAULT_PROVIDER）。旧設定(未設定/openai)を一度だけgeminiへ移す migrateTTSProviderDefault() 追加
+// v1.5 2026-10-29 - kimi の表示ラベルを「きみちゃん」（ひらがな）に統一
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 
 /**
  * TTSProvider 抽象クラス
@@ -48,27 +53,34 @@ class TTSProvider {
 const SISTER_VOICE_MAP = {
   koko: {
     openai:   { voice: 'nova',  label: '🌸 ここちゃん' },
-    voicevox: { voice: '1',     label: '🌸 ここちゃん' }  // ずんだもん（あまあま）
+    voicevox: { voice: '1',     label: '🌸 ここちゃん' },  // ずんだもん（あまあま）
+    gemini:   { voice: 'Autonoe', label: '🌸 ここちゃん' }
   },
   gpt: {
     openai:   { voice: 'shimmer', label: '🌙 お姉ちゃん' },
-    voicevox: { voice: '4',       label: '🌙 お姉ちゃん' }  // 四国めたん（セクシー）
+    voicevox: { voice: '4',       label: '🌙 お姉ちゃん' },  // 四国めたん（セクシー）
+    gemini:   { voice: 'Despina', label: '🌙 お姉ちゃん' }
   },
   claude: {
     openai:   { voice: 'alloy',  label: '🔮 クロちゃん' },
-    voicevox: { voice: '46',     label: '🔮 クロちゃん' }  // WhiteCUL（ノーマル）
-  }
+    voicevox: { voice: '46',     label: '🔮 クロちゃん' },  // WhiteCUL（ノーマル）
+    gemini:   { voice: 'Achernar', label: '🔮 クロちゃん' }
+  },
+  // 葵・キミは準備中（チャットは無効）。声だけ先に設定。OpenAI/VOICEVOXの声は無し→getSisterVoiceが既定('alloy')に戻す
+  aoi:  { gemini: { voice: 'Leda',   label: '葵ちゃん' } },
+  kimi: { gemini: { voice: 'Zephyr', label: 'きみちゃん' } }
 };
 
-// v1.1追加 - 現在のTTSプロバイダー名（'openai' or 'voicevox'）
-let _currentTTSProvider = 'openai';
+// v1.1追加 - 現在のTTSプロバイダー名（'gemini' | 'openai' | 'voicevox'）。v1.4から既定はgemini（openai/voicevoxは選べる控え兼、失敗時の自動戻し先）
+const TTS_DEFAULT_PROVIDER = 'gemini';
+let _currentTTSProvider = TTS_DEFAULT_PROVIDER;
 
 /**
  * TTSプロバイダーを切り替える
- * @param {string} providerName - 'openai' | 'voicevox'
+ * @param {string} providerName - 'openai' | 'voicevox' | 'gemini'
  */
 function setTTSProviderName(providerName) {
-  if (providerName === 'openai' || providerName === 'voicevox') {
+  if (providerName === 'openai' || providerName === 'voicevox' || providerName === 'gemini') {
     _currentTTSProvider = providerName;
     console.log(`[TTS] プロバイダー切替: ${providerName}`);
   } else {
@@ -85,6 +97,32 @@ function getTTSProviderName() {
 }
 
 /**
+ * 一度だけ、保存済み設定の読み上げプロバイダーが未設定/openai ならgeminiへ移す（voicevoxは本人の選択として残す）
+ * 印(cocomitalk-tts-gemini-default-v1)は新規インストールでも付ける → 後から自分でOpenAIを選んでも戻されない
+ * @returns {{changed: boolean}} 壊れた設定は触らない
+ */
+const TTS_MIGRATION_KEY = 'cocomitalk-tts-gemini-default-v1';
+function migrateTTSProviderDefault() {
+  try {
+    if (localStorage.getItem(TTS_MIGRATION_KEY)) return { changed: false };
+    const raw = localStorage.getItem('cocomitalk-settings');
+    let changed = false;
+    if (raw) {
+      const s = JSON.parse(raw);
+      if (s && typeof s === 'object' && (!s.ttsProvider || s.ttsProvider === 'openai')) {
+        s.ttsProvider = TTS_DEFAULT_PROVIDER;
+        localStorage.setItem('cocomitalk-settings', JSON.stringify(s));
+        changed = true;
+      }
+    }
+    localStorage.setItem(TTS_MIGRATION_KEY, '1');
+    return { changed };
+  } catch (e) {
+    return { changed: false };
+  }
+}
+
+/**
  * 姉妹IDから現在のプロバイダーに応じた声設定を取得するヘルパー
  * @param {string} sisterId - 'koko' | 'gpt' | 'claude'
  * @returns {{voice: string, provider: string, label: string}}
@@ -97,8 +135,8 @@ function getSisterVoice(sisterId) {
   }
   const config = sisterConfig[_currentTTSProvider];
   if (!config) {
-    // フォールバック: OpenAI
-    const fallback = sisterConfig.openai;
+    // フォールバック: OpenAI（葵・キミのようにOpenAIの声が無い人は 'alloy'）
+    const fallback = sisterConfig.openai || { voice: 'alloy', label: sisterConfig.gemini ? sisterConfig.gemini.label : '不明' };
     return { ...fallback, provider: 'openai' };
   }
   return { ...config, provider: _currentTTSProvider };

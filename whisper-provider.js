@@ -1,7 +1,9 @@
-// whisper-provider.js v1.10
+// whisper-provider.js v1.11
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
+// v1.11 2026-10-28 - STTモデルを設定値化（SttModel）、無音区切り秒数を設定値化（既定3000msで挙動不変）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
 // v1.10 2026-07-17 - 無音セグメント連続送信ループ修正（継続録音のhasVoiceStarted維持を廃止）＋
 //   無発話50秒で予防グラフ張替（maxVol>0で生存判定なのに感度低下する「半死」対策）
 // v1.9 2026-07-17 - 段階復帰はしご（resume待機張替/ctx作直し/フル再取得）＋番犬再武装＋
@@ -33,7 +35,7 @@ class WhisperProvider extends SpeechProvider {
     this._currentSessionId = 0;
 
     this._SILENCE_THRESHOLD = 35;
-    this._SILENCE_DURATION = 3000;
+    this._SILENCE_DURATION = (typeof SttModel !== 'undefined') ? SttModel.getSilenceMs() : 3000; // v1.11: 設定値（既定3000）
     // v1.6変更 - 15秒→25秒に延長（長めの発話でも途中で切られないように）
     // 短い発話は_SILENCE_DURATION（3秒無音）で自動区切りされるので影響なし
     this._MAX_RECORD_TIME = 25000;
@@ -442,12 +444,8 @@ class WhisperProvider extends SpeechProvider {
     if (blob.size < 3000) { this._debugLog(`データ小さすぎ（${blob.size}B）→ スキップ`); this._afterWhisperResponse(); return; }
     const sentSessionId = this._currentSessionId;
     try {
-      const formData = new FormData();
-      formData.append('file', blob, `audio.${ext}`);
-      formData.append('model', 'whisper-1');
-      formData.append('language', 'ja');
-      formData.append('prompt', 'COCOMITalkでの日常会話。');
-      const result = await ApiCommon.callAPI('whisper', formData, { isFormData: true });
+      // v1.11変更 - 文字起こしモデルは設定値（stt-model.js。既定gpt-transcribe、失敗時whisper-1へ自動で戻る）
+      const result = await SttModel.transcribe(blob, ext, 'COCOMITalkでの日常会話。');
       if (sentSessionId !== this._currentSessionId) {
         this._debugLog(`旧session応答を破棄 (sent=${sentSessionId}, current=${this._currentSessionId})`);
         this._afterWhisperResponse(); return;
