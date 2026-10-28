@@ -11,7 +11,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <!-- 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 （モデル3段階化: model-tiers.js等のscript追加／お散歩費用上限: walk-spend*.js追加／画面レイアウト: layout-*.css・layout-ui.js追加・設定sectionにid／レイアウトv2: layout2-*追加・model-indicatorの直書き文字を中立に） -->
+  <!-- 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 （起動オープニング: opening*.js / opening.css追加／モデル3段階化: model-tiers.js等のscript追加／お散歩費用上限: walk-spend*.js追加／画面レイアウト: layout-*.css・layout-ui.js追加・設定sectionにid／レイアウトv2: layout2-*追加・model-indicatorの直書き文字を中立に） -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#FF6B9D">
@@ -40,6 +40,8 @@
   <link rel="stylesheet" href="layout-panels.css">
   <link rel="stylesheet" href="layout2-main.css">
   <link rel="stylesheet" href="layout2-panels.css">
+  <!-- v3.76追加 - 起動オープニング（スプラッシュの上に重なる全画面。#opening-overlay専用） -->
+  <link rel="stylesheet" href="opening.css">
 </head>
 <body>
 
@@ -454,6 +456,10 @@
   <script src="layout2-core.js"></script>
   <script src="layout2-ui.js"></script>
   <script src="app-settings.js"></script>
+  <!-- v3.76追加 - 起動オープニング（app.jsより前。scene/audio→本体の順） -->
+  <script src="opening-scene.js"></script>
+  <script src="opening-audio.js"></script>
+  <script src="opening.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

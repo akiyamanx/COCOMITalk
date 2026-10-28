@@ -1,6 +1,6 @@
 // COCOMITalk - 読み上げの既定Gemini化・旧設定の移行・場面ごとの話し方(style)・戻し先のテスト
 // このファイルは node --test tests/ で実行する（実APIは呼ばない。fetch/Audio/ApiCommonは差し替え）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert/strict');
@@ -208,5 +208,5 @@ test('受け取り口: 1対1・グループ・会議の返信はすべてToneSty
   const pos = f => html.indexOf(`src="${f}"`);
   assert.ok(pos('tone-style.js') > 0 && pos('tone-style.js') < pos('prompts/koko-system.js'));
   assert.ok(pos('tone-style.js') < pos('tts-provider.js') && pos('tone-style.js') < pos('voice-output.js'));
-  assert.ok(sw.includes("'./tone-style.js'") && sw.includes("'cocomitalk-v3.75'"));
+  assert.ok(sw.includes("'./tone-style.js'") && sw.includes("'cocomitalk-v3.76'"));
 });
