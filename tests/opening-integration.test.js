@@ -387,16 +387,23 @@ function loadHandleSplash(opening) {
   return { run, splash, app, timers };
 }
 
-test('app.js: オープニング終了/スキップで即アプリ表示（従来の1.5秒タイマーは使わない）', () => {
+test('app.js: オープニング終了/スキップの後、ロゴ画面(COCOMITalk)を1000ms見せ→fade-out→400ms→アプリ表示', () => {
   for (const reason of ['ended', 'skipped']) {
     let onEnd;
     const h = loadHandleSplash({ isSupported: () => true, start: o => { onEnd = o.onEnd; return {}; } });
     h.run();
-    assert.equal(h.timers.length, 0);
+    assert.equal(h.timers.length, 0, 'オープニング中はタイマーなし');
     assert.ok(h.app.classList.has('hidden'), 'オープニング中はアプリ非表示');
     onEnd(reason);
-    assert.ok(!h.app.classList.has('hidden'));
-    assert.ok(h.splash.classList.has('hidden'));
+    assert.ok(h.app.classList.has('hidden'), '終了直後はまだアプリを出さない');
+    assert.ok(!h.splash.classList.has('hidden'), 'ロゴ画面が見えている');
+    assert.equal(h.timers.length, 1);
+    assert.equal(h.timers[0].ms, 1000);
+    h.timers[0].f();
+    assert.ok(h.splash.classList.has('fade-out'));
+    assert.equal(h.timers[1].ms, 400);
+    h.timers[1].f();
+    assert.ok(h.splash.classList.has('hidden') && !h.app.classList.has('hidden'));
   }
 });
 
