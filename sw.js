@@ -3,15 +3,28 @@
 // v3.43 2026-04-06 - お散歩モード改善（会話ラリー一時停止+表示/送信分離）
 // v3.60 2026-07-17 - お散歩ゲートPoC A反映（voice-sender v1.1 / vision-ui v1.5 / chat-core v2.2）
 // v3.61 2026-07-17 - バッファ待ち窓修正反映（voice-sender v1.2 / vision-ui v1.5.1）
-const CACHE_NAME = 'cocomitalk-v3.61';
+// v3.63 2026-10-28 - 思考の強さ/STTモデル/Gemini TTS追加（model-effort/effort-settings-ui/stt-model/gemini-tts-provider）
+// v3.64 2026-10-28 - 5人のGemini TTSの声を割り当て（characters.js / tts-provider.js）
+// v3.65 2026-10-28 - 読み上げの既定をGeminiに＋場面ごとの口調切替（tone-style.js追加）
+// v3.66 2026-10-28 - お散歩の費用上限（walk-spend-core/walk-spend/walk-spend-ui追加）
+// v3.67 2026-10-28 - 画面レイアウト改善（layout-main.css / layout-panels.css / layout-ui.js追加）
+// v3.68 2026-10-28 - 画面レイアウトv2（layout2-core.js / layout2-ui.js / layout2-main.css / layout2-panels.css追加）
+// v3.69 2026-10-28 - グループの帯の札タップ=話しかけ先（chat-group / layout2-core / layout2-ui / layout2-main.css）
+// v3.71 2026-10-28 - グループの帯に準備中の葵・キミも淡く並べる＋🔄つづきを右端に固定（layout2-core / layout2-ui / layout2-main.css）
+// v3.72 2026-10-29 - 葵・きみの最小プロンプト追加（prompts/common-env.js / aoi-system.js / kimi-system.js）＋三姉妹に家族の1〜2行＋「きみちゃん」ひらがな統一
+// v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
+// v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+const CACHE_NAME = 'cocomitalk-v3.73';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
-  './meeting-archive-styles.css', './consultation-styles.css', './vision-styles.css',
+  './meeting-archive-styles.css', './consultation-styles.css', './vision-styles.css', './layout-main.css', './layout-panels.css', './layout-ui.js', './layout2-core.js', './layout2-ui.js', './layout2-main.css', './layout2-panels.css',
   './app.js', './chat-ui.js',
   './chat-core.js', './chat-group.js', './chat-history.js',
-  './token-monitor.js', './api-common.js', './api-gemini.js',
-  './api-openai.js', './api-claude.js', './mode-switcher.js',
+  './model-tiers.js', './model-effort.js', './characters.js', './model-migration.js',
+  './token-monitor.js', './walk-spend-core.js', './walk-spend.js', './walk-spend-ui.js', './api-common.js', './api-gemini.js',
+  './api-openai.js', './api-openai-responses.js', './api-claude.js', './api-compat-core.js', './api-xai.js', './api-kimi.js', './mode-switcher.js',
   './meeting-router.js', './meeting-history.js', './meeting-memory.js',
   './chat-memory.js', './meeting-relay.js', './meeting-doc-actions.js',
   './meeting-ui.js', './meeting-archive-ui.js', './memory-ui.js',
@@ -20,17 +33,17 @@ const CACHE_FILES = [
   './search-caller.js', './tool-registry.js', './prompt-builder.js',
   './consultation-ui.js',
   './meeting-voice.js', './doc-generator.js', './file-handler.js',
-  './tts-provider.js', './openai-tts-provider.js',
+  './tone-style.js', './tts-provider.js', './openai-tts-provider.js', './gemini-tts-provider.js',
   './voicevox-tts-provider.js', './speech-provider.js',
-  './web-speech-provider.js', './debug-logger.js', './whisper-provider.js',
+  './web-speech-provider.js', './debug-logger.js', './whisper-provider.js', './stt-model.js',
   './voice-output.js', './voice-ui.js', './audio-health.js',
   './voice-state.js', './voice-command.js', './voice-input.js',
-  './voice-sender.js', './app-settings.js',
+  './voice-sender.js', './effort-settings-ui.js', './app-settings.js',
   './chat-style-modes.js', './style-resolver.js',
   './escape-hatch-detector.js',
   './vision-engine.js', './vision-ui-controller.js',
-  './prompts/koko-system.js', './prompts/gpt-system.js',
-  './prompts/claude-system.js', './manifest.json',
+  './prompts/common-env.js', './prompts/koko-system.js', './prompts/gpt-system.js',
+  './prompts/claude-system.js', './prompts/aoi-system.js', './prompts/kimi-system.js', './manifest.json',
 ];
 
 const CACHE_FONTS = [

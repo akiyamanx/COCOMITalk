@@ -10,6 +10,16 @@
 // v2.0 2026-03-30 - Sprint 2: PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
 // v2.1 2026-04-06 - お散歩モード自動送信対応（vision-auto-sendイベント受信、表示/送信テキスト分離）
 // v2.2 2026-07-17 - お散歩自動送信のisProcessingスキップ時に一時添付を破棄（ゾンビ写真の次送信混入防止・PoC A）
+// 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
+// v2.3 2026-10-29 - step2有効化の準備: SISTER_API に aoi(ApiXai) / kimi(ApiKimi) を追加。登録簿が enabled の時だけ api を返す（今は両方 false=誰も呼ばない）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+//
+// ■ 葵ちゃん/きみちゃんを有効にする手順（スイッチの場所）。まだ全部OFF。実際の中継には一度もつないでいない
+//   1. 中継Worker(cocomi-api-relay)に /xai /kimi をデプロイ + XAI_API_KEY / KIMI_API_KEY を設定（deliverables_v2/relay_xai_kimi_v2.patch）
+//   2. characters.js の aoi / kimi を enabled:true（← これが本体のスイッチ。このファイルのSISTER_APIと meeting-relay.js の SISTERS は
+//      それに連動して ApiXai/ApiKimi を返す）
+//   3. 有効にする前に別途必要（このstepでは未対応）: 発言順 meeting-router.js（今は koko/gpt/claude 固定）／このファイルの SISTERS・chatHistories
+//      ・履歴復元ループ（koko/gpt/claude 固定）／voice-input.js の姉妹ハイライト。tests/aoi-kimi-wiring.test.js が現状を固定している
 'use strict';
 
 /** チャットコアモジュール */
@@ -46,6 +56,9 @@ const ChatCore = (() => {
     }
   };
 
+  /** 登録簿で有効なキャラか（登録簿が無ければ false） */
+  const _isOn = (key) => (typeof CharacterRegistry !== 'undefined') && CharacterRegistry.isEnabled(key);
+
   const SISTER_API = {
     koko: {
       module: () => (typeof ApiGemini !== 'undefined') ? ApiGemini : null,
@@ -58,6 +71,15 @@ const ChatCore = (() => {
     claude: {
       module: () => (typeof ApiClaude !== 'undefined') ? ApiClaude : null,
       prompt: () => (typeof ClaudeSystemPrompt !== 'undefined') ? ClaudeSystemPrompt.getPrompt() : '',
+    },
+    // v2.3追加 - 登録簿(characters.js)が enabled の時だけ api を返す。無効の間は null（呼び出し側は未接続として扱う）
+    aoi: {
+      module: () => (_isOn('aoi') && typeof ApiXai !== 'undefined') ? ApiXai : null,
+      prompt: () => (typeof AoiSystemPrompt !== 'undefined') ? AoiSystemPrompt.getPrompt() : '',
+    },
+    kimi: {
+      module: () => (_isOn('kimi') && typeof ApiKimi !== 'undefined') ? ApiKimi : null,
+      prompt: () => (typeof KimiSystemPrompt !== 'undefined') ? KimiSystemPrompt.getPrompt() : '',
     },
   };
 
@@ -203,6 +225,7 @@ const ChatCore = (() => {
     _restoreSendButton();
   }
 
+  function _stripTone(r) { return (typeof ToneStyle !== 'undefined') ? ToneStyle.consume(r) : r; }
   function addMessage(role, text, options) {
     if (typeof ChatUi !== 'undefined') {
       ChatUi.addMessage(role, text, options);
@@ -276,7 +299,8 @@ const ChatCore = (() => {
       const mode = (typeof ModeSwitcher !== 'undefined') ? ModeSwitcher.getMode() : 'normal';
       if (mode !== 'normal') opts.maxTokens = 2048;
 
-      let reply = await apiModule.sendMessage(userText, fullPrompt, history, opts);
+      // v2.x 声のトーンタグ[tone:xxx]を画面・履歴・読み上げ用の文から外す（無くても/壊れていても本文はそのまま）
+      let reply = _stripTone(await apiModule.sendMessage(userText, fullPrompt, history, opts));
 
       if (typeof ChatMemory !== 'undefined' && reply.includes('💾SAVE:')) {
         reply = await ChatMemory.detectAndSave(reply, currentSister, chatHistories[currentSister]);
