@@ -1,4 +1,4 @@
-// voice-output.js v2.6
+// voice-output.js v2.7
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -14,6 +14,7 @@
 // v2.4 2026-10-28 - Gemini TTS追加（声が未割り当て/失敗時はOpenAIの声へ戻す。_synth()に集約）
 // v2.5 2026-10-28 - 既定をGeminiに。場面の話し方(style)をGeminiへ渡す。Gemini→OpenAI→VOICEVOXの順に戻す。声が使えない時は選択名もOpenAIへ揃える
 // v2.6 2026-10-29 - 吹き出しタップの二重再生を根本修正: ①speakBubble(準備中+再生中+キューを1つのガードで無視・finally/stop/保険タイマーで必ず解除) ②stop()/新しい読み上げの時に合成待ちの古い音声を捨てる(世代番号_gen)
+// v2.7 2026-10-29 - 音が鳴っている間の吹き出しタップで停止できるように（鳴り始め700msの連打は無視。準備中は引き続き無視）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 
 class AudioPlaybackManager {
@@ -40,6 +41,8 @@ class AudioPlaybackManager {
     this._gen = 0; // 読み上げの世代。stop()/新しい読み上げで進め、古い合成結果を捨てる
     this._bubbleHold = null; // 吹き出しタップのガード（準備中〜再生終了）
     this._bubblePollMs = 100;
+    this._audioStartAt = 0; // 音が鳴り始めた時刻（鳴り始めの連打を止めタップと間違えない猶予に使う）
+    this._stopGraceMs = 700; // 鳴り始めてからこの間のタップは無視（二重タップ対策）。過ぎたらタップで停止
     this._bubbleSafetyMs = 180000; // 合成が返らない等で固まった時の保険
   }
 
@@ -147,7 +150,7 @@ class AudioPlaybackManager {
         const vvSpeakerId = audio._vvSpeakerId;
         const vvApiKey = audio._vvApiKey;
 
-        this._currentAudio = audio;
+        this._currentAudio = audio; this._audioStartAt = Date.now();
         this._speed = options.speed || 1.0;
         audio.playbackRate = this._speed;
 
@@ -167,7 +170,7 @@ class AudioPlaybackManager {
           try {
             const ov = SISTER_VOICE_MAP[sisterId]?.openai?.voice || 'alloy';
             const fb = await this._openaiProvider.synthesize(chunkText, ov, { speed: options.speed || 1.0 });
-            this._currentAudio = fb; fb.playbackRate = this._speed;
+            this._currentAudio = fb; this._audioStartAt = Date.now(); fb.playbackRate = this._speed;
             await new Promise(r => { fb.addEventListener('ended', r, {once:true}); fb.addEventListener('error', r, {once:true}); fb.play().catch(r); });
             resolve(); return;
           } catch (e2) { /* フォールバックも失敗 */ }
@@ -209,7 +212,7 @@ class AudioPlaybackManager {
       const audio = await this._synth(cleanText, vc.voice, sisterId, options.speed || 1.0, options.style);
       if (gen !== this._gen) return; // 合成待ち中にstop/新しい読み上げ: この音声は捨てる（重なり防止）
       this._preparing = false;
-      this._currentAudio = audio; this._playing = true;
+      this._currentAudio = audio; this._playing = true; this._audioStartAt = Date.now();
       this._speed = options.speed || 1.0; audio.playbackRate = this._speed;
       if (this.onPlayStart) this.onPlayStart(sisterId);
       const rc = audio._vvRemainingChunks || [];
@@ -239,7 +242,7 @@ class AudioPlaybackManager {
       } catch(e) {}
       this._currentAudio = null;
     }
-    this._playing = false; this._queueCancelled = true; this._preparing = false; this._gen++;
+    this._playing = false; this._queueCancelled = true; this._preparing = false; this._gen++; this._audioStartAt = 0;
     this._queue = []; this._queuePlaying = false; this._chunkedPlaying = false;
     this._releaseBubble(); // 止めたら吹き出しのガードも解く
   }
@@ -247,12 +250,20 @@ class AudioPlaybackManager {
   /** 準備中・再生中・キュー中のどれか（新しい吹き出しタップを受けてはいけない間） */
   isBusy() { return !!(this._preparing || this._playing || this._queuePlaying || this._chunkedPlaying); }
 
+  /** 実際に音が出ている（合成待ちは含まない。長文・キューのチャンク間も含む） */
+  isAudible() { return !!(this._currentAudio || ((this._queuePlaying || this._chunkedPlaying) && this._audioStartAt > 0)); }
+
   /**
-   * 吹き出しタップの読み上げ。準備中(合成待ち)・再生中・キュー中・自動読み上げ中は無視して false を返す
+   * 吹き出しタップの読み上げ。準備中(合成待ち)は無視して false、音が鳴っている間のタップは停止して 'stopped' を返す
    * 始めたら true。解除は 再生終了/エラー/stop/保険タイマー のどれでも必ず行う。options.onBusyChange(bool)で見た目を切替
    */
   async speakBubble(text, sisterId, options = {}) {
-    if (this._bubbleHold || this.isBusy()) return false;
+    if (this.isAudible()) { // 音が鳴っている最中のタップ＝止める（鳴り始めの猶予内の連打は無視）
+      if (Date.now() - this._audioStartAt < this._stopGraceMs) return false;
+      this.stop();
+      return 'stopped';
+    }
+    if (this._bubbleHold || this.isBusy()) return false; // 準備中などは無視
     const { onBusyChange, ...speakOpts } = options;
     const hold = this._bubbleHold = { gen: this._gen, onBusyChange, timer: null, safety: null };
     hold.safety = setTimeout(() => { this._log('吹き出しガード: 保険タイマーで解除'); this.stop(); }, this._bubbleSafetyMs);
@@ -335,7 +346,7 @@ class AudioPlaybackManager {
       try {
         const a = await this._synth(clean, vc.voice, sisterId, options.speed || 1.0, options.style !== undefined ? options.style : this._styleFor(text));
         if (options._gen !== undefined && options._gen !== this._gen) { resolve(); return; } // 合成待ち中にstop: 鳴らさない
-        this._currentAudio = a; this._playing = true;
+        this._currentAudio = a; this._playing = true; this._audioStartAt = Date.now();
         this._speed = options.speed || 1.0; a.playbackRate = this._speed;
         // v2.3変更 - キュー中のonPlayStartは発火しない（姉妹アイコン切替のみ）
         if (this._queuePlaying) {
@@ -376,7 +387,7 @@ class AudioPlaybackManager {
       if (this._queueCancelled) break;
       try {
         const a = await this._voicevoxProvider.synthesizeChunk(chunks[i], speakerId, apiKey);
-        this._currentAudio = a;
+        this._currentAudio = a; this._audioStartAt = Date.now();
         await new Promise((res, rej) => {
           const t = setTimeout(() => rej(new Error('timeout')), 15000);
           a.addEventListener('canplaythrough', () => { clearTimeout(t); res(); }, {once:true});

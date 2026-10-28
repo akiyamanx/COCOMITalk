@@ -253,8 +253,45 @@ test('チャット画面: 吹き出しを3回タップ → タップは全部 sp
   assert.equal(bubble.attrs['aria-busy'], undefined);
 });
 
-test('CI: sw.js は v3.74、voice-output/chat-ui は500行以内、最終更新は葵 2026-10-29', () => {
-  assert.ok(src('sw.js').includes("'cocomitalk-v3.74'"));
+test('音が鳴っている間のタップで止まる（鳴り始めの猶予が過ぎたら）。止めたあとはまた押せる', async () => {
+  const x = env(); x.m._stopGraceMs = 0; const busy = [];
+  const p = x.m.speakBubble('止めたい。', 'koko', { onBusyChange: v => busy.push(v) });
+  x.synths[0].resolve(); await tick(5);
+  assert.equal(x.m.isAudible(), true);
+  assert.equal(await x.m.speakBubble('止めたい。', 'koko'), 'stopped');
+  assert.equal(x.audios[0].paused, true, '音が止まる');
+  assert.equal(x.m.isBusy(), false);
+  assert.deepEqual(busy, [true, false]);
+  await p;
+  const p2 = x.m.speakBubble('止めたい。', 'koko');
+  assert.equal(x.synths.length, 2, '止めたあとは再生をやり直せる');
+  x.synths[1].resolve(); await tick(5); x.audios[1].end(); await p2;
+});
+
+test('準備中(合成待ち)のタップは止めない。鳴り始めの猶予内の連打も止めない', async () => {
+  const x = env();
+  const p = x.m.speakBubble('連打。', 'koko');
+  assert.equal(x.m.isAudible(), false);
+  assert.equal(await x.m.speakBubble('連打。', 'koko'), false, '準備中は無視');
+  x.synths[0].resolve(); await tick(5);
+  assert.equal(await x.m.speakBubble('連打。', 'koko'), false, '鳴り始め直後は無視');
+  assert.equal(x.audios[0].paused, false);
+  assert.equal(plays(x), 1);
+  x.m._stopGraceMs = 0;
+  assert.equal(await x.m.speakBubble('連打。', 'koko'), 'stopped', '猶予を過ぎたら止まる');
+  await p;
+});
+
+test('自動読み上げが鳴っている最中のタップでも止まる', async () => {
+  const x = env(); x.m._stopGraceMs = 0;
+  const auto = x.m.speak('自動で読む返信です。', 'koko');
+  x.synths[0].resolve(); await tick(5);
+  assert.equal(await x.m.speakBubble('吹き出し。', 'gpt'), 'stopped');
+  assert.equal(x.m.isBusy(), false); await auto;
+});
+
+test('CI: sw.js は v3.75、voice-output/chat-ui は500行以内、最終更新は葵 2026-10-29', () => {
+  assert.ok(src('sw.js').includes("'cocomitalk-v3.75'"));
   for (const f of ['voice-output.js', 'chat-ui.js', 'styles.css']) assert.ok(src(f).split('\n').length <= 500, f);
   for (const f of ['voice-output.js', 'chat-ui.js', 'tests/bubble-speak-guard.test.js']) {
     const head = src(f).split('\n').slice(0, 20).join('\n');
