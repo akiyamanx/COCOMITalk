@@ -29,6 +29,8 @@ const App = (() => {
       } catch (e) { console.warn('[App] MeetingHistory初期化エラー:', e); }
     }
     ChatCore.init();
+    // 起動直後のモデル表示を実際の設定（段階のモデル名）にそろえる（HTMLの直書きの古い名前が残らないように）
+    if (typeof ModeSwitcher !== 'undefined') ModeSwitcher.onSisterSwitch(ChatCore.getCurrentSister());
     _setupTabs();
     _setupModeButton();
     _setupPeopleButton();

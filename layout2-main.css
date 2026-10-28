@@ -1,0 +1,164 @@
+/* COCOMITalk - 画面レイアウトv2（チャット最優先）: 上の細い帯 / ☰ドロワー / キャラ切替 / ⋯メニュー / ＋シート / 入力1行 / グループの帯 */
+/* このファイルは何をするか: v1(layout-*.css)の「後」に読み込み、html.lx2 の時だけ上書きする。色・トークンは既存のまま */
+/* 外し方: ☰「旧レイアウト(v1)に戻す」 / URLに ?layout=v1 / index.html の layout2-main.css と layout2-panels.css の <link> を消す */
+/* v1.0 2026-10-28 - 新規作成（follow-up #7） */
+/* v1.1 2026-10-28 - グループの帯の札をタップ可能に（44px・選択中=二重の輪＋✓。話している子の光とは別） */
+/* v1.2 2026-10-28 - 帯に準備中の札(淡く・点線・「準備中」札)を追加。札の列を横スクロールにして🔄つづきは列の外(右端に固定) */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 */
+
+/* ===== 上の細い帯: ☰ | 今のキャラ▾ | ⋯ ===== */
+html.lx2 .app-header { height: 52px; min-height: 52px; padding: var(--lx-sat) 6px 0; gap: 4px; box-sizing: content-box; }
+html.lx2 .app-header .header-left, html.lx2 .app-header .header-right { display: none; }
+html.lx2 .sister-tabs { display: none; }        /* 下のキャラ札はドロップダウンへ（実物は残す: app.jsが使う） */
+html.lx2 .lx2-hbtn {
+  flex: 0 0 var(--lx-tap); width: var(--lx-tap); height: var(--lx-tap); border: none; border-radius: var(--radius-full);
+  background: transparent; color: var(--text-primary); font-size: 22px; line-height: 1; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center; -webkit-tap-highlight-color: transparent;
+}
+html.lx2 .lx2-hbtn:active { background: var(--active-light); }
+html.lx2 .lx2-char {
+  flex: 0 1 auto; min-width: 0; max-width: calc(100% - 100px); min-height: var(--lx-tap); margin: 0 auto; padding: 0 14px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: inherit;
+  background: var(--active-light); color: var(--active-dark); border: 1.5px solid transparent; border-radius: var(--radius-full); cursor: pointer;
+}
+html.lx2 .lx2-char[aria-expanded="true"] { border-color: var(--active-primary); }
+html.lx2 .lx2-char-icon { font-size: 22px; line-height: 1; }
+html.lx2 .lx2-char-name { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+html.lx2 .lx2-caret { font-size: 13px; color: var(--lx-muted); margin-left: auto; padding-left: 4px; }
+html.lx2 .lx2-char .lx2-caret { margin-left: 0; }
+
+/* ===== 開く面（ドロワー / ⋯ / キャラ / ＋）の共通: 閉じている時は見えず押せない ===== */
+html.lx2 .lx2-drawer, html.lx2 .lx2-more, html.lx2 .lx2-chars, html.lx2 .lx2-sheet, html.lx2 .lx2-scrim { visibility: hidden; opacity: 0; transition: opacity 0.15s, transform 0.2s, visibility 0s 0.2s; }
+html.lx2 .lx2-drawer.lx2-on, html.lx2 .lx2-more.lx2-on, html.lx2 .lx2-chars.lx2-on, html.lx2 .lx2-sheet.lx2-on, html.lx2 .lx2-scrim.lx2-on { visibility: visible; opacity: 1; transition-delay: 0s; }
+html.lx2 .lx2-scrim { position: fixed; inset: 0; background: rgba(45, 37, 32, 0.35); z-index: 8000; }
+html.lx2 .lx2-drawer, html.lx2 .lx2-more, html.lx2 .lx2-chars { position: fixed; z-index: 8100; background: var(--bg-main); color: var(--text-primary); box-shadow: 0 8px 28px rgba(45, 37, 32, 0.28); overflow-y: auto; overscroll-behavior: contain; }
+
+/* ===== ☰ ドロワー（左から出る。入れ子の「設定」つき） ===== */
+html.lx2 .lx2-drawer { top: 0; bottom: 0; left: 0; width: min(86vw, 320px); transform: translateX(-100%); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; padding-bottom: var(--lx-sab); }
+html.lx2 .lx2-drawer.lx2-on { transform: translateX(0); }
+html.lx2 .lx2-drawer-head { display: flex; align-items: center; justify-content: space-between; padding: calc(8px + var(--lx-sat)) 8px 8px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: var(--bg-main); z-index: 1; }
+html.lx2 .lx2-drawer-title { font-size: 17px; font-weight: 700; }
+html.lx2 .lx2-drawer-body { padding: 4px 8px 16px; }
+html.lx2 .lx2-sec-title { font-size: 12px; font-weight: 700; color: var(--lx-muted); padding: 14px 10px 4px; letter-spacing: 0.05em; }
+html.lx2 .lx2-row, html.lx2 .lx2-more .lx2-adopted, html.lx2 .lx2-drawer .lx2-adopted {
+  width: 100%; min-height: var(--lx-tap); padding: 0 12px; border: none; border-radius: var(--radius-md); background: transparent; color: var(--text-primary);
+  font: inherit; font-size: 15px; text-align: left; display: flex; align-items: center; justify-content: flex-start; gap: 12px; cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+html.lx2 .lx2-row:active, html.lx2 .lx2-more .lx2-adopted:active, html.lx2 .lx2-drawer .lx2-adopted:active { background: var(--active-light); }
+html.lx2 .lx2-row-icon { flex: 0 0 26px; text-align: center; font-size: 20px; }
+html.lx2 .lx2-row-label { flex: 1 1 auto; min-width: 0; }
+html.lx2 .lx2-row .lx2-caret { margin-left: auto; transition: transform 0.2s; }
+html.lx2 .lx2-row[aria-expanded="true"] .lx2-caret { transform: rotate(180deg); }
+html.lx2 .lx2-nest { display: none; margin: 0 0 4px 22px; padding-left: 8px; border-left: 2px solid var(--active-light); }
+html.lx2 .lx2-nest.lx2-nest-on { display: block; }
+html.lx2 .lx2-nest-row { font-size: 14px; }
+html.lx2 .lx2-drawer #btn-settings { width: 100%; height: auto; padding: 0 12px; }
+html.lx2 .lx2-drawer #btn-settings::after { content: attr(data-lx2-label); font-size: 15px; }
+
+/* ===== ⋯ メニュー（この会話）: 状態(モデル・費用) → スタイル/モード/人数/指示書/保存 ===== */
+html.lx2 .lx2-more { top: calc(52px + var(--lx-sat)); right: 8px; width: min(90vw, 300px); border-radius: var(--radius-lg); padding: 6px; transform: translateY(-8px); }
+html.lx2 .lx2-more.lx2-on { transform: translateY(0); }
+html.lx2 .lx2-status { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--border); font-size: 12px; color: var(--lx-muted); }
+html.lx2 .lx2-status .model-indicator { font-size: 12px; background: var(--active-light); color: var(--active-dark); }
+html.lx2 .lx2-status .token-cost { font-size: 12px; color: var(--lx-muted); }
+html.lx2 .lx2-more .lx2-adopted { margin: 0; height: auto; box-shadow: none; }
+html.lx2 .lx2-more .lx2-adopted::after { content: attr(data-lx2-label); font-size: 15px; color: var(--text-primary); margin-left: auto; }
+html.lx2 .lx2-more .lx2-adopted { justify-content: space-between; }
+
+/* ===== キャラのドロップダウン（真ん中の名前から開く） ===== */
+html.lx2 .lx2-chars { top: calc(50px + var(--lx-sat)); left: 50%; width: min(88vw, 300px); border-radius: var(--radius-lg); padding: 6px; transform: translate(-50%, -8px); }
+html.lx2 .lx2-chars.lx2-on { transform: translate(-50%, 0); }
+html.lx2 .lx2-char-row { width: 100%; min-height: var(--lx-tap); padding: 0 12px; border: none; border-radius: var(--radius-md); background: transparent; font: inherit; font-size: 16px; color: var(--text-primary); text-align: left; display: flex; align-items: center; gap: 12px; cursor: pointer; }
+html.lx2 .lx2-char-row:active { background: var(--active-light); }
+html.lx2 .lx2-char-row-icon { flex: 0 0 28px; text-align: center; font-size: 22px; }
+html.lx2 .lx2-cur { background: var(--active-light); font-weight: 700; }
+html.lx2 .lx2-check { color: var(--active-dark); font-weight: 700; }
+html.lx2 .lx2-char-group { border-top: 1px solid var(--border); border-radius: 0 0 var(--radius-md) var(--radius-md); margin-top: 4px; font-size: 15px; }
+/* 準備中（葵=青い蝶 / キミ=金の星）: 色の点と薄い地で「その子の色」を匂わせる。文字は濃い色のまま読める */
+html.lx2 .lx2-soon { background: var(--lx2-soon-bg); border-left: 5px solid var(--lx2-soon-dot); cursor: default; }
+html.lx2 .lx2-soon .lx2-char-row-icon { filter: saturate(0.8); }
+html.lx2 .lx2-pill { margin-left: auto; font-size: 12px; font-weight: 700; color: #3A322C; background: #fff; border: 1.5px solid var(--lx2-soon-dot); border-radius: var(--radius-full); padding: 2px 8px; }
+
+/* ===== 入力は1行: ＋ | 文字 | 🎤か↑ ===== */
+html.lx2 .input-area { position: relative; padding: 6px max(8px, var(--lx-sar)) max(6px, var(--lx-sab)) max(8px, var(--lx-sal)); }
+html.lx2 .input-wrapper { flex-wrap: nowrap; align-items: center; gap: 2px; padding: 3px 4px 3px 4px; }
+html.lx2 .input-wrapper > .lx2-plus { order: 0; }
+html.lx2 .input-wrapper > .msg-input { order: 1; flex: 1 1 auto; min-width: 0; min-height: var(--lx-tap); padding: 10px 6px; font-size: 16px; }
+html.lx2 .input-wrapper > #cocomi-mic-wrap { order: 2; margin-left: 0; }
+html.lx2 .input-wrapper > .btn-send { order: 3; }
+html.lx2 .lx2-plus {
+  flex: 0 0 var(--lx-tap); width: var(--lx-tap); height: var(--lx-tap); border: none; border-radius: var(--radius-full); background: var(--active-light); color: var(--active-dark);
+  font-size: 26px; line-height: 1; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; transition: transform 0.2s;
+}
+html.lx2 .lx2-plus.lx2-x { transform: rotate(45deg); }
+html.lx2 #cocomi-mic-wrap, html.lx2 #cocomi-mic-btn, html.lx2 .btn-send { width: var(--lx-tap) !important; height: var(--lx-tap) !important; }
+html.lx2 .lx2-can-send #cocomi-mic-wrap { display: none !important; }
+html.lx2 .input-wrapper:not(.lx2-can-send) .btn-send { display: none !important; }
+html.lx2 .input-footer { min-height: 0; padding: 0 12px; margin: 0; justify-content: flex-end; }
+html.lx2 .input-footer:has(#char-count:empty) { display: none; }
+html.lx2 .input-footer #char-count { font-size: 11px; padding: 2px 0; }
+
+/* ===== ＋シート（入力の真上に出る。タイルごとに名前つき） ===== */
+html.lx2 .lx2-sheet { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 4px); z-index: 8100; display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 4px; padding: 8px; background: var(--bg-main); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 -4px 22px rgba(45, 37, 32, 0.22); transform: translateY(8px); }
+html.lx2 .lx2-sheet.lx2-on { transform: translateY(0); }
+html.lx2 .lx2-sheet .lx2-adopted {
+  width: auto; height: 72px; min-width: var(--lx-tap); padding: 4px; border: none; border-radius: var(--radius-md); background: transparent; box-shadow: none; opacity: 1; animation: none;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 24px; color: var(--text-primary); cursor: pointer;
+}
+html.lx2 .lx2-sheet .lx2-adopted:active { background: var(--active-light); }
+html.lx2 .lx2-sheet .lx2-adopted.hidden { display: none; }
+html.lx2 .lx2-sheet .lx2-adopted::after { content: attr(data-lx2-label); font-size: 12px; font-weight: 500; color: var(--lx-muted); }
+html.lx2 .lx2-sheet #btn-vision-toggle.vision-active::after { content: 'カメラを閉じる'; color: var(--active-dark); font-weight: 700; }
+html.lx2 .lx2-sheet .btn-search { border: none !important; }   /* 🔍のオレンジの輪は他の道具と同じ見た目に統一 */
+
+/* ===== 会話エリア: 幅を広く使う（アバターは小さく、自分のアイコンは出さない） ===== */
+html.lx2 .chat-area { padding: 10px 8px 6px; }
+html.lx2 .message { gap: 6px; margin-bottom: 12px; }
+html.lx2 .msg-avatar { width: 28px; height: 28px; font-size: 16px; }
+html.lx2 .message.user .msg-avatar { display: none; }
+html.lx2 .msg-bubble { max-width: 90%; padding: 9px 13px; }
+html.lx2 .message.user .msg-bubble { max-width: 86%; }
+@media (min-width: 700px) { html.lx2 .msg-bubble { max-width: 78%; } }
+html.lx2 .lx-toast { bottom: calc(92px + var(--lx-sab)); }
+
+/* ===== グループの帯（横にスクロール）: 話している子が光る ===== */
+html.lx2 .lx2-strip { display: none; flex: 0 0 auto; align-items: center; gap: 6px; padding: 0 8px; background: var(--bg-main); border-bottom: 1px solid var(--border); }
+/* 札の列だけが横にスクロール（準備中の葵・キミが増えて長くなっても）。🔄つづきは列の外＝右端に固定でいつも見える・押せる */
+html.lx2 .lx2-strip-scroll { flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 6px; padding: 4px; overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+html.lx2 .lx2-strip-scroll::-webkit-scrollbar { display: none; }
+html.lx2 .lx2-group .lx2-strip { display: flex; }
+html.lx2 .lx2-chip { flex: 0 0 auto; white-space: nowrap; display: inline-flex; align-items: center; gap: 5px; height: var(--lx-tap); min-width: var(--lx-tap); padding: 0 12px 0 8px; border-radius: var(--radius-full); border: 2px solid var(--border); background: #fff; color: var(--lx-muted); font: inherit; font-size: 14px; cursor: pointer; -webkit-tap-highlight-color: transparent; transition: background 0.2s, border-color 0.2s, transform 0.2s; }
+html.lx2 .lx2-chip-icon { font-size: 18px; }
+html.lx2 .lx2-chip[data-sister="koko"] { --lx2-c: var(--koko-primary); --lx2-cl: var(--koko-light); --lx2-cd: var(--koko-dark); }
+html.lx2 .lx2-chip[data-sister="gpt"] { --lx2-c: var(--gpt-primary); --lx2-cl: var(--gpt-light); --lx2-cd: var(--gpt-dark); }
+html.lx2 .lx2-chip[data-sister="claude"] { --lx2-c: var(--claude-primary); --lx2-cl: var(--claude-light); --lx2-cd: var(--claude-dark); }
+html.lx2 .lx2-chip[data-sister="aoi"] { --lx2-c: #3BA7D9; --lx2-cl: #E3F2FB; --lx2-cd: #1F6E96; }
+html.lx2 .lx2-chip.lx2-speaking { background: var(--lx2-cl, var(--active-light)); border-color: var(--lx2-c, var(--active-primary)); color: var(--lx2-cd, var(--active-dark)); font-weight: 700; transform: scale(1.05); box-shadow: 0 0 0 3px var(--lx2-cl, var(--active-light)); }
+/* 話しかけ先に選んだ札: 二重の濃い輪＋✓（話している子の「薄い地＋大きく光る」とは別。両方同時でも見分けられる） */
+html.lx2 .lx2-chip[aria-pressed="true"] { background: var(--lx2-cl, var(--active-light)); border-color: var(--lx2-cd, var(--active-dark)); color: var(--lx2-cd, var(--active-dark)); font-weight: 700; box-shadow: 0 0 0 1px #fff, 0 0 0 3px var(--lx2-cd, var(--active-dark)); }
+html.lx2 .lx2-chip[aria-pressed="true"]::after { content: "✓"; font-size: 14px; }
+html.lx2 .lx2-chip:focus-visible { outline: 3px solid var(--lx2-cd, var(--active-dark)); outline-offset: 2px; }
+html.lx2 .lx2-chip-act { flex: 0 0 auto; min-height: var(--lx-tap); padding: 0 14px; border: 1.5px solid var(--border); border-radius: var(--radius-full); background: #fff; color: var(--text-primary); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; }
+/* 準備中の札（葵=青 / キミ=金。色は.lx2-soonと同じ点と薄い地、「準備中」札は.lx2-pillを流用）: 淡く見せるが高さは他と同じ44px。押してもtoastだけ(選べない) */
+html.lx2 .lx2-chip-soon { background: var(--lx2-soon-bg); border-color: var(--lx2-soon-dot); border-style: dashed; color: #6B5F55; cursor: default; }
+html.lx2 .lx2-chip-soon .lx2-chip-icon { opacity: 0.55; filter: saturate(0.6); }
+@media (max-width: 480px) {   /* 狭い画面: 札を少し詰めて、右端の🔄つづきと並べる（高さ44pxは変えない） */
+  html.lx2 .lx2-strip, html.lx2 .lx2-strip-scroll { gap: 4px; }
+  html.lx2 .lx2-chip { font-size: 13px; padding: 0 10px 0 6px; gap: 3px; }
+  html.lx2 .lx2-chip-icon { font-size: 16px; }
+  html.lx2 .lx2-chip-act { padding: 0 10px; font-size: 13px; }
+}
+html.lx2 .lx2-chip-soon:focus-visible { outline-color: #3A322C; }
+html.lx2 .lx2-chip-soon .lx2-pill { margin-left: 0; font-size: 11px; padding: 1px 6px; white-space: nowrap; }
+
+@media (prefers-reduced-motion: reduce) {
+  html.lx2 .lx2-drawer, html.lx2 .lx2-more, html.lx2 .lx2-chars, html.lx2 .lx2-sheet, html.lx2 .lx2-scrim, html.lx2 .lx2-plus, html.lx2 .lx2-chip { transition: none !important; }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  html.lx2 .app-header { height: 46px; min-height: 46px; }
+  html.lx2 .lx2-drawer { width: min(60vw, 320px); }
+  html.lx2 .lx2-sheet { grid-template-columns: repeat(4, 1fr); }
+  html.lx2 .lx2-sheet .lx2-adopted { height: 56px; }
+}
+/* 相談の「会議開始」ボタンが43pxだったので44pxに */
+html.lx2 .consultation-start-btn { min-height: 44px; }

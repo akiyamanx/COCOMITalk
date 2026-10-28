@@ -2,6 +2,9 @@
 // このファイルはnormal/dev/meetingモードの切替とプロンプト＋モデルグレードの連動を管理する
 // v0.8 Step 3 - 新規作成
 // v0.9 Step 3.5 - solo/group（👤⇔👥）人数モード追加
+// v1.1 2026-10-28 - モデルを3段階(lite/standard/high)化。お散歩モード用の設定枠(walk)を追加。旧キーはModelMigrationで変換
+// v1.2 2026-10-29 - プロンプトのモード切替に葵・きみ（読み込まれていれば）も追加
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 
 'use strict';
 
@@ -32,39 +35,25 @@ const ModeSwitcher = (() => {
     group: { label: '👥', tooltip: 'みんなモード（三姉妹全員）' },
   };
 
-  // --- モード別モデルグレード ---
-  // v0.8 安全ガイド準拠 → v1.0 meeting最上位デフォルト化
-  const DEFAULT_MODE_MODELS = {
-    normal: {
-      koko: 'flash-25',       // gemini-2.5-flash
-      gpt: 'mini',            // gpt-4o-mini
-      claude: 'haiku',        // claude-haiku-4.5
-    },
-    dev: {
-      koko: 'flash-3',        // gemini-3-flash
-      gpt: 'gpt4o',           // gpt-4o
-      claude: 'sonnet',       // claude-sonnet-4
-    },
-    meeting: {
-      // v1.0 - 会議は最上位モデルをデフォルトに
-      koko: 'pro-31',         // gemini-3.1-pro
-      gpt: 'gpt54',           // gpt-5.4
-      claude: 'opus',         // claude-opus-4.6
-    },
-  };
+  // --- 設定できるモード（トーンモード＋お散歩）---
+  // 'walk' はお散歩モード中だけ使う設定枠（トーンモードとは別軸。walkActive中はこちらが優先）
+  const SETTING_MODES = [...MODES, 'walk'];
+
+  // --- モード別モデル段階（lite/standard/high）---
+  // 登録簿(CharacterRegistry)の既定段階から作る: 普段=lite / 開発=standard / 会議=high / お散歩=lite
+  // 葵・キミ（準備中）の枠も含むが、UIでは選べずAPIにも渡らない。
+  const DEFAULT_MODE_MODELS = {};
+  SETTING_MODES.forEach(mode => {
+    DEFAULT_MODE_MODELS[mode] = {};
+    CharacterRegistry.keys().forEach(k => { DEFAULT_MODE_MODELS[mode][k] = CharacterRegistry.defaultTier(k, mode); });
+  });
 
   // v1.0追加 - ユーザーがカスタマイズしたモデル設定（設定画面で変更可能）
   let customModeModels = null;
 
-  // --- 姉妹別モデル表示名 ---
-  const MODEL_DISPLAY = {
-    normal: { koko: 'Gemini 2.5 Flash', gpt: 'GPT-4o-mini', claude: 'Haiku 4.5' },
-    dev: { koko: 'Gemini 3 Flash', gpt: 'GPT-4o', claude: 'Sonnet 4' },
-    meeting: { koko: 'Gemini 3.1 Pro', gpt: 'GPT-5.4', claude: 'Opus 4.6' },
-  };
-
   let currentMode = 'normal';
   let peopleMode = 'solo'; // v0.9追加 - 'solo' or 'group'
+  let walkActive = false;  // v1.1追加 - お散歩モード中か（trueの間は 'walk' 枠のモデル段階を使う）
 
   /**
    * 次のモードに切替（循環: normal→dev→meeting→normal）
@@ -106,6 +95,9 @@ const ModeSwitcher = (() => {
     if (typeof KokoSystemPrompt !== 'undefined') KokoSystemPrompt.setMode(mode);
     if (typeof GptSystemPrompt !== 'undefined') GptSystemPrompt.setMode(mode);
     if (typeof ClaudeSystemPrompt !== 'undefined') ClaudeSystemPrompt.setMode(mode);
+    // 葵・きみ（準備中）。読み込まれていれば同じモードに揃えておく（有効化された時に食い違わないように）
+    if (typeof AoiSystemPrompt !== 'undefined') AoiSystemPrompt.setMode(mode);
+    if (typeof KimiSystemPrompt !== 'undefined') KimiSystemPrompt.setMode(mode);
   }
 
   /**
@@ -136,12 +128,11 @@ const ModeSwitcher = (() => {
     const indicator = document.getElementById('model-indicator');
     if (!indicator) return;
     const display = MODE_DISPLAY[mode];
-    // カスタム設定されてる場合はモデルキーから名前を逆引き
-    const currentKey = getModelKey(sisterKey);
-    const models = getAvailableModels();
-    const found = models[sisterKey]?.find(m => m.key === currentKey);
-    const modelName = found ? found.name : (MODEL_DISPLAY[mode]?.[sisterKey] || 'Unknown');
-    indicator.textContent = `${display.short} | ${modelName}`;
+    const provider = CharacterRegistry.providerOf(sisterKey);
+    if (!provider) return;
+    // 段階キーからモデル名を引く（お散歩中は 🚶 を付けて区別）
+    const r = ModelTiers.resolve(provider, getModelKey(sisterKey));
+    indicator.textContent = `${walkActive ? '🚶' : display.short} | ${r.label}`;
   }
 
   /**
@@ -152,25 +143,45 @@ const ModeSwitcher = (() => {
   }
 
   /**
-   * 現在のモードで指定姉妹のモデルキーを取得
-   * v1.0変更 - カスタム設定があればそちらを優先
+   * 設定モード（normal/dev/meeting/walk）と姉妹から、使うモデル段階キーを返す
+   * 優先順: 保存済みカスタム設定 > 既定段階。旧キーが残っていても段階へ変換して返す（未知の値は既定）
+   * @returns {string|undefined} 'lite'|'standard'|'high'（未登録の姉妹はundefined）
    */
-  function getModelKey(sisterKey) {
-    // カスタム設定 > デフォルト の優先順
-    if (customModeModels?.[currentMode]?.[sisterKey]) {
-      return customModeModels[currentMode][sisterKey];
-    }
-    return DEFAULT_MODE_MODELS[currentMode]?.[sisterKey] || DEFAULT_MODE_MODELS.normal[sisterKey];
+  function getModelKeyFor(settingMode, sisterKey) {
+    const provider = CharacterRegistry.providerOf(sisterKey);
+    if (!provider) return undefined;
+    const fallback = DEFAULT_MODE_MODELS[settingMode]?.[sisterKey] || DEFAULT_MODE_MODELS.normal[sisterKey];
+    const saved = customModeModels?.[settingMode]?.[sisterKey];
+    return ModelTiers.normalizeKey(provider, saved) || fallback;
   }
 
   /**
-   * v1.0追加 - モデルグレードのカスタム設定を適用
-   * @param {string} mode - 対象モード
-   * @param {Object} models - { koko: 'xxx', gpt: 'xxx', claude: 'xxx' }
+   * 現在のモードで指定姉妹のモデル段階キーを取得
+   * v1.0変更 - カスタム設定があればそちらを優先 / v1.1変更 - お散歩中は 'walk' 枠
+   */
+  function getModelKey(sisterKey) {
+    return getModelKeyFor(walkActive ? 'walk' : currentMode, sisterKey);
+  }
+
+  /**
+   * v1.0追加 - モデル段階のカスタム設定を適用
+   * v1.1変更 - 渡された姉妹だけ上書きして他の姉妹の保存値は消さない。値は段階へ変換、未知の値は捨てる
+   * @param {string} mode - 対象モード（normal/dev/meeting/walk）
+   * @param {Object} models - { koko: 'lite', gpt: 'standard', claude: 'high' }
    */
   function setCustomModels(mode, models) {
+    if (!SETTING_MODES.includes(mode)) {
+      console.warn(`[ModeSwitcher] 不明な設定モード: ${mode}`);
+      return;
+    }
     if (!customModeModels) customModeModels = {};
-    customModeModels[mode] = { ...models };
+    const merged = { ...(customModeModels[mode] || {}) };
+    Object.entries(models || {}).forEach(([sister, key]) => {
+      const provider = CharacterRegistry.providerOf(sister);
+      const tier = provider ? ModelTiers.normalizeKey(provider, key) : null;
+      if (tier) merged[sister] = tier;
+    });
+    customModeModels[mode] = merged;
     // LocalStorageに保存
     try {
       localStorage.setItem('cocomitalk-custom-models', JSON.stringify(customModeModels));
@@ -178,33 +189,41 @@ const ModeSwitcher = (() => {
     _updateUI(currentMode);
   }
 
-  /** v1.0追加 - 保存済みカスタムモデルを読み込み */
+  /** v1.0追加 - 保存済みカスタムモデルを読み込み（v1.1: 先に旧キー→段階の移行を実行） */
   function _loadCustomModels() {
     try {
+      ModelMigration.run(localStorage);
       const saved = localStorage.getItem('cocomitalk-custom-models');
       if (saved) customModeModels = JSON.parse(saved);
     } catch (e) { console.warn('[ModeSwitcher] カスタムモデル読み込みエラー:', e); }
   }
 
-  /** v1.0追加 - 選択可能なモデル一覧 */
+  /**
+   * v1.0追加 - 選択可能なモデル一覧（v1.1: 各姉妹3段階。準備中のキャラは含めない＝選べない）
+   * @returns {Object} { koko:[{key,name,tier,label,id,deprecatedAfter}], gpt:[...], claude:[...] }
+   */
   function getAvailableModels() {
-    return {
-      koko: [
-        { key: 'flash-25', name: 'Gemini 2.5 Flash', tier: '💰' },
-        { key: 'flash-3', name: 'Gemini 3 Flash', tier: '💰💰' },
-        { key: 'pro-31', name: 'Gemini 3.1 Pro', tier: '💰💰💰' },
-      ],
-      gpt: [
-        { key: 'mini', name: 'GPT-4o-mini', tier: '💰' },
-        { key: 'gpt4o', name: 'GPT-4o', tier: '💰💰' },
-        { key: 'gpt54', name: 'GPT-5.4', tier: '💰💰💰' },
-      ],
-      claude: [
-        { key: 'haiku', name: 'Haiku 4.5', tier: '💰' },
-        { key: 'sonnet', name: 'Sonnet 4', tier: '💰💰' },
-        { key: 'opus', name: 'Opus 4.6', tier: '💰💰💰' },
-      ],
-    };
+    const out = {};
+    CharacterRegistry.enabledList().forEach(c => { out[c.key] = ModelTiers.listForProvider(c.provider); });
+    return out;
+  }
+
+  /**
+   * v1.1追加 - お散歩モードの開始/終了を伝える（trueの間は 'walk' 枠の段階を使う）
+   */
+  function setWalkMode(on) {
+    walkActive = !!on;
+    _updateUI(currentMode);
+    console.log(`[ModeSwitcher] お散歩モデル枠: ${walkActive ? 'ON' : 'OFF'}`);
+  }
+
+  function isWalkMode() {
+    return walkActive;
+  }
+
+  /** v1.1追加 - 設定画面に並べるモード一覧（normal/dev/meeting/walk） */
+  function getSettingModes() {
+    return [...SETTING_MODES];
   }
 
   // 起動時にカスタム設定を読み込み
@@ -287,5 +306,7 @@ const ModeSwitcher = (() => {
     // v1.0追加 - モデルカスタマイズ
     setCustomModels, getAvailableModels,
     DEFAULT_MODE_MODELS,
+    // v1.1追加 - 3段階化・お散歩枠
+    getModelKeyFor, getSettingModes, setWalkMode, isWalkMode,
   };
 })();

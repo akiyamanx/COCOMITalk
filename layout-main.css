@@ -1,0 +1,162 @@
+/* COCOMITalk - 画面レイアウト改善（メイン画面）: ヘッダー / キャラ選択 / 入力 / 会議 / セーフエリア / 横向き・タブレット */
+/* このファイルは何をするか: 既存のCSSの「後」に読み込み、押しやすさと並べ方だけを上書きする（色トークンは既存のまま） */
+/* 外し方: index.html の <link href="layout-main.css"> を消せば元の見た目に戻る（JS・id・クラスは変えていない） */
+/* v1.0 2026-10-28 - 新規作成（follow-up #6） */
+/* v1.1 2026-10-28 - 🔍の橙の輪を消して他の道具と統一（follow-up #7） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 */
+
+:root {
+  --lx-tap: 44px;               /* 指で押す最小の大きさ */
+  --lx-tap-main: 52px;          /* 主役ボタン（マイク・送信） */
+  --lx-muted: #6B5F56;          /* 小さい補助文字用（--text-light #B5AAA0 は薄すぎて読めないため。白地で約6:1） */
+  --lx-sat: env(safe-area-inset-top, 0px);
+  --lx-sab: env(safe-area-inset-bottom, 0px);
+  --lx-sal: env(safe-area-inset-left, 0px);
+  --lx-sar: env(safe-area-inset-right, 0px);
+}
+
+/* ===== 画面の骨組み: 上=ヘッダー / 真ん中=会話 / 下=キャラ選択+入力（親指の届く場所に集める） ===== */
+.app { padding-left: var(--lx-sal); padding-right: var(--lx-sar); }
+.app-header { order: -10; }
+.sister-tabs { order: 1; }      /* 会話の下へ。他の要素は order:0 のまま元の並び */
+.input-area { order: 2; }
+.chat-area { overscroll-behavior: contain; }
+
+/* ===== ヘッダー: 押せる大きさ(44px)に。狭い画面では題名の文字を畳んでボタンを優先 ===== */
+.app-header {
+  height: auto; min-height: 56px; padding: var(--lx-sat) 12px 0;
+}
+.header-right { gap: 6px; }
+.app-header .btn-style, .app-header .mode-btn, .app-header .people-btn, .app-header .icon-btn {
+  min-height: var(--lx-tap); display: inline-flex; align-items: center; justify-content: center;
+}
+.app-header .btn-style { padding: 0 12px; font-size: 13px; }
+.app-header .mode-btn { padding: 0 12px; font-size: 14px; }
+.app-header .people-btn, .app-header .icon-btn { min-width: var(--lx-tap); padding: 0; }
+.icon-btn { width: var(--lx-tap); height: var(--lx-tap); }
+@media (max-width: 480px) {
+  .app-header .header-title { display: none; }   /* ロゴ🎙️だけ残す。題名は広い画面で表示 */
+  .app-header .header-left { flex: 0 0 auto; }
+  .app-header { justify-content: space-between; }
+}
+
+/* ===== キャラ選択: 5人ぶんの札。絵文字を大きく、名前を下に。今のキャラは色つきの面で分かる ===== */
+.sister-tabs {
+  height: auto; min-height: 58px; border-bottom: none; border-top: 1px solid var(--border);
+  padding: 0 4px; gap: 2px;
+}
+.tab, .tab-soon {
+  flex: 1 1 0; min-width: 0; min-height: var(--lx-tap-main);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0;
+  font-family: inherit; position: relative;
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
+}
+.tab-icon { font-size: 22px; line-height: 1.2; }
+.tab-name { font-size: 11px; line-height: 1.2; color: var(--lx-muted); white-space: nowrap; }
+.tab { color: var(--lx-muted); }
+.tab.active { background: var(--active-light); }
+.tab.active .tab-name { color: var(--active-dark); font-weight: 700; }
+.tab::after { top: 0; bottom: auto; height: 3px; border-radius: 0 0 3px 3px; left: 25%; right: 25%; }
+.tab.active::after { left: 10%; right: 10%; }
+.tab-soon { opacity: 0.55; background: transparent; color: var(--lx-muted); cursor: default; }
+.tab-soon .tab-icon { filter: grayscale(0.6); }
+.tab-soon::before {
+  content: '準備中'; position: absolute; top: 1px; right: 4px; font-size: 8px; line-height: 1;
+  color: var(--lx-muted); background: var(--border); border-radius: 6px; padding: 2px 3px;
+}
+/* キーボードを出して打っている間は名前を畳んで会話の場所を広げる（札は押せるまま） */
+.app:has(#msg-input:focus) .sister-tabs { min-height: 44px; }
+.app:has(#msg-input:focus) .tab-name, .app:has(#msg-input:focus) .tab-soon::before { display: none; }
+.app:has(#msg-input:focus) .tab, .app:has(#msg-input:focus) .tab-soon { min-height: 44px; }
+
+/* 準備中の札を押したときの一言 */
+.lx-toast {
+  position: fixed; left: 50%; bottom: calc(150px + var(--lx-sab)); transform: translate(-50%, 8px);
+  max-width: calc(100% - 32px); background: #3A322C; color: #fff; padding: 10px 16px;
+  border-radius: var(--radius-md); font-size: 14px; z-index: 10002; opacity: 0; pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.lx-toast.lx-toast-on { opacity: 1; transform: translate(-50%, 0); }
+
+/* ===== 会話エリア ===== */
+.welcome-hint { color: var(--lx-muted); }
+.msg-bubble { font-size: 15px; }
+.msg-sister-name { color: var(--lx-muted); }
+
+/* ===== 入力エリア: 上の段=文字入力（横いっぱい） / 下の段=左に道具(📷📎🔍🔄)・右に主役(🎤 ↑) ===== */
+.input-area { padding: 8px max(10px, var(--lx-sar)) max(8px, var(--lx-sab)) max(10px, var(--lx-sal)); }
+.input-wrapper { flex-wrap: wrap; align-items: center; gap: 2px 4px; padding: 6px 8px 8px 14px; }
+.msg-input { order: 0; flex: 1 1 100%; min-height: var(--lx-tap); padding: 10px 0; font-size: 16px; }
+.input-wrapper > button, .input-wrapper > div { order: 1; }
+.btn-vision-toggle, .btn-attach, .btn-search, .btn-continue-talk {
+  width: var(--lx-tap); height: var(--lx-tap); padding: 0; opacity: 1; font-size: 20px;
+  display: flex; align-items: center; justify-content: center;
+}
+.btn-vision-toggle span, .btn-attach span, .btn-continue-talk span { opacity: 0.75; }
+.btn-search { border: none; background: transparent; box-shadow: none; }   /* 🔍だけ橙の輪が付いていた(search-ui-styles.css)。他の道具と同じ見た目に統一。結果ありは右上の点で示す */
+.btn-search.has-results { position: relative; background: transparent; box-shadow: none; }
+.btn-search.has-results::after { content: ''; position: absolute; top: 8px; right: 8px; width: 9px; height: 9px; border-radius: 50%; background: #FF9800; }
+#cocomi-mic-wrap { order: 2; margin-left: auto; width: var(--lx-tap-main) !important; height: var(--lx-tap-main) !important; }
+#cocomi-mic-btn { width: var(--lx-tap-main) !important; height: var(--lx-tap-main) !important; font-size: 22px !important; }
+.btn-send { order: 3; width: var(--lx-tap-main); height: var(--lx-tap-main); }
+.send-arrow { font-size: 22px; }
+
+/* 入力の下の細い行: 情報は小さく、押すもの(📋💾)は44pxの当たり */
+.input-footer { align-items: center; padding: 2px 4px 0; font-size: 12px; color: var(--lx-muted); min-height: 32px; }
+.input-footer .btn-download {
+  min-width: var(--lx-tap); min-height: var(--lx-tap); margin: -6px 0; font-size: 18px; opacity: 0.8;
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.token-cost, .char-count { color: var(--lx-muted); }
+
+/* ===== 会議画面 ===== */
+.meeting-header { min-height: 56px; height: auto; padding-top: var(--lx-sat); padding-left: max(12px, var(--lx-sal)); padding-right: max(12px, var(--lx-sar)); }
+.meeting-header .icon-btn { width: var(--lx-tap); height: var(--lx-tap); }
+.meeting-header .header-right { gap: 2px; }
+.meeting-header .header-title { color: #fff; }   /* 赤い帯の上は白（暗い文字だと読みにくかった） */
+@media (max-width: 480px) {
+  .meeting-header .header-title { font-size: 0; }           /* 「COCOMITalk 会議室」は入らないので「会議室」だけ見せる */
+  .meeting-header .header-title::after { content: '会議室'; font-size: 16px; }
+}
+.meeting-input-area { padding-bottom: max(8px, var(--lx-sab)); padding-left: max(0px, var(--lx-sal)); padding-right: max(0px, var(--lx-sar)); }
+.meeting-grade-bar { padding: 6px 12px !important; font-size: 13px !important; color: var(--lx-muted) !important; }
+#meeting-grade-select { min-height: var(--lx-tap); font-size: 14px !important; padding: 6px 10px !important; border-radius: 12px !important; }
+.meeting-input-area .input-wrapper { margin: 0 10px; }
+.meeting-topic-input { order: 0; flex: 1 1 100%; min-height: var(--lx-tap); }
+#btn-meeting-attach { order: 1; width: var(--lx-tap); height: var(--lx-tap); opacity: 1; }
+#btn-meeting-mic { order: 2; margin-left: auto; width: var(--lx-tap-main) !important; height: var(--lx-tap-main) !important; }
+#btn-meeting-start { order: 3; width: var(--lx-tap-main); height: var(--lx-tap-main); }
+.meeting-action-row { gap: 10px; }
+.meeting-action-btn { min-height: var(--lx-tap-main); font-size: 15px; }
+
+/* ===== 横向き（高さが低い）: 縦を稼ぐ。ボタンの大きさは保つ ===== */
+@media (orientation: landscape) and (max-height: 520px) {
+  .app { max-width: min(100%, 900px); }
+  .app-header { min-height: 48px; }
+  .app-header .btn-style, .app-header .mode-btn, .app-header .people-btn, .icon-btn { min-height: 40px; }
+  .app-header .header-title { display: inline; }
+  .sister-tabs { min-height: 44px; }
+  .tab, .tab-soon { min-height: 44px; flex-direction: row; gap: 4px; }
+  .tab-icon { font-size: 18px; }
+  .tab-soon::before { display: none; }
+  .input-footer { display: none; }
+  .msg-input { min-height: 40px; padding: 8px 0; }
+  .input-wrapper { flex-wrap: nowrap; padding: 4px 6px 4px 12px; }
+  .msg-input { flex: 1 1 auto; order: 0; }
+  #cocomi-mic-wrap, .btn-send, #cocomi-mic-btn { width: 44px !important; height: 44px !important; }
+  #cocomi-mic-wrap { margin-left: 0; }
+  .lx-toast { bottom: calc(70px + var(--lx-sab)); }
+}
+
+/* ===== タブレット以上: 少し広く、文字も一段大きく ===== */
+@media (min-width: 700px) {
+  :root { --max-width: 720px; }
+  .msg-bubble { font-size: 16px; max-width: 72%; }
+  .tab-name { font-size: 12px; }
+  .app-header .header-title { display: inline; }
+}
+
+/* 動きを減らす設定の人には、ふわふわ動く絵を止める */
+@media (prefers-reduced-motion: reduce) {
+  .welcome-icon, .splash-logo, .btn-vision-toggle.vision-active, .vision-btn-walk.walk-active { animation: none !important; }
+}

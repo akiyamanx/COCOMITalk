@@ -9,6 +9,9 @@
 // v1.6 2026-03-23 - グループモードでもAI自発的記憶保存マーカー検知（detectAndSave対応）
 // v1.7 2026-03-30 - Sprint 2: PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
 
+// 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
+// 2026-10-28 - 話しかけ先(targetSister): 帯の札タップで選んだ子を、次の1通だけ先頭＋主担当にする（setTarget/takeTarget。1回で解除）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
 'use strict';
 
 /**
@@ -25,12 +28,35 @@ const ChatGroup = (() => {
   // --- 前ターンのリレー履歴を保持（ターン間で引き継ぐ） ---
   let prevTurnRelay = [];
 
+  // --- 話しかけ先（画面v2の札タップ）。次の1通だけ有効。変わるたびに document へ 'cocomi:group-target' を通知 ---
+  let _target = null;
+  function _emitTarget() {
+    if (typeof document !== 'undefined' && typeof CustomEvent !== 'undefined') {
+      document.dispatchEvent(new CustomEvent('cocomi:group-target', { detail: { target: _target } }));
+    }
+  }
+  function setTarget(key) {
+    const next = key || null;
+    if (next === _target) return;
+    _target = next;
+    _emitTarget();
+  }
+  function getTarget() { return _target; }
+  /** 1回だけ取り出して解除する（handleGroupReplyの頭で呼ぶ） */
+  function takeTarget() {
+    const t = _target;
+    if (t) { _target = null; _emitTarget(); }
+    return t;
+  }
+
   /**
    * グループリレー応答を実行
    */
   async function handleGroupReply(userText, ctx) {
     const { currentSister, chatHistories, addMessage, hideTyping,
             chatArea, SISTERS, SISTER_API, attachment } = ctx;
+
+    const target = takeTarget(); // 話しかけ先（無ければnull）。ここで必ず解除＝1通だけ
 
     // 動的ルーティングで発言順を決定
     let order = ['koko', 'gpt', 'claude'];
@@ -44,6 +70,12 @@ const ChatGroup = (() => {
       } catch (e) {
         console.warn('[ChatGroup] ルーティング分析フォールバック:', e);
       }
+    }
+
+    // 話しかけ先が選ばれていれば、その子を先頭＋主担当に（他の子は元の順で続く）
+    if (target && typeof Layout2Core !== 'undefined' && typeof CharacterRegistry !== 'undefined') {
+      const t = Layout2Core.applyTarget(order, lead, target, CharacterRegistry.list());
+      if (t.targeted && SISTERS[target]) { order = t.order; lead = t.lead; }
     }
 
     // 今ターンのリレー履歴
@@ -204,9 +236,10 @@ const ChatGroup = (() => {
 
     const opts = { model: modelKey };
     if (attachment) opts.attachment = attachment;
-    return await apiModule.sendMessage(
+    const raw = await apiModule.sendMessage(
       userText, systemPrompt + leadNote + (extraInstruction || '') + extraPrompt, history, opts
     );
+    return (typeof ToneStyle !== 'undefined') ? ToneStyle.consume(raw) : raw; // 声のトーンタグを外す
   }
 
   function _showGroupTyping(sisterKey, sister, chatArea, hideTyping) {
@@ -254,6 +287,7 @@ const ChatGroup = (() => {
 
   function resetHistory() {
     prevTurnRelay = [];
+    setTarget(null); // 1対1に戻る時などは話しかけ先も解除
   }
 
   /**
@@ -330,6 +364,9 @@ const ChatGroup = (() => {
     handleGroupReply,
     continueTalk,
     resetHistory,
+    setTarget,
+    getTarget,
+    takeTarget,
     hasPrevTurn: () => prevTurnRelay.length > 0,
   };
 })();
