@@ -7,12 +7,14 @@
 // v2.0 2026-04-06 - ビジョンUI関連をvision-ui-controller.jsに分離（行数削減）
 // v2.1 2026-10-29 - 起動オープニング(opening.js)をスプラッシュの上に出す（失敗時は従来スプラッシュ）
 // v2.2 2026-10-29 - オープニング(スキップ含む)の後にロゴ画面(COCOMITalk)を1秒見せてからアプリ表示
+// v3.77 2026-10-29 - 選んだ子の色は --sister-* だけ切替。全体の基調(--active-*)は青のまま／theme-colorは青固定
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 /** アプリケーションモジュール */
 const App = (() => {
   // 三姉妹のCSS変数マッピング
-  const _theme = (k) => ({ '--active-primary': `var(--${k}-primary)`, '--active-light': `var(--${k}-light)`, '--active-dark': `var(--${k}-dark)`, '--active-bg': `var(--${k}-bg)` });
+  // v2.3: 切り替えるのは“選んだ子の色”(--sister-*)だけ。画面全体の基調(--active-*)は落ち着いた青のまま
+  const _theme = (k) => ({ '--sister-primary': `var(--${k}-primary)`, '--sister-light': `var(--${k}-light)`, '--sister-dark': `var(--${k}-dark)`, '--sister-bg': `var(--${k}-bg)` });
   const SISTER_THEMES = { koko: _theme('koko'), gpt: _theme('gpt'), claude: _theme('claude') };
   // アプリ起動
   async function init() {
@@ -253,12 +255,9 @@ const App = (() => {
       root.style.setProperty(prop, value);
     });
 
-    // テーマカラーのmetaタグも更新
-    const themeColors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
+    // テーマカラーのmetaタグは基調の青のまま（姉妹ごとには変えない）
     const metaTheme = document.querySelector('meta[name="theme-color"]');
-    if (metaTheme) {
-      metaTheme.setAttribute('content', themeColors[sisterKey] || '#FF6B9D');
-    }
+    if (metaTheme) metaTheme.setAttribute('content', '#4A76A8');
   }
 
   // v1.2追加 - 進行中の会議をIndexedDBから復元

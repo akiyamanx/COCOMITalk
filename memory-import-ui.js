@@ -3,6 +3,8 @@
 // D1＋Vectorizeに記憶を直接投入する。3つの入力モードに対応:
 // ①テキスト1件入力 ②JSON一括ペースト ③MDファイルアップロード→自動パース
 // v1.0 2026-03-16 - 新規作成（実行計画書v24.0「次のステップ#1」）
+// v3.77 2026-10-29 - 記憶インポートの強調色を青系に
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 const MemoryImportUI = (() => {
@@ -309,7 +311,7 @@ const MemoryImportUI = (() => {
 .mi-header h2{margin:0;font-size:1.1rem}
 .mi-tabs{display:flex;gap:0;border-bottom:1px solid #333}
 .mi-tab{flex:1;padding:10px 8px;background:transparent;border:none;color:#999;font-size:0.85rem;cursor:pointer;border-bottom:2px solid transparent}
-.mi-tab.active{color:#a78bfa;border-bottom-color:#a78bfa}
+.mi-tab.active{color:#9DBFE3;border-bottom-color:#9DBFE3}
 .mi-body{flex:1;padding:16px;overflow-y:auto}
 .mi-mode.hidden{display:none}
 .mi-mode label{display:block;font-size:0.82rem;color:#aaa;margin:10px 0 4px}
@@ -317,7 +319,7 @@ const MemoryImportUI = (() => {
 .mi-mode input[type="text"],.mi-mode textarea,.mi-mode select{width:100%;padding:10px;background:#252540;border:1px solid #444;border-radius:8px;color:#e0e0e0;font-size:0.9rem;box-sizing:border-box}
 .mi-mode textarea{resize:vertical;font-family:inherit}
 .mi-mode input[type="file"]{margin:8px 0}
-.mi-btn-submit{width:100%;padding:12px;margin-top:16px;background:linear-gradient(135deg,#6c5ce7,#a78bfa);border:none;border-radius:10px;color:#fff;font-size:1rem;font-weight:bold;cursor:pointer}
+.mi-btn-submit{width:100%;padding:12px;margin-top:16px;background:linear-gradient(135deg,#3D6591,#4A76A8);border:none;border-radius:10px;color:#fff;font-size:1rem;font-weight:bold;cursor:pointer}
 .mi-btn-submit:active{opacity:0.8}
 .mi-hint{font-size:0.78rem;color:#888;margin:6px 0 0}
 .mi-status{padding:10px 16px;font-size:0.85rem;text-align:center}
@@ -326,7 +328,7 @@ const MemoryImportUI = (() => {
 .mi-status-success{color:#06d6a0}
 .mi-status-error{color:#ef476f}
 .mi-md-preview{margin-top:12px}
-.mi-preview-title{font-size:0.85rem;color:#a78bfa;margin:0 0 8px}
+.mi-preview-title{font-size:0.85rem;color:#9DBFE3;margin:0 0 8px}
 .mi-preview-item{padding:8px;margin:4px 0;background:#252540;border-radius:8px}
 .mi-preview-item label{display:flex;align-items:center;gap:6px;font-size:0.9rem}
 .mi-preview-summary{font-size:0.78rem;color:#999;margin:4px 0 0 24px;white-space:pre-wrap;word-break:break-all}

@@ -4,7 +4,8 @@
 /* v1.0 2026-10-28 - 新規作成（follow-up #7） */
 /* v1.1 2026-10-28 - グループの帯の札をタップ可能に（44px・選択中=二重の輪＋✓。話している子の光とは別） */
 /* v1.2 2026-10-28 - 帯に準備中の札(淡く・点線・「準備中」札)を追加。札の列を横スクロールにして🔄つづきは列の外(右端に固定) */
-/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 */
+/* v1.3 2026-10-29 - 配色を落ち着いた青に（キャラ名札だけ選んだ子の色=--sister-*。影・文字を青みのニュートラルへ。色のみ） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
 
 /* ===== 上の細い帯: ☰ | 今のキャラ▾ | ⋯ ===== */
 html.lx2 .app-header { height: 52px; min-height: 52px; padding: var(--lx-sat) 6px 0; gap: 4px; box-sizing: content-box; }
@@ -19,9 +20,12 @@ html.lx2 .lx2-hbtn:active { background: var(--active-light); }
 html.lx2 .lx2-char {
   flex: 0 1 auto; min-width: 0; max-width: calc(100% - 100px); min-height: var(--lx-tap); margin: 0 auto; padding: 0 14px;
   display: inline-flex; align-items: center; justify-content: center; gap: 8px; font: inherit;
-  background: var(--active-light); color: var(--active-dark); border: 1.5px solid transparent; border-radius: var(--radius-full); cursor: pointer;
+  background: var(--sister-light); color: var(--sister-dark); border: 1.5px solid transparent; border-radius: var(--radius-full); cursor: pointer;
 }
-html.lx2 .lx2-char[aria-expanded="true"] { border-color: var(--active-primary); }
+html.lx2 .lx2-char[aria-expanded="true"] { border-color: var(--sister-primary); }
+/* みんな(グループ)の時は特定の子の色ではなく基調の青 */
+html.lx2 .lx2-group .lx2-char { background: var(--app-light); color: var(--app-dark); }
+html.lx2 .lx2-group .lx2-char[aria-expanded="true"] { border-color: var(--app-primary); }
 html.lx2 .lx2-char-icon { font-size: 22px; line-height: 1; }
 html.lx2 .lx2-char-name { font-size: 16px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 html.lx2 .lx2-caret { font-size: 13px; color: var(--lx-muted); margin-left: auto; padding-left: 4px; }
@@ -30,8 +34,8 @@ html.lx2 .lx2-char .lx2-caret { margin-left: 0; }
 /* ===== 開く面（ドロワー / ⋯ / キャラ / ＋）の共通: 閉じている時は見えず押せない ===== */
 html.lx2 .lx2-drawer, html.lx2 .lx2-more, html.lx2 .lx2-chars, html.lx2 .lx2-sheet, html.lx2 .lx2-scrim { visibility: hidden; opacity: 0; transition: opacity 0.15s, transform 0.2s, visibility 0s 0.2s; }
 html.lx2 .lx2-drawer.lx2-on, html.lx2 .lx2-more.lx2-on, html.lx2 .lx2-chars.lx2-on, html.lx2 .lx2-sheet.lx2-on, html.lx2 .lx2-scrim.lx2-on { visibility: visible; opacity: 1; transition-delay: 0s; }
-html.lx2 .lx2-scrim { position: fixed; inset: 0; background: rgba(45, 37, 32, 0.35); z-index: 8000; }
-html.lx2 .lx2-drawer, html.lx2 .lx2-more, html.lx2 .lx2-chars { position: fixed; z-index: 8100; background: var(--bg-main); color: var(--text-primary); box-shadow: 0 8px 28px rgba(45, 37, 32, 0.28); overflow-y: auto; overscroll-behavior: contain; }
+html.lx2 .lx2-scrim { position: fixed; inset: 0; background: rgba(34, 48, 63, 0.38); z-index: 8000; }
+html.lx2 .lx2-drawer, html.lx2 .lx2-more, html.lx2 .lx2-chars { position: fixed; z-index: 8100; background: var(--bg-main); color: var(--text-primary); box-shadow: 0 8px 28px rgba(34, 48, 63, 0.28); overflow-y: auto; overscroll-behavior: contain; }
 
 /* ===== ☰ ドロワー（左から出る。入れ子の「設定」つき） ===== */
 html.lx2 .lx2-drawer { top: 0; bottom: 0; left: 0; width: min(86vw, 320px); transform: translateX(-100%); border-radius: 0 var(--radius-lg) var(--radius-lg) 0; padding-bottom: var(--lx-sab); }
@@ -77,7 +81,7 @@ html.lx2 .lx2-char-group { border-top: 1px solid var(--border); border-radius: 0
 /* 準備中（葵=青い蝶 / キミ=金の星）: 色の点と薄い地で「その子の色」を匂わせる。文字は濃い色のまま読める */
 html.lx2 .lx2-soon { background: var(--lx2-soon-bg); border-left: 5px solid var(--lx2-soon-dot); cursor: default; }
 html.lx2 .lx2-soon .lx2-char-row-icon { filter: saturate(0.8); }
-html.lx2 .lx2-pill { margin-left: auto; font-size: 12px; font-weight: 700; color: #3A322C; background: #fff; border: 1.5px solid var(--lx2-soon-dot); border-radius: var(--radius-full); padding: 2px 8px; }
+html.lx2 .lx2-pill { margin-left: auto; font-size: 12px; font-weight: 700; color: #26323F; background: #fff; border: 1.5px solid var(--lx2-soon-dot); border-radius: var(--radius-full); padding: 2px 8px; }
 
 /* ===== 入力は1行: ＋ | 文字 | 🎤か↑ ===== */
 html.lx2 .input-area { position: relative; padding: 6px max(8px, var(--lx-sar)) max(6px, var(--lx-sab)) max(8px, var(--lx-sal)); }
@@ -99,7 +103,7 @@ html.lx2 .input-footer:has(#char-count:empty) { display: none; }
 html.lx2 .input-footer #char-count { font-size: 11px; padding: 2px 0; }
 
 /* ===== ＋シート（入力の真上に出る。タイルごとに名前つき） ===== */
-html.lx2 .lx2-sheet { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 4px); z-index: 8100; display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 4px; padding: 8px; background: var(--bg-main); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 -4px 22px rgba(45, 37, 32, 0.22); transform: translateY(8px); }
+html.lx2 .lx2-sheet { position: absolute; left: 8px; right: 8px; bottom: calc(100% + 4px); z-index: 8100; display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 4px; padding: 8px; background: var(--bg-main); border: 1px solid var(--border); border-radius: var(--radius-lg); box-shadow: 0 -4px 22px rgba(34, 48, 63, 0.22); transform: translateY(8px); }
 html.lx2 .lx2-sheet.lx2-on { transform: translateY(0); }
 html.lx2 .lx2-sheet .lx2-adopted {
   width: auto; height: 72px; min-width: var(--lx-tap); padding: 4px; border: none; border-radius: var(--radius-md); background: transparent; box-shadow: none; opacity: 1; animation: none;
@@ -140,7 +144,7 @@ html.lx2 .lx2-chip[aria-pressed="true"]::after { content: "✓"; font-size: 14px
 html.lx2 .lx2-chip:focus-visible { outline: 3px solid var(--lx2-cd, var(--active-dark)); outline-offset: 2px; }
 html.lx2 .lx2-chip-act { flex: 0 0 auto; min-height: var(--lx-tap); padding: 0 14px; border: 1.5px solid var(--border); border-radius: var(--radius-full); background: #fff; color: var(--text-primary); font: inherit; font-size: 14px; cursor: pointer; white-space: nowrap; }
 /* 準備中の札（葵=青 / キミ=金。色は.lx2-soonと同じ点と薄い地、「準備中」札は.lx2-pillを流用）: 淡く見せるが高さは他と同じ44px。押してもtoastだけ(選べない) */
-html.lx2 .lx2-chip-soon { background: var(--lx2-soon-bg); border-color: var(--lx2-soon-dot); border-style: dashed; color: #6B5F55; cursor: default; }
+html.lx2 .lx2-chip-soon { background: var(--lx2-soon-bg); border-color: var(--lx2-soon-dot); border-style: dashed; color: #4E5E6E; cursor: default; }
 html.lx2 .lx2-chip-soon .lx2-chip-icon { opacity: 0.55; filter: saturate(0.6); }
 @media (max-width: 480px) {   /* 狭い画面: 札を少し詰めて、右端の🔄つづきと並べる（高さ44pxは変えない） */
   html.lx2 .lx2-strip, html.lx2 .lx2-strip-scroll { gap: 4px; }
@@ -148,7 +152,7 @@ html.lx2 .lx2-chip-soon .lx2-chip-icon { opacity: 0.55; filter: saturate(0.6); }
   html.lx2 .lx2-chip-icon { font-size: 16px; }
   html.lx2 .lx2-chip-act { padding: 0 10px; font-size: 13px; }
 }
-html.lx2 .lx2-chip-soon:focus-visible { outline-color: #3A322C; }
+html.lx2 .lx2-chip-soon:focus-visible { outline-color: #26323F; }
 html.lx2 .lx2-chip-soon .lx2-pill { margin-left: 0; font-size: 11px; padding: 1px 6px; white-space: nowrap; }
 
 @media (prefers-reduced-motion: reduce) {

@@ -2,7 +2,8 @@
 /* このファイルは何をするか: 設定を「見出しの一覧→開いて使う」形にし、お散歩中の操作を大きく・横にはみ出さないようにする */
 /* 外し方: index.html の <link href="layout-panels.css"> を消せば元の見た目に戻る（設定は layout-ui.js を外すと全部開いた形） */
 /* v1.0 2026-10-28 - 新規作成（follow-up #6） */
-/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 */
+/* v3.77 2026-10-29 - 配色を落ち着いた青に（色のみ・レイアウト不変） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
 
 /* ===== 設定: 見出しの一覧（カード）。使う項目だけ開く ===== */
 .modal-content { max-height: 92dvh; padding-bottom: var(--lx-sab, 0px); overscroll-behavior: contain; }
@@ -30,7 +31,7 @@
 /* 保存ボタン: 設定のどこにいても画面の下に居る（親指で押せる） */
 #btn-save-settings {
   order: 20; position: sticky; bottom: 8px; z-index: 2; min-height: 54px; font-size: 16px;
-  box-shadow: 0 4px 14px rgba(255, 107, 157, 0.35);
+  box-shadow: 0 4px 14px rgba(74, 118, 168, 0.35);
 }
 /* モデル設定の中の「普段/開発/会議/お散歩…」も同じ畳み方 */
 .model-mode-block { padding: 0 12px 10px; margin-bottom: 10px; }

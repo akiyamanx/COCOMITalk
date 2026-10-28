@@ -5,15 +5,17 @@
 // v1.8 2026-03-28 - 相談トピック連携: ConsultationUI.init()呼び出し＋会議終了時の回答ダイアログ
 // v1.8.1 2026-03-28 - バグ修正: 回答ダイアログ表示時にhide()が先に走って見えない問題を修正
 // v1.9 2026-04-05 - ワイワイモード: meeting-full時のスタイルボタングレーアウト制御追加
+// v3.77 2026-10-29 - 姉妹の色を彩度控えめに
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 /** 会議UIモジュール */
 const MeetingUI = (() => {
 
   const SISTER_DISPLAY = {
-    koko: { name: 'ここちゃん', emoji: '🌸', color: '#FF6B9D' },
-    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#6B5CE7' },
-    claude: { name: 'クロちゃん', emoji: '🔮', color: '#E6783E' },
+    koko: { name: 'ここちゃん', emoji: '🌸', color: '#E8779F' },
+    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#7469D4' },
+    claude: { name: 'クロちゃん', emoji: '🔮', color: '#DB8250' },
   };
 
   let meetingScreen = null;

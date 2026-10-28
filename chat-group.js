@@ -11,7 +11,8 @@
 
 // 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
 // 2026-10-28 - 話しかけ先(targetSister): 帯の札タップで選んだ子を、次の1通だけ先頭＋主担当にする（setTarget/takeTarget。1回で解除）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// v3.77 2026-10-29 - グループのタイピング名の色を彩度控えめに
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 /**
@@ -244,7 +245,7 @@ const ChatGroup = (() => {
 
   function _showGroupTyping(sisterKey, sister, chatArea, hideTyping) {
     hideTyping();
-    const colors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
+    const colors = { koko: '#A5426C', gpt: '#4F449E', claude: '#A8531F' };
     const color = colors[sisterKey] || '#888';
 
     const msgDiv = document.createElement('div');

@@ -3,12 +3,13 @@
 /* 外し方: index.html の <link href="layout-main.css"> を消せば元の見た目に戻る（JS・id・クラスは変えていない） */
 /* v1.0 2026-10-28 - 新規作成（follow-up #6） */
 /* v1.1 2026-10-28 - 🔍の橙の輪を消して他の道具と統一（follow-up #7） */
-/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 */
+/* v3.77 2026-10-29 - 配色を落ち着いた青に（色のみ・レイアウト不変） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
 
 :root {
   --lx-tap: 44px;               /* 指で押す最小の大きさ */
   --lx-tap-main: 52px;          /* 主役ボタン（マイク・送信） */
-  --lx-muted: #6B5F56;          /* 小さい補助文字用（--text-light #B5AAA0 は薄すぎて読めないため。白地で約6:1） */
+  --lx-muted: #4E5E6E;          /* 小さい補助文字用（青みのニュートラル。白地で約6.5:1） */
   --lx-sat: env(safe-area-inset-top, 0px);
   --lx-sab: env(safe-area-inset-bottom, 0px);
   --lx-sal: env(safe-area-inset-left, 0px);
@@ -72,7 +73,7 @@
 /* 準備中の札を押したときの一言 */
 .lx-toast {
   position: fixed; left: 50%; bottom: calc(150px + var(--lx-sab)); transform: translate(-50%, 8px);
-  max-width: calc(100% - 32px); background: #3A322C; color: #fff; padding: 10px 16px;
+  max-width: calc(100% - 32px); background: #26323F; color: #fff; padding: 10px 16px;
   border-radius: var(--radius-md); font-size: 14px; z-index: 10002; opacity: 0; pointer-events: none;
   transition: opacity 0.2s, transform 0.2s;
 }

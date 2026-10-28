@@ -3,6 +3,8 @@
 // meeting-ui.jsから分割（500行制限対応）
 // v1.0 Step 3.5 - 新規作成（2026-03-08）
 // v1.1 2026-03-09 - 「見る」ボタンでMeetingRelay状態復元（過去会議の再開・追加質問対応）
+// v3.77 2026-10-29 - 姉妹の色を彩度控えめに
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 /**
@@ -16,9 +18,9 @@ const MeetingArchiveUI = (() => {
 
   // 姉妹表示設定（MeetingUIと同じ）
   const SISTER_DISPLAY = {
-    koko: { name: 'ここちゃん', emoji: '🌸', color: '#FF6B9D' },
-    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#6B5CE7' },
-    claude: { name: 'クロちゃん', emoji: '🔮', color: '#E6783E' },
+    koko: { name: 'ここちゃん', emoji: '🌸', color: '#E8779F' },
+    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#7469D4' },
+    claude: { name: 'クロちゃん', emoji: '🔮', color: '#DB8250' },
   };
 
   /**

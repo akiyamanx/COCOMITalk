@@ -4,6 +4,8 @@
 // v1.0〜v1.1.1: 履歴省略（セッションカプセル参照）
 // v1.2 追加 - 送信カウントダウンアニメ（方針F対応: 0.5秒光って自動送信、タップでキャンセル）
 // v1.3 追加 - recovering/blocked状態表示（三姉妹会議決定: UI状態同期）
+// v3.77 2026-10-29 - マイクの状態色を青系に（紫・ピンクをやめた）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 
 /**
  * VoiceUI
@@ -66,7 +68,7 @@ class VoiceUI {
     btn.style.cssText = `
       width: 38px; height: 38px;
       border-radius: 50%;
-      border: 2px solid var(--active-primary, #6c5ce7);
+      border: 2px solid var(--active-primary, #4A76A8);
       background: white;
       font-size: 18px;
       cursor: pointer; transition: all 0.3s ease;
@@ -109,8 +111,8 @@ class VoiceUI {
     el.style.cssText = `
       display: none;
       padding: 8px 12px; margin: 4px 8px;
-      background: rgba(108, 92, 231, 0.1);
-      border-left: 3px solid var(--active-primary, #6c5ce7);
+      background: rgba(61, 101, 145, 0.1);
+      border-left: 3px solid var(--active-primary, #4A76A8);
       border-radius: 4px;
       font-size: 14px;
       color: #555;
@@ -133,8 +135,8 @@ class VoiceUI {
     el.style.cssText = `
       display: none;
       padding: 8px 12px; margin: 4px 8px;
-      background: rgba(108, 92, 231, 0.08);
-      border: 1px solid var(--active-primary, #6c5ce7);
+      background: rgba(61, 101, 145, 0.08);
+      border: 1px solid var(--active-primary, #4A76A8);
       border-radius: 8px; font-size: 14px;
       color: #333;
     `;
@@ -158,7 +160,7 @@ class VoiceUI {
     style.textContent = `
       /* v1.1: リングウェーブ＋呼吸グロー */
       .cocomi-mic-listening {
-        background: linear-gradient(135deg, #ec4899, #a855f7) !important;
+        background: linear-gradient(135deg, #5B8EC4, #3D6591) !important;
         border-color: transparent !important;
         animation: cocomi-breath-scale 3s ease-in-out infinite !important;
       }
@@ -167,7 +169,7 @@ class VoiceUI {
         position: absolute;
         inset: -6px;
         border-radius: 50%;
-        background: linear-gradient(135deg, #ec4899, #a855f7);
+        background: linear-gradient(135deg, #5B8EC4, #3D6591);
         filter: blur(12px);
         z-index: -1;
         animation: cocomi-breath-glow 3s ease-in-out infinite;
@@ -182,16 +184,16 @@ class VoiceUI {
         z-index: 1;
       }
       .cocomi-mic-ring-1 {
-        border-color: rgba(236,72,153,0.4);
+        border-color: rgba(91, 142, 196,0.4);
         animation: cocomi-ring-expand 2.4s ease-out infinite;
       }
       .cocomi-mic-ring-2 {
-        border-color: rgba(168,85,247,0.3);
+        border-color: rgba(61, 101, 145,0.3);
         animation: cocomi-ring-expand 2.4s ease-out infinite 0.8s;
       }
       @keyframes cocomi-breath-scale {
-        0%, 100% { transform: scale(1); box-shadow: 0 0 14px rgba(236,72,153,0.3); }
-        50% { transform: scale(1.06); box-shadow: 0 0 24px rgba(168,85,247,0.4); }
+        0%, 100% { transform: scale(1); box-shadow: 0 0 14px rgba(91, 142, 196,0.3); }
+        50% { transform: scale(1.06); box-shadow: 0 0 24px rgba(61, 101, 145,0.4); }
       }
       @keyframes cocomi-breath-glow {
         0%, 100% { opacity: 0.25; transform: scale(0.9); }
@@ -203,23 +205,23 @@ class VoiceUI {
       }
       /* speaking状態 */
       .cocomi-mic-speaking {
-        background: linear-gradient(135deg, #a855f7, #6c5ce7) !important;
+        background: linear-gradient(135deg, #4E9A94, #3D6591) !important;
         border-color: transparent !important;
-        box-shadow: 0 0 12px rgba(108,92,231,0.4);
+        box-shadow: 0 0 12px rgba(61, 101, 145,0.4);
       }
       @keyframes cocomi-speak-glow {
-        0%, 100% { box-shadow: 0 0 4px rgba(108, 92, 231, 0.3); }
-        50% { box-shadow: 0 0 16px rgba(108, 92, 231, 0.8); }
+        0%, 100% { box-shadow: 0 0 4px rgba(61, 101, 145, 0.3); }
+        50% { box-shadow: 0 0 16px rgba(61, 101, 145, 0.8); }
       }
       /* v1.2: 送信カウントダウンアニメ */
       @keyframes cocomi-send-pulse {
-        0% { background: rgba(108, 92, 231, 0.15); }
-        50% { background: rgba(108, 92, 231, 0.35); }
-        100% { background: rgba(108, 92, 231, 0.15); }
+        0% { background: rgba(61, 101, 145, 0.15); }
+        50% { background: rgba(61, 101, 145, 0.35); }
+        100% { background: rgba(61, 101, 145, 0.15); }
       }
       .cocomi-send-countdown {
         animation: cocomi-send-pulse 0.5s ease-in-out;
-        border-left: 3px solid #a855f7 !important;
+        border-left: 3px solid #4A76A8 !important;
       }
     `;
     document.head.appendChild(style);
@@ -281,7 +283,7 @@ class VoiceUI {
       // idle
       btn.classList.add('cocomi-mic-idle');
       btn.style.background = 'white';
-      btn.style.borderColor = 'var(--active-primary, #6c5ce7)';
+      btn.style.borderColor = 'var(--active-primary, #4A76A8)';
       btn.style.animation = 'none';
       btn.innerHTML = '🎤';
     }
@@ -333,7 +335,7 @@ class VoiceUI {
       <div style="display:flex; gap:8px; flex-wrap:wrap;">
         <button id="cocomi-voice-send" style="
           padding:6px 16px; border-radius:6px; border:none;
-          background:var(--active-primary, #6c5ce7); color:white;
+          background:var(--active-primary, #4A76A8); color:white;
           cursor:pointer; font-size:14px;">送る！</button>
         <button id="cocomi-voice-cancel" style="
           padding:6px 16px; border-radius:6px; border:1px solid #ccc;

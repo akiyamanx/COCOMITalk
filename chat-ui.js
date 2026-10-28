@@ -4,6 +4,7 @@
 // v1.2 2026-03-27 - #77改善: 再タップで読み上げ停止トグル（再生中→停止/停止中→再生）
 // v1.4 2026-10-29 - 音が鳴っている間の吹き出しタップで停止（準備中・鳴り始め700msのタップは無視）
 // v1.3 2026-10-29 - 連打で声が重なる不具合の修正: 読み上げ中(準備中含む)のタップは無視。停止はマイクの🔊ボタン。読み上げ中の吹き出しに speaking 表示
+// v3.77 2026-10-29 - AIの吹き出しに data-sister を付与（CSSがその子の色を付ける）／名前札の色を彩度控えめに
 // 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
@@ -23,7 +24,7 @@ const ChatUi = (() => {
 
   // 姉妹テーマカラー
   function getSisterColor(sisterKey) {
-    const colors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
+    const colors = { koko: '#A5426C', gpt: '#4F449E', claude: '#A8531F' };
     return colors[sisterKey] || '#888';
   }
 
@@ -37,6 +38,7 @@ const ChatUi = (() => {
 
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
+    if (role === 'ai' && sisterKey) msgDiv.setAttribute('data-sister', sisterKey);   // v3.77: CSSがその子の色（アバター地・吹き出しの左筋）を付ける目印
 
     // アバター
     const avatar = document.createElement('div');

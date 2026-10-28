@@ -7,46 +7,42 @@
  *           本ファイル読込後に上書きするため、当面は二重定義となる
  *           （既存挙動保護のため、削除は次フェーズで実施）。
  * 関連: ideas/2026-04-08_cocomitalk-uiux-and-dressup-system.md
+ * v1.1 2026-10-29 - 配色を落ち着いた青に（--app-*追加・姉妹色は識別用に彩度を少し下げ・--sister-*追加）
+ * 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
  */
 
 :root {
-  /* ========== 三姉妹カラー（既存維持） ========== */
-  /* ここちゃん（koko）: ピンク系 */
-  --koko-primary: #FF6B9D;
-  --koko-light: #FFE0EB;
-  --koko-dark: #D44A7A;
-  --koko-bg: #FFF5F8;
+  /* ========== アプリの基調（v1.1 2026-10-29: 落ち着いた青。styles.cssの:rootと同じ値） ========== */
+  --app-primary: #4A76A8; --app-dark: #3D6591; --app-light: #E6EEF6; --app-bg: #F6F9FC;
 
-  /* お姉ちゃん（gpt）: 紫系 */
-  --gpt-primary: #6B5CE7;
-  --gpt-light: #E8E5FF;
-  --gpt-dark: #4A3FC7;
-  --gpt-bg: #F7F5FF;
+  /* ========== 三姉妹カラー（その子を見分ける所だけに使う。彩度を少し落とした） ========== */
+  --koko-primary: #E8779F; --koko-light: #FCE7EE; --koko-dark: #A5426C; --koko-bg: #FFF7FA;
+  --gpt-primary: #7469D4; --gpt-light: #ECEAFA; --gpt-dark: #4F449E; --gpt-bg: #F8F7FD;
+  --claude-primary: #DB8250; --claude-light: #FBEBDF; --claude-dark: #A8531F; --claude-bg: #FEF8F3;
 
-  /* クロちゃん（claude）: オレンジ系 */
-  --claude-primary: #E6783E;
-  --claude-light: #FFEEE5;
-  --claude-dark: #C45A22;
-  --claude-bg: #FFF8F3;
-
-  /* ========== 背景・テキスト（既存維持） ========== */
-  --bg-main: #FEFCFA;
-  --bg-chat: #FAF7F4;
-  --text-primary: #2D2520;
-  --text-secondary: #8B7E74;
-  --text-light: #B5AAA0;
-  --border: #EDE8E3;
+  /* ========== 背景・テキスト（青みのニュートラル） ========== */
+  --bg-main: #F6F9FC;
+  --bg-chat: #EEF3F8;
+  --text-primary: #22303F;
+  --text-secondary: #566676;
+  --text-light: #5E6D7C;
+  --border: #DCE4EC;
 
   /* ========== 影（既存＋新規） ========== */
-  --shadow-sm: 0 1px 3px rgba(45, 37, 32, 0.08);
+  --shadow-sm: 0 1px 3px rgba(34, 48, 63, 0.10);
   /* v1.0新規: 構想カプセル仕様の統一ソフトシャドウ */
-  --shadow-soft: 0 2px 8px rgba(45, 37, 32, 0.10);
+  --shadow-soft: 0 2px 8px rgba(34, 48, 63, 0.12);
 
   /* ========== アクティブ姉妹（既存維持） ========== */
-  --active-primary: var(--koko-primary);
-  --active-light: var(--koko-light);
-  --active-dark: var(--koko-dark);
-  --active-bg: var(--koko-bg);
+  --active-primary: var(--app-primary);
+  --active-light: var(--app-light);
+  --active-dark: var(--app-dark);
+  --active-bg: var(--app-bg);
+  /* 選んだ姉妹の色（名前札・アバター等）。app.jsが切り替える */
+  --sister-primary: var(--koko-primary);
+  --sister-light: var(--koko-light);
+  --sister-dark: var(--koko-dark);
+  --sister-bg: var(--koko-bg);
 
   /* ========== フォント（既存維持） ========== */
   --font-main: 'Zen Maru Gothic', 'M PLUS Rounded 1c', 'Hiragino Maru Gothic Pro', sans-serif;

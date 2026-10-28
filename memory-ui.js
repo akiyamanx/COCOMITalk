@@ -8,6 +8,8 @@
 // v1.3 2026-03-13 - 期間指定削除サーバーサイド化（1件ずつループ→Worker SQL一発）
 // v1.4 2026-03-15 - 感情の温度表示（一覧に絵文字＋詳細に感情セクション追加）
 // v1.5 2026-03-16 - 日時表示をJST変換（UTCで保存→表示時にAsia/Tokyo変換）
+// v3.77 2026-10-29 - 姉妹の色を彩度控えめに
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 /** メモリー管理UIモジュール */
@@ -15,9 +17,9 @@ const MemoryUI = (() => {
 
   // 姉妹表示設定
   const SISTER_DISPLAY = {
-    koko: { name: 'ここちゃん', emoji: '🌸', color: '#FF6B9D' },
-    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#6B5CE7' },
-    claude: { name: 'クロちゃん', emoji: '🔮', color: '#E6783E' },
+    koko: { name: 'ここちゃん', emoji: '🌸', color: '#E8779F' },
+    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#7469D4' },
+    claude: { name: 'クロちゃん', emoji: '🔮', color: '#DB8250' },
   };
 
   // v1.4追加 - 感情温度→絵文字変換

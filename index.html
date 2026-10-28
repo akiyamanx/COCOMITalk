@@ -14,7 +14,7 @@
   <!-- 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 （起動オープニング: opening*.js / opening.css追加／モデル3段階化: model-tiers.js等のscript追加／お散歩費用上限: walk-spend*.js追加／画面レイアウト: layout-*.css・layout-ui.js追加・設定sectionにid／レイアウトv2: layout2-*追加・model-indicatorの直書き文字を中立に） -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#FF6B9D">
+  <meta name="theme-color" content="#4A76A8">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>COCOMITalk</title>
@@ -197,7 +197,7 @@
           <span class="send-arrow">▶</span>
         </button>
         <!-- v1.6追加 Step 5c: 会議用マイクボタン -->
-        <button id="btn-meeting-mic" class="cocomi-mic-btn" aria-label="音声入力" style="width:36px;height:36px;border-radius:50%;border:2px solid var(--active-primary,#6c5ce7);background:white;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;transition:all 0.2s ease;">🎤</button>
+        <button id="btn-meeting-mic" class="cocomi-mic-btn" aria-label="音声入力" style="width:36px;height:36px;border-radius:50%;border:2px solid var(--active-primary,#4A76A8);background:white;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;transition:all 0.2s ease;">🎤</button>
       </div>
       <!-- v1.6改善 - ラウンド完了後のアクション（わかりやすいガイド付き） -->
       <div class="meeting-actions hidden">
@@ -299,7 +299,7 @@
           <!-- v1.6追加 - 話すスピード調整 -->
           <div class="setting-item" style="margin-top:12px;">
             <label style="font-size:0.85em; color:#888;">話すスピード: <span id="tts-speed-label">1.0x</span></label>
-            <input type="range" id="range-tts-speed" min="0.75" max="1.5" step="0.05" value="1.0" style="width:100%; margin-top:4px; accent-color:var(--active-primary,#6c5ce7);">
+            <input type="range" id="range-tts-speed" min="0.75" max="1.5" step="0.05" value="1.0" style="width:100%; margin-top:4px; accent-color:var(--active-primary,#4A76A8);">
             <div style="display:flex; justify-content:space-between; font-size:0.75em; color:#666;">
               <span>ゆっくり 0.75x</span><span>普通 1.0x</span><span>はやい 1.5x</span>
             </div>

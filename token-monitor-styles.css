@@ -2,7 +2,8 @@
 /* このファイルはトークン料金表示・モデル選択UIのスタイルを定義する */
 /* v1.0 styles.cssから分離（元: v0.4〜v0.9.5のスタイル） */
 /* v1.1 2026-10-28 - お散歩/準備中ブロックの色、無効行の薄表示を追加 */
-/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 */
+/* v3.77 2026-10-29 - 配色を落ち着いた青に（色のみ・レイアウト不変） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
 
 /* ===== フッターのトークン料金表示 ===== */
 .token-cost {
@@ -79,7 +80,7 @@
   padding: 12px;
   margin-bottom: 12px;
 }
-.model-mode-block[data-mode="normal"] { border-left: 3px solid var(--koko-primary, #FF6B9D); }
+.model-mode-block[data-mode="normal"] { border-left: 3px solid var(--koko-primary, #E8779F); }
 .model-mode-block[data-mode="dev"] { border-left: 3px solid #FF9800; }
 .model-mode-block[data-mode="meeting"] { border-left: 3px solid #F44336; }
 .model-mode-block[data-mode="walk"] { border-left: 3px solid #4CAF50; }
