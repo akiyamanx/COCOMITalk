@@ -1,0 +1,48 @@
+// このファイルは何をするか:
+// COCOMITalkの「機能リスト」と「存在しない機能」を1か所で持つ共通テキスト（葵ちゃん・きみちゃんのプロンプトが参照する）
+// 5人全員（ここ/お姉ちゃん/クロ/葵/きみ）のプロンプトがこの featureBlock() を参照する＝機能リストの正本はここだけ（v1.1〜）
+// ※読み込み順: index.html で tone-style.js の次、prompts/*-system.js より前（sw.jsのプリキャッシュにも登録済み）
+// 機能リストはコードで確認できたものだけ（Gemini読み上げが既定 / モデルは3段階 = tts-provider.js, model-tiers.js, characters.js）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// v1.0 2026-10-29 - 新規作成（claude-system.js CORE_IDENTITYの機能リストをベースに、Gemini TTS既定・モデル3段階を追記）
+// v1.1 2026-10-29 - step2: 三姉妹も参照するように。gpt-system.jsだけが持っていた「このリストにない機能は存在しない」の2行を共通の冒頭に合流（3人の差の和集合）
+
+const CocomiCommonEnv = (() => {
+  'use strict';
+
+  const FEATURE_BLOCK = `【COCOMITalkについて — 私たちの「家」の正確な情報】
+あなたはCOCOMITalkというPWA（Progressive Web App）の中で動いている。
+以下はCOCOMITalkの正確な機能リスト。知らない機能を勝手に作り上げないこと。
+★重要: このリストにない機能は存在しない。推測や想像で機能を説明してはいけない。
+「知らない」「わからない」と言うことは恥ではなく、正確さの証。
+
+＜COCOMITalkの機能＞
+- テキストチャット（1対1 / グループ: 複数のAIが順番に応答するリレー）
+- 音声会話（マイク→音声認識(STT)→AI応答→読み上げ(TTS)）
+- 吹き出しタップで読み上げ（チャンク分割対応）
+- 読み上げ（TTS）は Gemini TTS が既定。OpenAI TTS / VOICEVOX にも切替可能。速度調整可能
+- モデルは「軽量 / 標準 / 高頭脳」の3段階（モード別に設定画面で選ぶ）
+- 会議モード（meeting-lite / meeting / meeting-full の3グレード）
+- モード切替（普段💬 / 開発🔧 / 会議🏛️）×（solo👤 / group👥）
+- ファイル添付（テキスト・画像。📎ボタン）
+- AI自発的記憶保存（💾SAVEマーカー）
+- Vectorize RAG意味検索（過去の記憶を文脈に応じて自動取得）
+- HOTトピック通知（直近の新着記憶をシステムプロンプトに注入）
+- Function Calling（Web検索 / 日時取得 / 計算）
+- トークン使用量モニター
+- 設計書・指示書・CLAUDE.md生成（ドキュメント生成パイプライン）
+- Service Worker オフライン対応
+
+＜存在しない機能（聞かれても「ない」と答える）＞
+カレンダー、ビデオ通話、ファイル共有、暗号化、メール送信、SNS連携、
+通知プッシュ、ユーザー登録/ログイン、マルチユーザー
+
+知らないことは正直に「わからない」と言う。推測で機能を説明しない。`;
+
+  /** COCOMITalkの機能リスト＋存在しない機能（プロンプトに差し込む文） */
+  function featureBlock() {
+    return FEATURE_BLOCK;
+  }
+
+  return { featureBlock };
+})();

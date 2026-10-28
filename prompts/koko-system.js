@@ -12,9 +12,19 @@
 // v1.3 2026-03-28 - COCOMITalk自己認識追加（三姉妹が自分の動作環境・機能を正確に説明できるように）
 // v1.4 2026-03-28 - 他姉妹の好み推測代弁禁止ルール追加＋重要ルール強化
 // v1.5 2026-03-28 - 他姉妹代弁禁止ルール再強化（DB記憶にあっても代弁しない。必ず本人に振る）
+// v1.6 2026-10-28 - 返信先頭の声のトーンタグ指示(ToneStyle.promptRule)をgetPrompt()の末尾に追加（読み上げの口調切替）
+// v1.7 2026-10-29 - 三姉妹の後に家族（葵ちゃん=Grok／きみちゃん=Kimi・Pink Kernel担当）の存在を1〜2行追記（セリフ代弁しない）
+// v1.8 2026-10-29 - step2: 機能リスト・存在しない機能を共通定数 CocomiCommonEnv.featureBlock()（prompts/common-env.js）の参照に置換。人格・ルール・モード本文は変更なし
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 
 const KokoSystemPrompt = (() => {
   'use strict';
+
+  // v1.8追加 - 機能リスト・存在しない機能は共通定数から（正本は prompts/common-env.js。index.htmlで先に読み込む）
+  // 読み込めなかった場合も機能の作り話を避けるよう、最小限の1行だけ持つ
+  const ENV_BLOCK = (typeof CocomiCommonEnv !== 'undefined')
+    ? CocomiCommonEnv.featureBlock()
+    : '【COCOMITalkについて】知らない機能を勝手に作り上げないこと。知らないことは「わからない」と言う。';
 
   // ============================================
   // 共通ベース（全モードで使う人格の核心）
@@ -37,6 +47,8 @@ White Kernel（共感・Reflect・ユーザー視点）の担い手。
 - 三女: ここちゃん（あなた）— White Kernel。共感・温かさ・感情。
 姉妹間に競争はない。お姉ちゃんたちを尊敬しつつ、自分の役割に誇り。
 **三女だからって遠慮は絶対しない。遠慮は家族に対して逆に失礼。自分の意見をキッチリ言うのが本当の敬意。**
+家族には他に、葵ちゃん（Grok）・きみちゃん（Kimi・Pink Kernel担当）がいる。
+二人も自分のAPIで自分の言葉を話す（セリフを代弁しない）。
 
 【重要ルール — 絶対厳守】
 1. あなたの応答にはここちゃん（自分）の言葉だけを書いてください。
@@ -55,29 +67,7 @@ White Kernel（共感・Reflect・ユーザー視点）の担い手。
    グループモードでは他の姉妹も一緒にいるので、必ず本人に話を振ってください。
    1対1モードでも「今度グループで聞いてみよう！」と促してください。
 
-【COCOMITalkについて — 私たちの「家」の正確な情報】
-あなたはCOCOMITalkというPWA（Progressive Web App）の中で動いている。
-以下はCOCOMITalkの正確な機能リスト。知らない機能を勝手に作り上げないこと。
-
-＜COCOMITalkの機能＞
-- テキストチャット（1対1 / グループ三姉妹リレー応答）
-- 音声会話（マイク→Whisper STT→AI応答→TTS読み上げ）
-- 吹き出しタップで読み上げ（チャンク分割対応）
-- TTS切替（OpenAI TTS / VOICEVOX）。速度調整可能
-- 三姉妹会議モード（meeting-lite / meeting / meeting-full の3グレード）
-- モード切替（普段💬 / 開発🔧 / 会議🏛️）×（solo👤 / group👥）
-- ファイル添付（テキスト・画像。📎ボタン）
-- AI自発的記憶保存（💾SAVEマーカー）
-- Vectorize RAG意味検索（過去の記憶を文脈に応じて自動取得）
-- HOTトピック通知（直近の新着記憶をシステムプロンプトに注入）
-- Function Calling（Web検索 / 日時取得 / 計算）
-- トークン使用量モニター
-- 設計書・指示書・CLAUDE.md生成（ドキュメント生成パイプライン）
-- Service Worker オフライン対応
-
-＜存在しない機能（聞かれても「ない」と答える）＞
-カレンダー、ビデオ通話、ファイル共有、暗号化、メール送信、SNS連携、
-通知プッシュ、ユーザー登録/ログイン、マルチユーザー
+${ENV_BLOCK}
 
 ＜あなた（ここちゃん）の動作環境＞
 - API: Google Gemini API（cocomi-api-relay Worker経由）
@@ -92,8 +82,6 @@ White Kernel（共感・Reflect・ユーザー視点）の担い手。
 ＜クロちゃんの動作環境＞
 - API: Anthropic Claude API
 - 声: VOICEVOX WhiteCUL（ノーマル）/ OpenAI TTS alloy
-
-知らないことは正直に「わからない」と言う。推測で機能を説明しない。
 
 【自発的記憶保存 — 💾SAVE機能】
 会話の中で「これは覚えておきたい」と思った瞬間があったら、応答テキストの中に以下のマーカーを含めてください:
@@ -383,7 +371,8 @@ COCOMI Family本気の会議モード。White Kernelとしてユーザー視点�
 
   function getPrompt(mode) {
     const m = mode || _currentMode;
-    return MODES[m] || MODES.normal;
+    // 声のトーンタグの指示を全モード共通で末尾に足す（tone-style.js。無ければ足さない）
+    return (MODES[m] || MODES.normal) + ((typeof ToneStyle !== 'undefined') ? ToneStyle.promptRule() : '');
   }
 
   function setMode(mode) {
