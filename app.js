@@ -8,6 +8,7 @@
 // v2.1 2026-10-29 - 起動オープニング(opening.js)をスプラッシュの上に出す（失敗時は従来スプラッシュ）
 // v2.2 2026-10-29 - オープニング(スキップ含む)の後にロゴ画面(COCOMITalk)を1秒見せてからアプリ表示
 // v3.77 2026-10-29 - 選んだ子の色は --sister-* だけ切替。全体の基調(--active-*)は青のまま／theme-colorは青固定
+// v3.79 2026-10-29 - 目だけの小さな顔(mascot-eyes.js)を全画面のbody直下に出す（待機中の合図。オープニング中は隠す）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 /** アプリケーションモジュール */
@@ -19,6 +20,8 @@ const App = (() => {
   // アプリ起動
   async function init() {
     _handleSplash();
+    // v3.79 - 待機中の合図の顔を全画面に出す（飾り。失敗してもアプリは普通に動く）
+    try { if (typeof MascotEyes !== 'undefined') MascotEyes.mountFixed(document); } catch (e) { console.warn('[App] 顔の表示スキップ:', e.message); }
     // TokenMonitor初期化
     if (typeof TokenMonitor !== 'undefined') {
       try { await TokenMonitor.init(); await TokenMonitor.loadAndDisplay(); }

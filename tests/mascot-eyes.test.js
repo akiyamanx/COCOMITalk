@@ -1,5 +1,5 @@
-// tests/mascot-eyes.test.js v1.0
-// このファイルは COCOMITalk の「目が動く小さな顔」(mascot-eyes.js / .css) のテスト。乱数とタイマーを差し替えて決まった動きを確かめる
+// tests/mascot-eyes.test.js v1.1
+// このファイルは COCOMITalk の「目が動く小さな顔」(mascot-eyes.js / .css) のテスト。乱数とタイマーを差し替えて決まった動きを確かめる（v1.1: 口なし・全画面のfixed表示・オープニング中は隠す・重なりを避ける）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 const test = require('node:test');
@@ -158,58 +158,138 @@ test('destroy: タイマーも監視も全部片付き、以後は何も起き�
   assert.doesNotThrow(() => ctl.destroy());
 });
 
-// ---- 部品づくり・取り付け（最小の偽DOM） ----
+// ---- 部品づくり・取り付け（最小の偽DOM。class/属性/body/getElementById/elementsFromPointを持つ） ----
 function fakeDom() {
-  const mk = (tag) => ({ tag, className: '', attrs: {}, children: [], parentNode: null,
-    setAttribute(k, v) { this.attrs[k] = v; },
-    appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
-    insertBefore(c, ref) { c.parentNode = this; const i = ref ? this.children.indexOf(ref) : -1; if (i < 0) this.children.push(c); else this.children.splice(i, 0, c); return c; },
-    removeChild(c) { this.children.splice(this.children.indexOf(c), 1); c.parentNode = null; },
-    get firstChild() { return this.children[0] || null; },
-    get nextSibling() { const p = this.parentNode; return p ? (p.children[p.children.indexOf(this) + 1] || null) : null; },
-    querySelector(sel) { const k = sel.replace('.', ''); const f = (n) => { for (const c of n.children) { if (c.className.split(' ').includes(k)) return c; const r = f(c); if (r) return r; } return null; }; return f(this); },
-    style: { setProperty() {} }, classList: { add() {}, remove() {} } });
-  return { createElement: mk, hidden: false, addEventListener() {}, removeEventListener() {}, mk };
+  const ids = {};
+  const mk = (tag) => {
+    const cls = new Set();
+    const n = { tag, attrs: {}, children: [], parentNode: null, style: { setProperty() {} }, top: 11,
+      get className() { return [...cls].join(' '); }, set className(v) { cls.clear(); String(v).split(' ').filter(Boolean).forEach((c) => cls.add(c)); },
+      classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) },
+      setAttribute(k, v) { this.attrs[k] = v; if (k === 'id') ids[v] = this; },
+      appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
+      removeChild(c) { this.children.splice(this.children.indexOf(c), 1); c.parentNode = null; if (c.attrs.id) delete ids[c.attrs.id]; },
+      contains(c) { for (let p = c; p; p = p.parentNode) if (p === this) return true; return false; },
+      getBoundingClientRect() { return { top: this.top, left: 0, width: 30, height: 30 }; },
+      querySelector(sel) { const k = sel.split('.').filter(Boolean); const f = (x) => { for (const c of x.children) { if (k.every((q) => c.classList.contains(q))) return c; const r = f(c); if (r) return r; } return null; }; return f(this); } };
+    return n;
+  };
+  const body = mk('body');
+  const doc = { createElement: mk, body, hidden: false, mk, ids, addEventListener() {}, removeEventListener() {},
+    getElementById: (id) => ids[id] || null, querySelector: (sel) => body.querySelector(sel) };
+  doc.add = (id, cls) => { const e = mk('div'); e.className = cls || ''; e.setAttribute('id', id); body.appendChild(e); return e; };
+  return doc;
 }
-test('build: aria-hidden、目が2つ、黒目が2つ。外部画像のURLなし', () => {
+const ALL = (root) => { const a = []; (function w(n) { a.push(n); n.children.forEach(w); })(root); return a; };
+test('build: aria-hidden、目が2つ、黒目が2つ。口(me-smile)も外部画像のURLもない（目だけ）', () => {
   const doc = fakeDom(); const root = M.build(doc);
   assert.equal(root.attrs['aria-hidden'], 'true'); assert.ok(root.className.includes('mascot-eyes'));
-  const all = []; (function w(n) { all.push(n); n.children.forEach(w); })(root);
+  const all = ALL(root);
   assert.equal(all.filter((n) => n.className === 'me-eye').length, 2);
   assert.equal(all.filter((n) => n.className === 'me-pupil').length, 2);
+  assert.equal(all.length, 1 + 1 + 2 + 2, '顔の外側・顔・目2・黒目2だけ');
+  assert.ok(!all.some((n) => /smile|mouth/.test(n.className)));
 });
-test('mount: ☰の直後に1つだけ付く／取り付け先が無ければ何もしない／二重に付けない', () => {
-  const doc = fakeDom(); const bar = doc.mk('div'); const menu = doc.mk('button'); const ch = doc.mk('button'); bar.appendChild(menu); bar.appendChild(ch);
-  const m = M.mount(bar, { after: menu, doc, rng: () => 0.5, win: makeWin(true) });
-  assert.ok(m && bar.children[1] === m.el && bar.children[0] === menu && bar.children[2] === ch);
-  assert.equal(M.mount(bar, { after: menu, doc }), null);
-  assert.equal(M.mount(null, { doc }), null);
-  m.destroy(); assert.equal(bar.children.length, 2);
+test('mountFixed: body直下に1つだけfixedで付く／二重に付けない／body無しなら何もしない／destroyで外れる', () => {
+  const doc = fakeDom(); doc.add('splash-screen', 'splash hidden');
+  const m = M.mountFixed(doc, { rng: () => 0.5, win: makeWin(true) });
+  assert.ok(m && m.el.parentNode === doc.body && m.el.classList.contains('me-fixed') && m.el.classList.contains('mascot-eyes'));
+  assert.equal(M.mountFixed(doc, { rng: () => 0.5 }), null);
+  assert.equal(M.mountFixed({ createElement: doc.createElement }, {}), null);
+  assert.equal(M.mountFixed(null, {}), null);
+  m.destroy(); assert.ok(!doc.body.children.includes(m.el));
+});
+
+// ---- 全画面での位置（重なりを避ける）・オープニング中は隠す ----
+test('pickSpot: 基本位置(☰の右隣)が空いていればそこ。埋まっていれば空いた所のうち基本位置に近い所。横に空きが無ければ下へずらす。全部埋まりなら一番空いた所', () => {
+  const W = 390, home = M.DOCK.homeX, P = (c, cur, w) => ({ ...M.pickSpot(w || W, c, cur) });
+  assert.deepEqual(P(() => 0), { x: home, dy: 0 });
+  assert.deepEqual(P((x) => (x < 100 ? 3 : 0)), { x: 100, dy: 0 });                // 左側が埋まり→100以降で最も近い所
+  assert.deepEqual(P((x) => (x < 100 ? 3 : 0), { x: 150, dy: 0 }), { x: 150, dy: 0 }, '今の位置が空いていればそのまま');
+  assert.deepEqual(P((x, dy) => (dy === 0 ? 3 : 0)), { x: 56, dy: 7 }, '1行目が全部埋まり→一段下へ');
+  assert.deepEqual(P((x, dy) => (x === home && dy === 0 ? 5 : 2)), { x: 56, dy: 0 }, '同じ埋まり具合なら基本位置に近い所');
+  assert.deepEqual(P((x, dy) => (x === 200 && dy === 0 ? 1 : 4)), { x: 200, dy: 0 }, '全部埋まり: 一番少ない所');
+  assert.deepEqual(P(() => 0, null, 320), { x: home, dy: 0 });
+  assert.ok(P(() => 0, null, 60).x <= 60 - M.DOCK.size, '狭い画面でも画面の外へ出ない');
+});
+test('isBusyEl: ボタン・文字・画像は中身あり／何も無い背景は空き', () => {
+  const doc = fakeDom();
+  const bare = doc.createElement('div'); bare.nodeType = 1; bare.childNodes = [];
+  const txt = doc.createElement('span'); txt.nodeType = 1; txt.childNodes = [{ nodeType: 3, nodeValue: ' 設定 ' }];
+  const ws = doc.createElement('div'); ws.nodeType = 1; ws.childNodes = [{ nodeType: 3, nodeValue: '\n  ' }];
+  const inBtn = doc.createElement('span'); inBtn.nodeType = 1; inBtn.childNodes = []; inBtn.closest = (s) => (/button/.test(s) ? {} : null);
+  assert.ok(!M.isBusyEl(bare) && !M.isBusyEl(ws) && !M.isBusyEl(null));
+  assert.ok(M.isBusyEl(txt) && M.isBusyEl(inBtn));
+});
+test('isBusyEl: 文字だけの要素(見出し・段落)は箱が広くても、文字の範囲に当たったときだけ中身あり', () => {
+  const mk = (rects) => ({
+    nodeType: 1, childNodes: [{ nodeType: 3, nodeValue: '記憶管理' }],
+    ownerDocument: { createRange: () => ({ selectNodeContents() {}, getClientRects: () => rects }) },
+  });
+  const h = mk([{ left: 10, right: 80, top: 5, bottom: 25 }]);
+  assert.ok(M.isBusyEl(h, 40, 15), '文字の上');
+  assert.ok(M.isBusyEl(h, 82, 15), '文字の2px外まで');
+  assert.ok(!M.isBusyEl(h, 150, 15), '同じ見出しの右の空き');
+  assert.ok(!M.isBusyEl(h, 40, 60), '文字の下の空き');
+  assert.ok(M.isBusyEl(h), '点を省くと箱全体で判定');
+  const z = mk([{ left: 54, right: 54, top: 28, bottom: 28 }]);
+  assert.ok(M.isBusyEl(z, 70, 15), '文字の幅が0(::afterで見せる飾り文字)なら箱全体で判定');
+  const btn = { nodeType: 1, childNodes: [], closest: (q) => (/button/.test(q) ? {} : null) };
+  assert.ok(M.isBusyEl(btn, 999, 999), 'ボタンは常に箱全体');
+});
+test('オープニング(#opening-overlay)中・ロゴ画面(#splash-screen)中は隠し、終わったら出す。隠れている間は目も動かない', () => {
+  const doc = fakeDom(); const op = doc.add('opening-overlay', ''); const sp = doc.add('splash-screen', 'splash');
+  const c = makeClock();
+  const m = M.mountFixed(doc, { rng: () => 0.5, win: { ...makeWin(false), innerWidth: 390 }, setTimeoutFn: c.st, clearTimeoutFn: c.ct });
+  assert.ok(m.el.classList.contains('me-off') && m.dock.isOff() && !m.isRunning());
+  doc.body.removeChild(op); m.dock.update();
+  assert.ok(m.el.classList.contains('me-off'), 'ロゴ画面が出ている間はまだ隠す');
+  sp.classList.add('hidden'); m.dock.update();
+  assert.ok(!m.el.classList.contains('me-off') && !m.dock.isOff() && m.isRunning());
+  m.destroy();
+});
+test('位置の見直し: 画面が変わったら(予約→160ms後)重なる所を避けて動く。閉じたら基本位置へ戻る。タイマーは1つにまとまる', () => {
+  const doc = fakeDom(); doc.add('splash-screen', 'splash hidden');
+  const c = makeClock(); let busyBelow = 0;                                          // busyBelow より左は埋まっている（ドロワーが開いた想定）
+  const m = M.mountFixed(doc, { rng: () => 0.5, win: { ...makeWin(false), innerWidth: 390 }, setTimeoutFn: c.st, clearTimeoutFn: c.ct, countAt: (x) => (x < busyBelow ? 3 : 0) });
+  assert.equal(m.dock.left(), M.DOCK.homeX);
+  busyBelow = 120; m.dock.schedule(); m.dock.schedule(); m.dock.schedule();
+  assert.equal(c.delays().filter((d) => d === M.DOCK.checkMs).length, 1, '連続変化はまとめる');
+  c.advance(M.DOCK.checkMs); assert.equal(m.dock.left(), 120); assert.equal(m.dock.down(), 0); assert.equal(m.el.style.left, '120px');
+  busyBelow = 0; m.dock.schedule(); c.advance(M.DOCK.checkMs); assert.equal(m.dock.left(), M.DOCK.homeX);
+  m.destroy(); c.advance(1000); assert.equal(c.active(), 0);
 });
 
 // ---- 見た目・配線 ----
-test('CSS: タップ素通し・帯(52px)に収まる30px・黒目はtransition・reduced-motionで静止・画像/通信なし', () => {
+test('CSS: タップ素通し・30px・fixedで全画面(z-index 9000)・口なし・ヘッダー幅調整なし・reduced-motionで静止・画像/通信なし', () => {
   const css = read('mascot-eyes.css'), js = read('mascot-eyes.js');
   assert.ok(/\.mascot-eyes \{[^}]*pointer-events:\s*none/.test(css));
   assert.ok(/width:\s*30px;\s*height:\s*30px/.test(css));
+  assert.ok(/\.mascot-eyes\.me-fixed \{[^}]*position:\s*fixed[^}]*env\(safe-area-inset-top[^}]*z-index:\s*9000/.test(css));
+  assert.ok(/\.me-fixed\.me-off \{[^}]*visibility:\s*hidden/.test(css));
+  assert.ok(!/me-smile|mouth/.test(css + js), '口は無い');
+  assert.ok(!/lx2-char|app-header|calc\(100% - 138px\)/.test(css), 'ヘッダーの名前ボタンの幅は触らない');
   assert.ok(/\.me-pupil \{[^}]*transition:\s*transform/.test(css));
   assert.ok(/prefers-reduced-motion: reduce\) \{[\s\S]*transition: none/.test(css));
   assert.ok(!/url\(|https?:|@import/.test(css + js), '外部リソースなし');
   assert.ok(!/fetch\(|XMLHttpRequest|new Audio|AudioContext|setInterval/.test(js), '通信・音・setIntervalなし');
+  const z = +/z-index:\s*(\d+)/.exec(css)[1];
+  assert.ok(z > 8100 && z < 9999, 'ドロワー(8100)より上、確認ダイアログ(9999)より下');
 });
-test('配線: index.html(css/js。layout2-coreより前)・sw.js(CACHE_FILES・v3.78)・layout2-uiのtry/catch取り付け', () => {
-  const html = read('index.html'), sw = read('sw.js'), ui = read('layout2-ui.js');
+test('配線: index.html(css/js)・sw.js(CACHE_FILES・v3.79)・app.jsのtry/catch取り付け・layout2-uiは帯に付けない', () => {
+  const html = read('index.html'), sw = read('sw.js'), ui = read('layout2-ui.js'), app = read('app.js');
   assert.ok(html.includes('href="mascot-eyes.css"'));
-  assert.ok(html.indexOf('src="mascot-eyes.js"') > 0 && html.indexOf('src="mascot-eyes.js"') < html.indexOf('src="layout2-ui.js"'));
+  assert.ok(html.indexOf('src="mascot-eyes.js"') > 0 && html.indexOf('src="mascot-eyes.js"') < html.indexOf('src="app.js"'));
   const files = sw.slice(sw.indexOf('const CACHE_FILES'), sw.indexOf('const CACHE_FONTS'));
   assert.ok(files.includes("'./mascot-eyes.js'") && files.includes("'./mascot-eyes.css'"));
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.78';"));
-  assert.ok(/try \{ if \(typeof MascotEyes !== 'undefined'\) MascotEyes\.mount\(h, \{ after: menu \}\); \} catch/.test(ui));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.79';"));
+  assert.ok(/try \{ if \(typeof MascotEyes !== 'undefined'\) MascotEyes\.mountFixed\(document\); \} catch/.test(app));
+  assert.ok(!/typeof MascotEyes/.test(ui), '帯(layout2-ui)には付けない');
 });
 test('CI: 各ファイル500行以内・ヘッダー(作成/最終更新・バージョン・「このファイルは」)', () => {
-  for (const f of ['mascot-eyes.js', 'mascot-eyes.css', 'tests/mascot-eyes.test.js', 'layout2-ui.js']) {
+  for (const f of ['mascot-eyes.js', 'mascot-eyes.css', 'tests/mascot-eyes.test.js', 'layout2-ui.js', 'app.js']) {
     const t = read(f); assert.ok(t.split('\n').length <= 500, f);
-    const head = t.split('\n').slice(0, 12).join('\n');
+    const head = t.split('\n').slice(0, 14).join('\n');
     assert.ok(head.includes('作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29'), f);
     assert.ok(/v\d+\.\d+/.test(head), f);
   }

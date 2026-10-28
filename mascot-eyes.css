@@ -1,7 +1,8 @@
-/* mascot-eyes.css v1.0 */
-/* このファイルは COCOMITalk の上の帯の「目がきょろきょろ動く小さな顔」(mascot-eyes.js) の見た目だけを決める */
+/* mascot-eyes.css v1.1 */
+/* このファイルは COCOMITalk の全画面に出す「目だけの小さな顔（口なし）」(mascot-eyes.js) の見た目だけを決める */
 /* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
 /* v1.0 2026-10-29 - 新規作成（依頼B）。外部画像なし。黒目はCSS transitionで動く。タップは下のボタンへ素通し */
+/* v1.1 2026-10-29 - 口を廃止。body直下のfixed表示に変更（全画面）。ヘッダー内の幅調整ルールを削除（名前ボタンは元の位置へ） */
 
 .mascot-eyes {
   flex: 0 0 30px; width: 30px; height: 30px; display: inline-block; position: relative;
@@ -11,7 +12,7 @@
 .mascot-eyes .me-face {
   position: absolute; inset: 0; border-radius: 50%; box-sizing: border-box;
   background: var(--app-light, #E6EEF6); border: 1.5px solid rgba(74, 118, 168, 0.45);
-  display: flex; align-items: center; justify-content: center; gap: 3px; padding-bottom: 3px;
+  display: flex; align-items: center; justify-content: center; gap: 3px;
 }
 .mascot-eyes .me-eye {
   position: relative; width: 9px; height: 12px; border-radius: 50%; background: #FFFFFF; overflow: hidden;
@@ -23,23 +24,23 @@
   transform: translate(calc(var(--me-x) * 1px), calc(var(--me-y) * 1px));
   transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
-.mascot-eyes .me-smile {
-  position: absolute; left: 50%; bottom: 5px; width: 6px; height: 3px; margin-left: -3px; box-sizing: border-box;
-  border-bottom: 1.5px solid rgba(61, 101, 145, 0.7); border-radius: 0 0 6px 6px;
-}
 /* まばたき: 目がつぶれる */
 .mascot-eyes.me-blink .me-eye { transform: scaleY(0.12); }
 /* え？: 目が丸く大きくなり、黒目が少し小さくなる */
 .mascot-eyes.me-wide .me-eye { transform: scale(1.18, 1.12); }
 .mascot-eyes.me-wide .me-pupil { width: 4px; height: 4px; margin: -2px 0 0 -2px; }
 
-/* 帯の中: 名前のボタンと重ならないよう、あった分だけ名前の最大幅を狭める（v2レイアウトのみ） */
-html.lx2 .app-header .mascot-eyes { align-self: center; }
-html.lx2 .app-header .mascot-eyes + .lx2-char { max-width: calc(100% - 138px); }
+/* 全画面表示: body直下にfixed。左上(☰の右隣)が基本で、JSが文字やボタンの無い所へ横にずらす。
+   z-index 9000 = ドロワー(8100)や各パネルより上、確認ダイアログ(9999)より下。オープニング(1100)中はJSが me-off を付けて隠す。 */
+.mascot-eyes.me-fixed {
+  position: fixed; left: 58px; top: calc(env(safe-area-inset-top, 0px) + 11px); z-index: 9000;
+  transition: left 0.25s ease, opacity 0.2s ease;
+}
+.mascot-eyes.me-fixed.me-off { visibility: hidden; opacity: 0; }
 
 /* 動きを減らす設定: 動かさず、真ん中で静止（JSも止める。念のためCSSでも） */
 @media (prefers-reduced-motion: reduce) {
-  .mascot-eyes .me-pupil, .mascot-eyes .me-eye { transition: none; }
+  .mascot-eyes .me-pupil, .mascot-eyes .me-eye, .mascot-eyes.me-fixed { transition: none; }
   .mascot-eyes .me-pupil { transform: none; }
   .mascot-eyes.me-blink .me-eye, .mascot-eyes.me-wide .me-eye { transform: none; }
 }
