@@ -12,6 +12,7 @@
 // v3.69 2026-10-28 - グループの帯の札タップ=話しかけ先（chat-group / layout2-core / layout2-ui / layout2-main.css）
 // v3.71 2026-10-28 - グループの帯に準備中の葵・キミも淡く並べる＋🔄つづきを右端に固定（layout2-core / layout2-ui / layout2-main.css）
 // v3.72 2026-10-29 - 葵・きみの最小プロンプト追加（prompts/common-env.js / aoi-system.js / kimi-system.js）＋三姉妹に家族の1〜2行＋「きみちゃん」ひらがな統一
+// v3.78 2026-10-29 - 上の帯に目が動く小さな顔を追加（mascot-eyes.js / mascot-eyes.css、layout2-ui.jsで取り付け）
 // v3.77 2026-10-29 - 配色を落ち着いた青に（styles/design-tokens/layout/各CSSと一部JSの色のみ。姉妹の色は識別用に彩度控えめ）
 // v3.76 2026-10-29 - 起動オープニング追加（opening.js / opening-scene.js / opening-audio.js / opening.css）
 // v3.75 2026-10-29 - 音が鳴っている間の吹き出しタップで停止できるように（voice-output v2.7 / chat-ui v1.4）
@@ -19,12 +20,12 @@
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
-const CACHE_NAME = 'cocomitalk-v3.77';
+const CACHE_NAME = 'cocomitalk-v3.78';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
   './meeting-archive-styles.css', './consultation-styles.css', './vision-styles.css', './layout-main.css', './layout-panels.css', './layout-ui.js', './layout2-core.js', './layout2-ui.js', './layout2-main.css', './layout2-panels.css',
-  './app.js', './opening.js', './opening-scene.js', './opening-audio.js', './opening.css', './chat-ui.js',
+  './app.js', './mascot-eyes.js', './mascot-eyes.css', './opening.js', './opening-scene.js', './opening-audio.js', './opening.css', './chat-ui.js',
   './chat-core.js', './chat-group.js', './chat-history.js',
   './model-tiers.js', './model-effort.js', './characters.js', './model-migration.js',
   './token-monitor.js', './walk-spend-core.js', './walk-spend.js', './walk-spend-ui.js', './api-common.js', './api-gemini.js',

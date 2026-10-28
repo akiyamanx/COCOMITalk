@@ -1,4 +1,4 @@
-// layout2-ui.js v1.2
+// layout2-ui.js v1.3
 // このファイルは何をするか:
 // 画面レイアウトv2（チャット最優先）の画面づくり。次の部品を作って、既存のボタンを「移動」して使い回す（作り直さない）。
 //  ・上の細い帯: ☰(左メニュー) / 真ん中=今のキャラ▾(切替) / ⋯(右メニュー=この会話) ・グループの参加者の帯(話している子が光る)
@@ -8,7 +8,8 @@
 // v1.0 2026-10-28 - 新規作成（follow-up #7）
 // v1.1 2026-10-28 - グループの帯の札をタップ可能に（話しかけ先: 次の1通だけその子が先に答える。もう一度タップで解除。準備中は選べない）
 // v1.2 2026-10-28 - 帯に準備中の子(葵・キミ)も淡く並べる（aria-disabled・「準備中」札・タップはtoastのみ）。札の列は横スクロール＋🔄つづきは右端に固定
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// v1.3 2026-10-29 - 帯の☰の右に目が動く小さな顔(mascot-eyes.js)を取り付け（無ければ何もしない）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 const Layout2Ui = (() => {
@@ -86,6 +87,8 @@ const Layout2Ui = (() => {
     more.addEventListener('click', () => openPanel('more'));
     h.prepend(menu, ch);
     h.appendChild(more);
+    // v1.x: ☰の右に目が動く小さな顔（飾り。aria-hidden・タップ素通し）。失敗しても帯は普通に動く
+    try { if (typeof MascotEyes !== 'undefined') MascotEyes.mount(h, { after: menu }); } catch (e) { /* 飾りなので無視 */ }
   }
   function _updateChar() {
     const grp = document.querySelector('#btn-people')?.dataset.people === 'group';
