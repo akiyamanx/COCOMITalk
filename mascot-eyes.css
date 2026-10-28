@@ -1,8 +1,9 @@
-/* mascot-eyes.css v1.1 */
+/* mascot-eyes.css v1.2 */
 /* このファイルは COCOMITalk の全画面に出す「目だけの小さな顔（口なし）」(mascot-eyes.js) の見た目だけを決める */
 /* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
 /* v1.0 2026-10-29 - 新規作成（依頼B）。外部画像なし。黒目はCSS transitionで動く。タップは下のボタンへ素通し */
 /* v1.1 2026-10-29 - 口を廃止。body直下のfixed表示に変更（全画面）。ヘッダー内の幅調整ルールを削除（名前ボタンは元の位置へ） */
+/* v1.2 2026-10-29 - 顔をあたたかいクリーム色(#FFF3E3/縁#F0C9A8)＋ほっぺ(#FFB8A8)に。避けて動くときのピョン(me-hop)を追加 */
 
 .mascot-eyes {
   flex: 0 0 30px; width: 30px; height: 30px; display: inline-block; position: relative;
@@ -11,12 +12,20 @@
 }
 .mascot-eyes .me-face {
   position: absolute; inset: 0; border-radius: 50%; box-sizing: border-box;
-  background: var(--app-light, #E6EEF6); border: 1.5px solid rgba(74, 118, 168, 0.45);
+  background: #FFF3E3; border: 1.5px solid #F0C9A8;      /* あたたかいクリーム色の顔（灰色っぽく見えないように） */
   display: flex; align-items: center; justify-content: center; gap: 3px;
+  transform-origin: 50% 100%;                              /* ホップ時の伸び縮みは足元(下端)を基準に */
 }
+/* ほっぺ: 目の下の左右に薄い桃色の丸（低い不透明度で、目の読みやすさは保つ） */
+.mascot-eyes .me-face::before, .mascot-eyes .me-face::after {
+  content: ''; position: absolute; bottom: 3px; width: 6px; height: 4px; border-radius: 50%;
+  background: #FFB8A8; opacity: 0.5;
+}
+.mascot-eyes .me-face::before { left: 2.5px; }
+.mascot-eyes .me-face::after { right: 2.5px; }
 .mascot-eyes .me-eye {
   position: relative; width: 9px; height: 12px; border-radius: 50%; background: #FFFFFF; overflow: hidden;
-  box-shadow: 0 0 0 0.5px rgba(61, 101, 145, 0.35);
+  box-shadow: 0 0 0 0.6px rgba(150, 100, 70, 0.5);   /* 白目の縁はあたたかい茶系で、クリーム地でも見える */
   transition: transform 0.09s ease-out; transform-origin: 50% 50%;
 }
 .mascot-eyes .me-pupil {
@@ -24,6 +33,18 @@
   transform: translate(calc(var(--me-x) * 1px), calc(var(--me-y) * 1px));
   transition: transform 0.14s cubic-bezier(0.2, 0.8, 0.3, 1);
 }
+/* ピョン(避けて動くとき): 少しつぶれる→伸びてジャンプ→着地でつぶれて戻る。顔(内側)だけに transform を掛けるので、
+   外側の left/top の移動 transition とは別。目・黒目の transform(まばたき・視線)とも別の要素なので壊さない */
+.mascot-eyes.me-hop .me-face { animation: me-hop 0.45s ease-out 1; }
+@keyframes me-hop {
+  0%   { transform: translateY(0) scale(1, 1); }
+  18%  { transform: translateY(1px) scale(1.14, 0.84); }    /* しゃがんでつぶれる(横に伸びる) */
+  42%  { transform: translateY(-6px) scale(0.9, 1.14); }    /* 伸びてジャンプ */
+  62%  { transform: translateY(-3px) scale(0.96, 1.05); }
+  80%  { transform: translateY(0) scale(1.1, 0.88); }       /* 着地でちょっとつぶれる */
+  100% { transform: translateY(0) scale(1, 1); }
+}
+
 /* まばたき: 目がつぶれる */
 .mascot-eyes.me-blink .me-eye { transform: scaleY(0.12); }
 /* え？: 目が丸く大きくなり、黒目が少し小さくなる */
@@ -43,4 +64,5 @@
   .mascot-eyes .me-pupil, .mascot-eyes .me-eye, .mascot-eyes.me-fixed { transition: none; }
   .mascot-eyes .me-pupil { transform: none; }
   .mascot-eyes.me-blink .me-eye, .mascot-eyes.me-wide .me-eye { transform: none; }
+  .mascot-eyes.me-hop .me-face { animation: none; }
 }

@@ -1,5 +1,5 @@
-// tests/mascot-eyes.test.js v1.1
-// このファイルは COCOMITalk の「目が動く小さな顔」(mascot-eyes.js / .css) のテスト。乱数とタイマーを差し替えて決まった動きを確かめる（v1.1: 口なし・全画面のfixed表示・オープニング中は隠す・重なりを避ける）
+// tests/mascot-eyes.test.js v1.2
+// このファイルは COCOMITalk の「目が動く小さな顔」(mascot-eyes.js / .css) のテスト。乱数とタイマーを差し替えて決まった動きを確かめる（v1.2: 口なし・全画面のfixed表示・オープニング中は隠す・重なりを避ける・あたたかい顔色・ピョン）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 const test = require('node:test');
@@ -166,6 +166,7 @@ function fakeDom() {
     const n = { tag, attrs: {}, children: [], parentNode: null, style: { setProperty() {} }, top: 11,
       get className() { return [...cls].join(' '); }, set className(v) { cls.clear(); String(v).split(' ').filter(Boolean).forEach((c) => cls.add(c)); },
       classList: { add: (c) => cls.add(c), remove: (c) => cls.delete(c), contains: (c) => cls.has(c) },
+      addEventListener(ty, f) { (this.ls = this.ls || {})[ty] = f; }, removeEventListener(ty) { if (this.ls) delete this.ls[ty]; },
       setAttribute(k, v) { this.attrs[k] = v; if (k === 'id') ids[v] = this; },
       appendChild(c) { c.parentNode = this; this.children.push(c); return c; },
       removeChild(c) { this.children.splice(this.children.indexOf(c), 1); c.parentNode = null; if (c.attrs.id) delete ids[c.attrs.id]; },
@@ -260,6 +261,30 @@ test('位置の見直し: 画面が変わったら(予約→160ms後)重なる�
   m.destroy(); c.advance(1000); assert.equal(c.active(), 0);
 });
 
+// ---- ピョン（避けて動くとき）----
+const hopSetup = (reduced) => {
+  const doc = fakeDom(); doc.add('splash-screen', 'splash hidden');
+  const c = makeClock(); let busyBelow = 0;
+  const m = M.mountFixed(doc, { rng: () => 0.5, win: { ...makeWin(reduced), innerWidth: 390 }, setTimeoutFn: c.st, clearTimeoutFn: c.ct, countAt: (x) => (x < busyBelow ? 3 : 0) });
+  return { m, c, set: (v) => { busyBelow = v; m.dock.schedule(); c.advance(M.DOCK.checkMs); } };
+};
+test('ピョン: 最初の配置では付かず、避けて動くとき me-hop が付く。終わり(animationend)で外れ、続けて動けばまた付く', () => {
+  const { m, set } = hopSetup(false);
+  assert.ok(!m.el.classList.contains('me-hop'), '最初の配置ではピョンしない');
+  set(120); assert.equal(m.dock.left(), 120); assert.ok(m.el.classList.contains('me-hop'));
+  m.el.ls.animationend({ animationName: 'other' }); assert.ok(m.el.classList.contains('me-hop'), '別のアニメ終了では外さない');
+  m.el.ls.animationend({ animationName: 'me-hop' }); assert.ok(!m.el.classList.contains('me-hop'));
+  set(0); assert.equal(m.dock.left(), M.DOCK.homeX); assert.ok(m.el.classList.contains('me-hop'), '戻るときもピョン');
+  set(0); m.el.ls.animationend({ animationName: 'me-hop' }); set(0); assert.ok(!m.el.classList.contains('me-hop'), '動かなければ付かない');
+  m.destroy(); assert.ok(!m.el.ls || !m.el.ls.animationend, 'destroyでリスナーも外れる');
+});
+test('ピョン: 動きを減らす設定では付けず即移動。まばたき(me-blink/me-wide)のクラスとは別', () => {
+  const { m, set } = hopSetup(true);
+  set(120); assert.equal(m.dock.left(), 120); assert.ok(!m.el.classList.contains('me-hop'));
+  const a = hopSetup(false); a.m.el.classList.add('me-blink'); a.set(120);
+  assert.ok(a.m.el.classList.contains('me-blink') && a.m.el.classList.contains('me-hop'), 'ピョン中もまばたきクラスは壊れない');
+});
+
 // ---- 見た目・配線 ----
 test('CSS: タップ素通し・30px・fixedで全画面(z-index 9000)・口なし・ヘッダー幅調整なし・reduced-motionで静止・画像/通信なし', () => {
   const css = read('mascot-eyes.css'), js = read('mascot-eyes.js');
@@ -276,13 +301,36 @@ test('CSS: タップ素通し・30px・fixedで全画面(z-index 9000)・口な�
   const z = +/z-index:\s*(\d+)/.exec(css)[1];
   assert.ok(z > 8100 && z < 9999, 'ドロワー(8100)より上、確認ダイアログ(9999)より下');
 });
-test('配線: index.html(css/js)・sw.js(CACHE_FILES・v3.79)・app.jsのtry/catch取り付け・layout2-uiは帯に付けない', () => {
+test('CSS: 顔はあたたかいクリーム(#FFF3E3・縁#F0C9A8)＋ほっぺ(#FFB8A8・薄い)。青灰色の顔色は残らない。目の読みやすさ(白目・黒目)は維持', () => {
+  const css = read('mascot-eyes.css');
+  const face = /\.mascot-eyes \.me-face \{([^}]*)\}/.exec(css)[1];
+  assert.ok(/background:\s*#FFF3E3/i.test(face) && /border:\s*1\.5px solid #F0C9A8/i.test(face));
+  const cheek = /\.me-face::before, \.mascot-eyes \.me-face::after \{([^}]*)\}/.exec(css)[1];
+  assert.ok(/#FFB8A8/i.test(cheek) && +/opacity:\s*([\d.]+)/.exec(cheek)[1] <= 0.6, 'ほっぺは低い不透明度');
+  assert.ok(!/E6EEF6|74, 118, 168/i.test(css), '以前の青灰色は使わない');
+  assert.ok(/\.me-eye \{[^}]*background:\s*#FFFFFF/.test(css) && /\.me-pupil \{[^}]*background:\s*#141414/.test(css));
+  assert.ok(/\.me-eye \{[^}]*box-shadow:[^;]*rgba\(150, 100, 70/.test(css), '白目の縁は暖色で見える');
+});
+test('CSS: ピョンは顔(内側 .me-face)だけに transform。外側の left/top の transition とは別。0.35〜0.5秒・つぶれ→伸び→着地つぶれ→戻り。reduced-motionでは無効', () => {
+  const css = read('mascot-eyes.css');
+  const use = /\.mascot-eyes\.me-hop \.me-face \{[^}]*animation:\s*me-hop\s+([\d.]+)s/.exec(css);
+  assert.ok(use && +use[1] >= 0.35 && +use[1] <= 0.5);
+  assert.ok(!/\.mascot-eyes\.me-hop \{/.test(css) && !/\.me-fixed \{[^}]*(animation|transform)/.test(css), '外側の要素にはtransformを掛けない');
+  const kf = /@keyframes me-hop \{([\s\S]*?)\n\}/.exec(css)[1];
+  const sc = [...kf.matchAll(/(\d+)%\s*\{[^}]*scale\(([\d.]+), ([\d.]+)\)/g)].map((m) => [+m[1], +m[2], +m[3]]);
+  assert.deepEqual(sc[0].slice(1), [1, 1]); assert.deepEqual(sc[sc.length - 1].slice(1), [1, 1]);
+  assert.ok(sc.some(([, x, y]) => x > 1 && y < 1), 'つぶれ(横伸び・縦縮み)');
+  assert.ok(sc.some(([, x, y]) => x < 1 && y > 1), '伸び(縦伸び)');
+  assert.ok(/translateY\(-\d+px\)/.test(kf), 'ジャンプで上がる');
+  assert.ok(/prefers-reduced-motion: reduce\) \{[\s\S]*\.me-hop \.me-face \{ animation: none/.test(css));
+});
+test('配線: index.html(css/js)・sw.js(CACHE_FILES・v3.80)・app.jsのtry/catch取り付け・layout2-uiは帯に付けない', () => {
   const html = read('index.html'), sw = read('sw.js'), ui = read('layout2-ui.js'), app = read('app.js');
   assert.ok(html.includes('href="mascot-eyes.css"'));
   assert.ok(html.indexOf('src="mascot-eyes.js"') > 0 && html.indexOf('src="mascot-eyes.js"') < html.indexOf('src="app.js"'));
   const files = sw.slice(sw.indexOf('const CACHE_FILES'), sw.indexOf('const CACHE_FONTS'));
   assert.ok(files.includes("'./mascot-eyes.js'") && files.includes("'./mascot-eyes.css'"));
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.79';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.80';"));
   assert.ok(/try \{ if \(typeof MascotEyes !== 'undefined'\) MascotEyes\.mountFixed\(document\); \} catch/.test(app));
   assert.ok(!/typeof MascotEyes/.test(ui), '帯(layout2-ui)には付けない');
 });

@@ -175,7 +175,7 @@ test('中継の提案パッチ(あれば)との一致: 送るモデルIDが許�
   for (const k of [...forbidden.matchAll(/'([^']+)'/g)].map(m => m[1])) assert.ok(!new RegExp(`body\\.${k}\\b|\\b${k}:`).test(src.replace(/\/\/.*$/gm, '')), 'sends ' + k);
 });
 
-test('配線: index.html（api-common/model-tiersの後・api-claudeの後）とsw.js（cache v3.79・3ファイル）、1ファイル500行以内、先頭に「このファイルは」', () => {
+test('配線: index.html（api-common/model-tiersの後・api-claudeの後）とsw.js（cache v3.80・3ファイル）、1ファイル500行以内、先頭に「このファイルは」', () => {
   const html = read('index.html'), sw = read('sw.js');
   const pos = f => html.indexOf(`src="${f}"`);
   for (const f of ['api-compat-core.js', 'api-xai.js', 'api-kimi.js']) {
@@ -186,7 +186,7 @@ test('配線: index.html（api-common/model-tiersの後・api-claudeの後）と
     assert.match(t, /作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-29/);
   }
   assert.ok(pos('api-compat-core.js') < pos('api-xai.js') && pos('api-xai.js') < pos('api-kimi.js'));
-  assert.ok(sw.includes("'cocomitalk-v3.79'"));
+  assert.ok(sw.includes("'cocomitalk-v3.80'"));
   // 有効化の手順（スイッチの場所）が冒頭に書いてある
   assert.match(read('chat-core.js').split('\n').slice(0, 25).join('\n'), /characters\.js の aoi \/ kimi を enabled:true/);
   assert.match(read('api-xai.js').split('\n').slice(0, 10).join('\n'), /characters\.js の aoi を enabled:true/);

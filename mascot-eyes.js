@@ -1,4 +1,4 @@
-// mascot-eyes.js v1.1
+// mascot-eyes.js v1.2
 // このファイルは COCOMITalk の全画面に出す「目だけの小さなまるい顔（口なし）」を作って動かす（見た目は mascot-eyes.css）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 // v1.0 2026-10-29 - 新規作成（依頼B）。外部画像・通信・音なし。黒目の動きはCSS transition、タイマーは最小限
@@ -10,6 +10,7 @@
 //   ・オープニング(#opening-overlay)とロゴ画面の間は隠し、アプリ表示後に出す
 //   ・横に空きが無い画面(狭い幅の見出しなど)は下へ段ずらし。見出し・段落は「文字のある範囲」だけを避ける(幅0の飾り文字は箱全体)
 //   ・乱数(rng)とタイマー(setTimeoutFn/clearTimeoutFn)は差し替え可能（テスト用）。destroy() で全部片付く
+// v1.2 2026-10-29 - 避けて場所を変えたとき root に me-hop を付けてピョン(つぶれて伸びて着地)を1回再生。動きを減らす設定では付けない
 'use strict';
 
 const MascotEyes = (() => {
@@ -208,6 +209,17 @@ const MascotEyes = (() => {
       };
     };
 
+    // ピョン: 場所を変えるときに1回。連続したら最初から。終わったらクラスを外す。動きを減らす設定なら何もしない（即移動）
+    const calm = () => !!(win && typeof win.matchMedia === 'function' && win.matchMedia('(prefers-reduced-motion: reduce)').matches);
+    function hop() {
+      if (calm()) return;
+      root.classList.remove('me-hop');
+      if (typeof root.offsetWidth === 'number') void root.offsetWidth;   // 再生し直すための再計算
+      root.classList.add('me-hop');
+    }
+    const onHopEnd = (e) => { if (e && e.animationName === 'me-hop') root.classList.remove('me-hop'); };
+    if (root.addEventListener) root.addEventListener('animationend', onHopEnd);
+
     function update() {
       if (dead) return;
       const nowOff = isOpeningActive(doc);
@@ -217,6 +229,8 @@ const MascotEyes = (() => {
       }
       if (off || (doc && doc.hidden)) return;
       const p = pickSpot((win && win.innerWidth) || 390, o.countAt || makeCount(), current === null ? null : { x: current, dy: curDy });
+      const moved = current !== null && (p.x !== current || p.dy !== curDy);
+      if (moved) hop();
       if (p.x !== current) { current = p.x; root.style.left = p.x + 'px'; }
       if (p.dy !== curDy) { curDy = p.dy; root.style.top = p.dy ? 'calc(env(safe-area-inset-top, 0px) + ' + (11 + p.dy) + 'px)' : ''; }
     }
@@ -237,6 +251,7 @@ const MascotEyes = (() => {
       dead = true;
       if (timer !== null) { ct(timer); timer = null; }
       if (mo) mo.disconnect();
+      if (root.removeEventListener) root.removeEventListener('animationend', onHopEnd);
       if (win && win.removeEventListener) win.removeEventListener('resize', schedule);
       if (doc && doc.removeEventListener) { doc.removeEventListener('transitionend', onEvt, true); doc.removeEventListener('animationend', onEvt, true); }
     }
