@@ -12,10 +12,11 @@
 // v3.69 2026-10-28 - グループの帯の札タップ=話しかけ先（chat-group / layout2-core / layout2-ui / layout2-main.css）
 // v3.71 2026-10-28 - グループの帯に準備中の葵・キミも淡く並べる＋🔄つづきを右端に固定（layout2-core / layout2-ui / layout2-main.css）
 // v3.72 2026-10-29 - 葵・きみの最小プロンプト追加（prompts/common-env.js / aoi-system.js / kimi-system.js）＋三姉妹に家族の1〜2行＋「きみちゃん」ひらがな統一
+// v3.74 2026-10-29 - 吹き出しタップの二重再生ガード（voice-output v2.6 / voice-input v2.5.1 / chat-ui v1.3 / styles.css）
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
-const CACHE_NAME = 'cocomitalk-v3.73';
+const CACHE_NAME = 'cocomitalk-v3.74';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',

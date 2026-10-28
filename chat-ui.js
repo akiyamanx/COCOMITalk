@@ -2,6 +2,8 @@
 // v1.0 2026-03-10 - chat-core.jsから表示系ロジックを分離
 // v1.1 2026-03-27 - #77 吹き出しタップ読み上げ（AI返答bubbleをタップ→TTS再生）
 // v1.2 2026-03-27 - #77改善: 再タップで読み上げ停止トグル（再生中→停止/停止中→再生）
+// v1.3 2026-10-29 - 連打で声が重なる不具合の修正: 読み上げ中(準備中含む)のタップは無視。停止はマイクの🔊ボタン。読み上げ中の吹き出しに speaking 表示
+// 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 /** チャットUI表示モジュール */
@@ -67,22 +69,16 @@ const ChatUi = (() => {
     }
     bubble.appendChild(textNode);
 
-    // v1.2改良 - #77 吹き出しタップ読み上げ（AI返答のみ・再タップで停止トグル）
+    // v1.3改良 - #77 吹き出しタップ読み上げ（AI返答のみ）。読み上げ中(合成待ち含む)のタップは speakBubble 側のガードが無視する
     if (role === 'ai') {
       bubble.style.cursor = 'pointer';
+      const setBusy = (busy) => {
+        bubble.classList.toggle('speaking', busy);
+        if (busy) bubble.setAttribute('aria-busy', 'true'); else bubble.removeAttribute('aria-busy');
+      };
       bubble.addEventListener('click', () => {
         const vc = window.voiceController;
-        if (!vc) return;
-        // v1.2追加 - 再生中なら停止（トグル動作）
-        if (vc._playback && vc._playback.isPlaying()) {
-          vc._playback.stop();
-          console.log('[ChatUi] 再タップ → 読み上げ停止');
-          return;
-        }
-        // 停止中なら読み上げ開始
-        if (vc.speakBubble) {
-          vc.speakBubble(text, sisterKey);
-        }
+        if (vc && vc.speakBubble) vc.speakBubble(text, sisterKey, { onBusyChange: setBusy });
       });
     }
 

@@ -1,4 +1,4 @@
-// voice-output.js v2.5
+// voice-output.js v2.6
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -13,7 +13,8 @@
 // v2.3 修正 - speakQueueマイク復帰バグ修正（onPlayStart/onPlayEndをキュー全体で1回ずつに統一）
 // v2.4 2026-10-28 - Gemini TTS追加（声が未割り当て/失敗時はOpenAIの声へ戻す。_synth()に集約）
 // v2.5 2026-10-28 - 既定をGeminiに。場面の話し方(style)をGeminiへ渡す。Gemini→OpenAI→VOICEVOXの順に戻す。声が使えない時は選択名もOpenAIへ揃える
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// v2.6 2026-10-29 - 吹き出しタップの二重再生を根本修正: ①speakBubble(準備中+再生中+キューを1つのガードで無視・finally/stop/保険タイマーで必ず解除) ②stop()/新しい読み上げの時に合成待ちの古い音声を捨てる(世代番号_gen)
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 
 class AudioPlaybackManager {
   constructor() {
@@ -35,6 +36,11 @@ class AudioPlaybackManager {
     this._speed = 1.0;
     this.onFallback = null;
     this._chunkedPlaying = false;
+    this._preparing = false; // 合成(ネット)待ち中。_playingは音が鳴り始めてからなので別に持つ
+    this._gen = 0; // 読み上げの世代。stop()/新しい読み上げで進め、古い合成結果を捨てる
+    this._bubbleHold = null; // 吹き出しタップのガード（準備中〜再生終了）
+    this._bubblePollMs = 100;
+    this._bubbleSafetyMs = 180000; // 合成が返らない等で固まった時の保険
   }
 
   switchProvider(providerName) {
@@ -83,7 +89,8 @@ class AudioPlaybackManager {
   }
 
   async speak(text, sisterId, options = {}) {
-    if (this._playing) this.stop();
+    if (this._playing || this._preparing || this._queuePlaying) this.stop();
+    options = { ...options, _gen: ++this._gen }; // この読み上げの世代（合成待ちの間にstopされたら音を捨てる）
     if (!text || text.trim().length === 0) return;
 
     const cleanText = this._cleanTextForTTS(text);
@@ -104,6 +111,7 @@ class AudioPlaybackManager {
     const chunks = this._splitTextToChunks(cleanText);
     this._log(`${chunks.length}チャンクに分割`);
 
+    const gen = options._gen;
     this._chunkedPlaying = true;
     this._queueCancelled = false;
     const voiceConfig = getSisterVoice(sisterId);
@@ -112,7 +120,7 @@ class AudioPlaybackManager {
     if (this.onPlayStart) this.onPlayStart(sisterId);
 
     for (let i = 0; i < chunks.length; i++) {
-      if (this._queueCancelled) break;
+      if (this._queueCancelled || gen !== this._gen) break;
       try {
         await this._speakOneChunk(chunks[i], voiceConfig.voice, sisterId, options);
       } catch (e) {
@@ -120,6 +128,7 @@ class AudioPlaybackManager {
       }
     }
 
+    if (gen !== this._gen) return; // 途中でstop/新しい読み上げに替わった: 今の状態を壊さない
     this._playing = false;
     this._currentAudio = null;
     this._chunkedPlaying = false;
@@ -131,6 +140,7 @@ class AudioPlaybackManager {
     return new Promise(async (resolve, reject) => {
       try {
         const audio = await this._synth(chunkText, voice, sisterId, options.speed || 1.0, options.style);
+        if (options._gen !== this._gen) { resolve(); return; } // 合成待ち中にstopされた: 鳴らさない
 
         // v2.1追加 - VOICEVOX残りチャンク情報を取得
         const vvRemaining = audio._vvRemainingChunks || [];
@@ -193,8 +203,12 @@ class AudioPlaybackManager {
 
   async _speakSingle(cleanText, sisterId, options = {}) {
     const vc = getSisterVoice(sisterId);
+    const gen = options._gen;
+    this._preparing = true;
     try {
       const audio = await this._synth(cleanText, vc.voice, sisterId, options.speed || 1.0, options.style);
+      if (gen !== this._gen) return; // 合成待ち中にstop/新しい読み上げ: この音声は捨てる（重なり防止）
+      this._preparing = false;
       this._currentAudio = audio; this._playing = true;
       this._speed = options.speed || 1.0; audio.playbackRate = this._speed;
       if (this.onPlayStart) this.onPlayStart(sisterId);
@@ -211,7 +225,8 @@ class AudioPlaybackManager {
       });
       await audio.play();
     } catch (error) {
-      this._playing = false; this._currentAudio = null;
+      if (gen !== this._gen) return;
+      this._preparing = false; this._playing = false; this._currentAudio = null;
       if (this.onPlayError) this.onPlayError(`TTS生成エラー: ${error.message}`, sisterId);
     }
   }
@@ -224,13 +239,64 @@ class AudioPlaybackManager {
       } catch(e) {}
       this._currentAudio = null;
     }
-    this._playing = false; this._queueCancelled = true;
+    this._playing = false; this._queueCancelled = true; this._preparing = false; this._gen++;
     this._queue = []; this._queuePlaying = false; this._chunkedPlaying = false;
+    this._releaseBubble(); // 止めたら吹き出しのガードも解く
+  }
+
+  /** 準備中・再生中・キュー中のどれか（新しい吹き出しタップを受けてはいけない間） */
+  isBusy() { return !!(this._preparing || this._playing || this._queuePlaying || this._chunkedPlaying); }
+
+  /**
+   * 吹き出しタップの読み上げ。準備中(合成待ち)・再生中・キュー中・自動読み上げ中は無視して false を返す
+   * 始めたら true。解除は 再生終了/エラー/stop/保険タイマー のどれでも必ず行う。options.onBusyChange(bool)で見た目を切替
+   */
+  async speakBubble(text, sisterId, options = {}) {
+    if (this._bubbleHold || this.isBusy()) return false;
+    const { onBusyChange, ...speakOpts } = options;
+    const hold = this._bubbleHold = { gen: this._gen, onBusyChange, timer: null, safety: null };
+    hold.safety = setTimeout(() => { this._log('吹き出しガード: 保険タイマーで解除'); this.stop(); }, this._bubbleSafetyMs);
+    this._bubbleNotify(hold, true);
+    try {
+      const p = this.speak(text, sisterId, speakOpts);
+      hold.gen = this._gen; // speak()が同期で進めた世代。これ以外になったら押し出された
+      await p;
+    } catch (e) {
+      this._log(`吹き出し読み上げエラー: ${e.message}`);
+    } finally {
+      this._bubbleWait(hold);
+    }
+    return true;
+  }
+
+  _bubbleNotify(hold, busy) {
+    if (typeof hold.onBusyChange !== 'function') return;
+    try { hold.onBusyChange(busy); } catch (e) { /* 見た目の失敗で読み上げを止めない */ }
+  }
+
+  /** 再生が終わる(または押し出される)まで見張り、終わったらガード解除 */
+  _bubbleWait(hold) {
+    const check = () => {
+      if (this._bubbleHold !== hold) return;
+      if (this._gen !== hold.gen || !this.isBusy()) { this._releaseBubble(); return; }
+      hold.timer = setTimeout(check, this._bubblePollMs);
+    };
+    check();
+  }
+
+  _releaseBubble() {
+    const hold = this._bubbleHold;
+    if (!hold) return;
+    this._bubbleHold = null;
+    clearTimeout(hold.timer); clearTimeout(hold.safety);
+    this._bubbleNotify(hold, false);
   }
 
   async speakQueue(items, options = {}) {
     if (!items || items.length === 0) return;
     this.stop();
+    const gen = ++this._gen;
+    options = { ...options, _gen: gen };
     this._queue = [...items]; this._queuePlaying = true; this._queueCancelled = false;
 
     // v2.3追加 - キュー開始時に最初の姉妹のonPlayStartを1回だけ発火
@@ -240,16 +306,17 @@ class AudioPlaybackManager {
     if (this.onPlayStart) this.onPlayStart(firstSisterId);
 
     for (let i = 0; i < this._queue.length; i++) {
-      if (this._queueCancelled) break;
+      if (this._queueCancelled || gen !== this._gen) break;
       try {
         await this._speakAndWait(this._queue[i].text, this._queue[i].sisterId, options);
       } catch(e) {
         this._log(`speakQueue item ${i} エラー: ${e.message}`);
       }
-      if (i < this._queue.length - 1 && !this._queueCancelled) await new Promise(r => setTimeout(r, 300));
+      if (i < this._queue.length - 1 && !this._queueCancelled && gen === this._gen) await new Promise(r => setTimeout(r, 300));
     }
 
     // v2.3修正 - キュー完了時に確実にフラグクリア＋onQueueEnd発火
+    if (gen !== this._gen) return; // 途中で別の読み上げに替わった: 今の状態を壊さない
     this._playing = false;
     this._currentAudio = null;
     this._queuePlaying = false;
@@ -267,6 +334,7 @@ class AudioPlaybackManager {
       const vc = getSisterVoice(sisterId);
       try {
         const a = await this._synth(clean, vc.voice, sisterId, options.speed || 1.0, options.style !== undefined ? options.style : this._styleFor(text));
+        if (options._gen !== undefined && options._gen !== this._gen) { resolve(); return; } // 合成待ち中にstop: 鳴らさない
         this._currentAudio = a; this._playing = true;
         this._speed = options.speed || 1.0; a.playbackRate = this._speed;
         // v2.3変更 - キュー中のonPlayStartは発火しない（姉妹アイコン切替のみ）
@@ -294,7 +362,10 @@ class AudioPlaybackManager {
           resolve();
         });
         await a.play();
-      } catch(e) { this._playing = false; this._currentAudio = null; resolve(); }
+      } catch(e) {
+        if (options._gen === undefined || options._gen === this._gen) { this._playing = false; this._currentAudio = null; }
+        resolve();
+      }
     });
   }
 

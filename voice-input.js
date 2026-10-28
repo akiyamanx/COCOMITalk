@@ -1,4 +1,4 @@
-// voice-input.js v2.5.0
+// voice-input.js v2.5.1
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
 // UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
 // v2.0〜v2.3.0: 履歴省略（バッファ方式/TTS待機フラグ/voice-state連携/吹き出し読み上げ）
@@ -6,6 +6,7 @@
 // v2.4.1 修正 - pause済みWhisperのhealthCheckスキップ（recorder=inactive誤判定回避）
 // v2.5.0 修正 - STT再開ガードを_canResumeSTT()に一元化（isPlaying欠落drift解消）＋
 //   フェイルセーフのTTS再生中誤爆防止＋onPlayError後のマイク復帰経路追加（音声途切れバグ根本修正）
+// v2.5.1 2026-10-29 修正 - speakBubbleを二重再生ガード付き(AudioPlaybackManager.speakBubble)に委譲
 
 class VoiceController {
   constructor() {
@@ -479,9 +480,8 @@ class VoiceController {
     await this._playback.speak(responseText, sisterId, { speed: this._speed });
   }
 
-  async speakBubble(text, sisterId) {
-    if (!this._playback) return;
-    await this._playback.speak(text, sisterId, { speed: this._speed || 1.25 });
+  async speakBubble(text, sisterId, hooks) {
+    return this._playback ? this._playback.speakBubble(text, sisterId, { ...hooks, speed: this._speed || 1.25 }) : false;
   }
 
   async speakQueue(items) {
