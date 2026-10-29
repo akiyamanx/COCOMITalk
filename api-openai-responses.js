@@ -1,6 +1,7 @@
 // このファイルはお姉ちゃん（GPT）の標準・高頭脳（Terra/Astra）でツール（Web検索等）を使うための Responses API 経路を担当する
 // v1.0 2026-10-28 - 新規作成（既定オフ。オンのとき Terra/Astra だけ中継 /openai-responses 経由。失敗したら呼び出し側が従来のChat Completionsへ戻す）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// 2026-10-30 - ツール使用時に options.toolUsed を立てる（自動フォローアップ判定用）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 //
 // ★未確認★ 実APIでは一度も動かしていない。リクエスト/応答の形は公式docs（2026-10-28閲覧）を元にした推定で、
 //   テストは全部モック。中継Workerに /openai-responses が無い間は 404 になり、自動でChat Completions（ツール無し）へ戻る。
@@ -116,6 +117,7 @@ const ApiOpenAIResponses = (() => {
 
     if (r.calls.length && typeof ToolRegistry !== 'undefined') {
       const outputs = [];
+      options.toolUsed = true; // 自動フォローアップ判定用
       for (const [i, c] of r.calls.entries()) {
         let args = {};
         try { args = JSON.parse(c.arguments || '{}'); } catch (e) { /* 空の引数として扱う */ }

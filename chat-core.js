@@ -12,7 +12,8 @@
 // v2.2 2026-07-17 - お散歩自動送信のisProcessingスキップ時に一時添付を破棄（ゾンビ写真の次送信混入防止・PoC A）
 // 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
 // v2.3 2026-10-29 - step2有効化の準備: SISTER_API に aoi(ApiXai) / kimi(ApiKimi) を追加。登録簿が enabled の時だけ api を返す（今は両方 false=誰も呼ばない）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// v2.4 2026-10-30 - 1対1: 約束(調べるね/待っててね)だけで止まった返事に1回だけ自動フォローアップ（promise-followup.js）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 //
 // ■ 葵ちゃん/きみちゃんを有効にする手順（スイッチの場所）。まだ全部OFF。実際の中継には一度もつないでいない
 //   1. 中継Worker(cocomi-api-relay)に /xai /kimi をデプロイ + XAI_API_KEY / KIMI_API_KEY を設定（deliverables_v2/relay_xai_kimi_v2.patch）
@@ -318,6 +319,13 @@ const ChatCore = (() => {
 
       if (window.voiceController && window.voiceController.isEnabled()) {
         window.voiceController.speakResponse(reply, currentSister);
+      }
+      // v2.4 約束だけで止まった返事 → 1回だけ自動で続き（隠し指示は履歴に入れない）
+      if (typeof PromiseFollowup !== 'undefined' && PromiseFollowup.shouldFollowUp(reply, opts)) {
+        showTyping();
+        const more = await PromiseFollowup.run({ apiModule, systemPrompt: fullPrompt, history: chatHistories[currentSister], firstReply: reply, model: modelKey, state: opts });
+        hideTyping();
+        if (more) { const r2 = _stripTone(more); addMessage('ai', r2); chatHistories[currentSister].push({ role: 'assistant', content: r2 }); _saveHistory(); }
       }
 
     } catch (error) {

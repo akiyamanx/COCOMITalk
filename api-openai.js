@@ -14,7 +14,8 @@
 // v1.8 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定。GPT-6系対応（reasoning_effort付与・Terra/Astraはツール不可）
 // v1.9 2026-10-28 - Terra/Astra: 設定スイッチON時は Responses API（api-openai-responses.js）でツール付き。失敗時は従来のChat Completions（ツール無し）へ自動フォールバック
 // v2.0 2026-10-28 - 高頭脳をAstraに。強さ(reasoning_effort)は設定で変更可（tier.params経由）。xhigh/maxは出力枠を32000に拡大。Lunaは強さnone以外だとChat Completionsでツール無し
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// 2026-10-30 - ツール使用時に options.toolUsed を立てる（自動フォローアップ判定用）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
 'use strict';
 
@@ -199,6 +200,7 @@ const ApiOpenAI = (() => {
     console.log(`[ApiOpenAI] tool_calls検出: ${tc.function.name}(${JSON.stringify(args)})`);
 
     // ToolRegistryでツール実行
+    if (options) options.toolUsed = true; // 自動フォローアップ判定用
     const toolResult = await ToolRegistry.execute(tc.function.name, args);
 
     // ツール結果をOpenAIに返す（tool role形式）

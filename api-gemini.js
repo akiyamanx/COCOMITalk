@@ -10,7 +10,8 @@
 // v1.2 2026-03-12 - history末尾のuserMessage二重送信防止
 // v1.3 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定（旧モデルID表を廃止）
 // v1.4 2026-10-28 - 思考レベル: 設定で選ばれた時だけ generationConfig.thinkingConfig.thinkingLevel を送る。思考トークン(thoughtsTokenCount)も出力として記録
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// v1.5 2026-10-30 - Function Calling 2回目に元のpartsをそのまま返す（thoughtSignature保持）。複数functionCallに対応。ツール使用をoptions.toolUsedで通知
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
 'use strict';
 
@@ -173,18 +174,26 @@ const ApiGemini = (() => {
 
     const fc = fcPart.functionCall;
     if (typeof ToolRegistry === 'undefined' || !ToolRegistry.hasTool(fc.name)) return null;
+    if (options) options.toolUsed = true; // v1.5: 自動フォローアップ判定用
 
     console.log(`[ApiGemini] Function Call検出: ${fc.name}(${JSON.stringify(fc.args)})`);
 
     // ToolRegistryでツール実行
-    const toolResult = await ToolRegistry.execute(fc.name, fc.args || {});
+    // v1.5: モデルの返したparts（thoughtSignature含む）をそのまま返す。functionCallが複数なら全部に答える（最大3つ）
+    const responses = [];
+    for (const [i, p] of parts.filter(x => x.functionCall).entries()) {
+      const f = p.functionCall;
+      const ok = i < 3 && ToolRegistry.hasTool(f.name);
+      const result = ok ? await ToolRegistry.execute(f.name, f.args || {}) : '（このツールは実行しませんでした）';
+      responses.push({ functionResponse: { name: f.name, response: { result } } });
+    }
 
     // ツール結果をGeminiに返す（functionResponse形式）
     const followUpBody = { ...originalBody };
     followUpBody.contents = [
       ...originalBody.contents,
-      { role: 'model', parts: [{ functionCall: fc }] },
-      { role: 'user', parts: [{ functionResponse: { name: fc.name, response: { result: toolResult } } }] },
+      { role: 'model', parts },
+      { role: 'user', parts: responses },
     ];
     // 2回目はツール定義なし（ループ防止）
     delete followUpBody.tools;
