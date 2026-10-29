@@ -12,7 +12,8 @@
 // 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
 // 2026-10-28 - 話しかけ先(targetSister): 帯の札タップで選んだ子を、次の1通だけ先頭＋主担当にする（setTarget/takeTarget。1回で解除）
 // v3.77 2026-10-29 - グループのタイピング名の色を彩度控えめに
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// v1.8 2026-10-30 - 自動フォローアップ: 約束(調べるね等)で止まりツール未使用の子に、全員の後で1回だけ続き（最大2回/ターン・葵/きみ除外・停止で中止）。吹き出しにツール印
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
 /**
@@ -28,6 +29,13 @@ const ChatGroup = (() => {
 
   // --- 前ターンのリレー履歴を保持（ターン間で引き継ぐ） ---
   let prevTurnRelay = [];
+
+  // --- 自動フォローアップ（ツールを呼べる子だけ。葵/きみは中継がtools未対応なので除外） ---
+  const FOLLOWUP_OK = ['koko', 'gpt', 'claude'];
+  const MAX_FOLLOWUPS_PER_TURN = 2;
+  let _stopped = false;
+  /** 停止ボタン（chat-core._handleCancel）から呼ぶ。このターンの残りのフォローアップをやめる */
+  function abort() { _stopped = true; }
 
   // --- 話しかけ先（画面v2の札タップ）。次の1通だけ有効。変わるたびに document へ 'cocomi:group-target' を通知 ---
   let _target = null;
@@ -58,6 +66,8 @@ const ChatGroup = (() => {
             chatArea, SISTERS, SISTER_API, attachment } = ctx;
 
     const target = takeTarget(); // 話しかけ先（無ければnull）。ここで必ず解除＝1通だけ
+    _stopped = false;
+    const promised = []; // 約束で止まった子（話した順）
 
     // 動的ルーティングで発言順を決定
     let order = ['koko', 'gpt', 'claude'];
@@ -106,11 +116,12 @@ const ChatGroup = (() => {
             }
           }
 
-          let reply = await _callSisterInGroup(
+          const res = await _callSisterInGroup(
             userText, sisterKey, isLead, sisterAPI,
             chatHistories, relayContext, complement, SISTERS,
             undefined, sisterAttachment
           );
+          let reply = res.text;
 
           // v1.6追加 - グループモードでもAI自発的記憶保存マーカーを検知
           if (typeof ChatMemory !== 'undefined' && reply.includes('💾SAVE:')) {
@@ -118,8 +129,10 @@ const ChatGroup = (() => {
           }
 
           hideTyping();
-          addMessage('ai', reply, { sisterKey, isLead });
+          addMessage('ai', reply, { sisterKey, isLead, toolNames: res.toolNames });
           relayContext.push({ sisterKey, content: reply, isLead });
+          if (FOLLOWUP_OK.includes(sisterKey) && typeof PromiseFollowup !== 'undefined' &&
+              PromiseFollowup.shouldFollowUp(reply, res.state)) promised.push({ sisterKey, isLead, reply, res });
 
         } else {
           hideTyping();
@@ -135,6 +148,8 @@ const ChatGroup = (() => {
         console.error(`[ChatGroup] ${sister.name} グループ応答エラー:`, error);
       }
     }
+
+    await _runFollowups(promised, { chatHistories, relayContext, addMessage, hideTyping, chatArea, SISTERS });
 
     if (typeof PromptBuilder !== 'undefined') PromptBuilder.clearSearch();
 
@@ -152,6 +167,30 @@ const ChatGroup = (() => {
         sisterId: r.sisterKey
       }));
       window.voiceController.speakQueue(queueItems);
+    }
+  }
+
+  /** v1.8 - 約束で止まった子に1回ずつ続きを聞く（話した順・最大2回・停止で中止）。隠し指示は履歴に残さない */
+  async function _runFollowups(promised, c) {
+    let done = 0;
+    for (const p of promised) {
+      if (_stopped || done >= MAX_FOLLOWUPS_PER_TURN) break;
+      done++;
+      const sister = c.SISTERS[p.sisterKey];
+      _showGroupTyping(p.sisterKey, sister, c.chatArea, c.hideTyping);
+      try {
+        const more = await PromiseFollowup.run({ apiModule: p.res.apiModule, systemPrompt: p.res.systemPrompt,
+          history: p.res.history, firstReply: p.reply, model: p.res.modelKey, state: p.res.state });
+        c.hideTyping();
+        if (!more || _stopped) continue;
+        const r2 = (typeof ToneStyle !== 'undefined') ? ToneStyle.consume(more) : more;
+        c.addMessage('ai', r2, { sisterKey: p.sisterKey, isLead: p.isLead, toolNames: p.res.state.followToolNames });
+        c.relayContext.push({ sisterKey: p.sisterKey, content: r2, isLead: p.isLead });
+        // 履歴は relayContext 経由で _saveGroupHistory がまとめて保存（二重に入れない）
+      } catch (e) {
+        c.hideTyping();
+        console.warn(`[ChatGroup] ${sister.name} 自動フォローアップ失敗:`, e);
+      }
     }
   }
 
@@ -237,10 +276,12 @@ const ChatGroup = (() => {
 
     const opts = { model: modelKey };
     if (attachment) opts.attachment = attachment;
-    const raw = await apiModule.sendMessage(
-      userText, systemPrompt + leadNote + (extraInstruction || '') + extraPrompt, history, opts
-    );
-    return (typeof ToneStyle !== 'undefined') ? ToneStyle.consume(raw) : raw; // 声のトーンタグを外す
+    const fullPrompt = systemPrompt + leadNote + (extraInstruction || '') + extraPrompt;
+    const raw = await apiModule.sendMessage(userText, fullPrompt, history, opts);
+    const text = (typeof ToneStyle !== 'undefined') ? ToneStyle.consume(raw) : raw; // 声のトーンタグを外す
+    // v1.8 - {text, toolUsed, toolNames} に加え、フォローアップ用に同じ指示文・履歴・状態を返す
+    return { text, toolUsed: !!opts.toolUsed, toolNames: opts.toolNames, state: opts,
+      apiModule, systemPrompt: fullPrompt, history, modelKey };
   }
 
   function _showGroupTyping(sisterKey, sister, chatArea, hideTyping) {
@@ -330,12 +371,12 @@ const ChatGroup = (() => {
 
           const continueInstruction = '\n\n【アキヤは今は見守っています。前の会話の続きを姉妹同士で自然に会話してください。相手の姉妹の発言に反応したり、新しい視点を出したり、議論を深めたり。アキヤへの報告じゃなくて、姉妹同士のおしゃべりとして。】';
 
-          const reply = await _callSisterInGroup(
+          const reply = (await _callSisterInGroup(
             '（アキヤは見守り中。前の会話の続きを姉妹同士で話してね）\n\n前の会話:\n' + lastTopic,
             sisterKey, isLead, sisterAPI,
             chatHistories, relayContext, complement, SISTERS,
             continueInstruction
-          );
+          )).text; // v1.8: 戻り値がオブジェクトになった（つづきではフォローアップしない）
 
           hideTyping();
           addMessage('ai', reply, { sisterKey, isLead });
@@ -365,6 +406,7 @@ const ChatGroup = (() => {
     handleGroupReply,
     continueTalk,
     resetHistory,
+    abort,
     setTarget,
     getTarget,
     takeTarget,

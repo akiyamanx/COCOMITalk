@@ -12,6 +12,7 @@
 // v2.2 2026-07-17 - お散歩自動送信のisProcessingスキップ時に一時添付を破棄（ゾンビ写真の次送信混入防止・PoC A）
 // 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
 // v2.3 2026-10-29 - step2有効化の準備: SISTER_API に aoi(ApiXai) / kimi(ApiKimi) を追加。登録簿が enabled の時だけ api を返す（今は両方 false=誰も呼ばない）
+// v2.5 2026-10-30 - 停止ボタンでグループの自動フォローアップも止める（ChatGroup.abort）
 // v2.4 2026-10-30 - 1対1: 約束(調べるね/待っててね)だけで止まった返事に1回だけ自動フォローアップ（promise-followup.js）
 // v2.5 2026-10-30 - 実行したツール名を吹き出しに渡す（🔎検索したよ 等の小さな印）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
@@ -221,6 +222,7 @@ const ChatCore = (() => {
     console.log('[ChatCore] 送信キャンセル実行');
     const aborted = (typeof ApiCommon !== 'undefined') ? ApiCommon.abortAll() : 0;
     if (typeof MeetingRelay !== 'undefined') MeetingRelay.abort();
+    if (typeof ChatGroup !== 'undefined' && ChatGroup.abort) ChatGroup.abort(); // v2.5 グループの自動フォローアップも止める
     hideTyping();
     if (aborted > 0) addMessage('ai', '⏹ 送信をキャンセルしました');
     isProcessing = false;
