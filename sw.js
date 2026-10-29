@@ -16,6 +16,7 @@
 // v3.81 2026-10-29 - 指示文に今の日本時間の1行を追加（prompt-builder v1.9）、ここちゃんの「あとで調べる」約束だけをやめる（koko-system v1.9）
 // v3.82 2026-10-30 - 約束だけで止まった返事の自動フォローアップ（promise-followup.js追加・chat-core v2.4）、Gemini thoughtSignature保持（api-gemini v1.5）、共通プロンプトに1行（common-env v1.2）
 // v3.83 2026-10-30 - 「最新の会話へ」ボタン（scroll-latest.js追加）、ツールを使った吹き出しに小さな印、フォローアップ指示の強化
+// v3.84 2026-10-30 - 知識に無いこと・最近/今の出来事は推測せず検索する指示（common-env v1.4 / promise-followup v1.2）
 // v3.79 2026-10-29 - 目の顔から口を外し、全画面のbody直下fixed表示に変更（mascot-eyes.js/css v1.1、app.jsで取り付け。名前ボタンは元の位置へ）
 // v3.78 2026-10-29 - 上の帯に目が動く小さな顔を追加（mascot-eyes.js / mascot-eyes.css、layout2-ui.jsで取り付け）
 // v3.77 2026-10-29 - 配色を落ち着いた青に（styles/design-tokens/layout/各CSSと一部JSの色のみ。姉妹の色は識別用に彩度控えめ）
@@ -25,7 +26,7 @@
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
-const CACHE_NAME = 'cocomitalk-v3.83';
+const CACHE_NAME = 'cocomitalk-v3.84';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
