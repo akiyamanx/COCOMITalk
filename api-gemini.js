@@ -10,6 +10,7 @@
 // v1.2 2026-03-12 - history末尾のuserMessage二重送信防止
 // v1.3 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定（旧モデルID表を廃止）
 // v1.4 2026-10-28 - 思考レベル: 設定で選ばれた時だけ generationConfig.thinkingConfig.thinkingLevel を送る。思考トークン(thoughtsTokenCount)も出力として記録
+// v1.6 2026-10-30 - 実行したツール名を options.toolNames に記録（吹き出しの印用）
 // v1.5 2026-10-30 - Function Calling 2回目に元のpartsをそのまま返す（thoughtSignature保持）。複数functionCallに対応。ツール使用をoptions.toolUsedで通知
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
@@ -184,6 +185,7 @@ const ApiGemini = (() => {
     for (const [i, p] of parts.filter(x => x.functionCall).entries()) {
       const f = p.functionCall;
       const ok = i < 3 && ToolRegistry.hasTool(f.name);
+      if (ok && options) (options.toolNames = options.toolNames || []).push(f.name); // v1.6: 吹き出しの「ツールを使ったよ」印用
       const result = ok ? await ToolRegistry.execute(f.name, f.args || {}) : '（このツールは実行しませんでした）';
       responses.push({ functionResponse: { name: f.name, response: { result } } });
     }

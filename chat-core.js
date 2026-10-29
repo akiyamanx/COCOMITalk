@@ -13,6 +13,7 @@
 // 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
 // v2.3 2026-10-29 - step2有効化の準備: SISTER_API に aoi(ApiXai) / kimi(ApiKimi) を追加。登録簿が enabled の時だけ api を返す（今は両方 false=誰も呼ばない）
 // v2.4 2026-10-30 - 1対1: 約束(調べるね/待っててね)だけで止まった返事に1回だけ自動フォローアップ（promise-followup.js）
+// v2.5 2026-10-30 - 実行したツール名を吹き出しに渡す（🔎検索したよ 等の小さな印）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 //
 // ■ 葵ちゃん/きみちゃんを有効にする手順（スイッチの場所）。まだ全部OFF。実際の中継には一度もつないでいない
@@ -308,7 +309,7 @@ const ChatCore = (() => {
       }
 
       hideTyping();
-      addMessage('ai', reply);
+      addMessage('ai', reply, { toolNames: opts.toolNames });
       chatHistories[currentSister].push({ role: 'assistant', content: reply });
       _saveHistory();
 
@@ -325,7 +326,7 @@ const ChatCore = (() => {
         showTyping();
         const more = await PromiseFollowup.run({ apiModule, systemPrompt: fullPrompt, history: chatHistories[currentSister], firstReply: reply, model: modelKey, state: opts });
         hideTyping();
-        if (more) { const r2 = _stripTone(more); addMessage('ai', r2); chatHistories[currentSister].push({ role: 'assistant', content: r2 }); _saveHistory(); }
+        if (more) { const r2 = _stripTone(more); addMessage('ai', r2, { toolNames: opts.followToolNames }); chatHistories[currentSister].push({ role: 'assistant', content: r2 }); _saveHistory(); }
       }
 
     } catch (error) {

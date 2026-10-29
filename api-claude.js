@@ -8,7 +8,7 @@
 // v1.7 2026-03-19 - skipToolsオプション追加（会議モードでtool_useエラー防止）
 // v1.8 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定。temperatureは段階表で送信可否を判定（Claude 4.7+は送らない）
 // v1.9 2026-10-28 - 思考の強さ: 設定で選ばれた時だけ output_config.effort を送る（未選択はAPI既定。xhigh/maxは出力枠を16000に拡大）
-// 2026-10-30 - ツール使用時に options.toolUsed を立てる（自動フォローアップ判定用）
+// 2026-10-30 - ツール使用時に options.toolUsed / toolNames を立てる（自動フォローアップ判定・吹き出しの印用）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
 'use strict';
@@ -155,7 +155,7 @@ const ApiClaude = (() => {
     console.log(`[ApiClaude] tool_use検出: ${tuBlock.name}(${JSON.stringify(tuBlock.input)})`);
 
     // ToolRegistryでツール実行
-    if (options) options.toolUsed = true; // 自動フォローアップ判定用
+    if (options) { options.toolUsed = true; (options.toolNames = options.toolNames || []).push(tuBlock.name); } // 自動フォローアップ判定・吹き出しの印用
     const toolResult = await ToolRegistry.execute(tuBlock.name, tuBlock.input || {});
 
     // ツール結果をClaudeに返す（tool_result形式）

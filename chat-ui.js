@@ -2,6 +2,7 @@
 // v1.0 2026-03-10 - chat-core.jsから表示系ロジックを分離
 // v1.1 2026-03-27 - #77 吹き出しタップ読み上げ（AI返答bubbleをタップ→TTS再生）
 // v1.2 2026-03-27 - #77改善: 再タップで読み上げ停止トグル（再生中→停止/停止中→再生）
+// v1.5 2026-10-30 - ツールを実際に使った返事の吹き出しに小さな印（options.toolNames → 🔎検索したよ 等）
 // v1.4 2026-10-29 - 音が鳴っている間の吹き出しタップで停止（準備中・鳴り始め700msのタップは無視）
 // v1.3 2026-10-29 - 連打で声が重なる不具合の修正: 読み上げ中(準備中含む)のタップは無視。停止はマイクの🔊ボタン。読み上げ中の吹き出しに speaking 表示
 // v3.77 2026-10-29 - AIの吹き出しに data-sister を付与（CSSがその子の色を付ける）／名前札の色を彩度控えめに
@@ -71,6 +72,14 @@ const ChatUi = (() => {
       textNode.textContent = text;
     }
     bubble.appendChild(textNode);
+    // v1.5 2026-10-30 ツールを実際に使った返事に小さな印（検証用）
+    if (role === 'ai' && options.toolNames && options.toolNames.length && typeof PromiseFollowup !== 'undefined') {
+      const tag = document.createElement('div');
+      tag.className = 'msg-tool-tag';
+      tag.textContent = PromiseFollowup.toolLabel(options.toolNames);
+      tag.style.cssText = 'font-size:11px;opacity:.65;margin-top:4px;';
+      bubble.appendChild(tag);
+    }
 
     // v1.3改良 - #77 吹き出しタップ読み上げ（AI返答のみ）。準備中(合成待ち)のタップは無視、音が鳴っている間のタップは停止（speakBubble 側で判定）
     if (role === 'ai') {

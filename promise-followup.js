@@ -2,6 +2,7 @@
 // このファイルは、ツールを使わずに「調べてみるね」「待っててね」等の約束で終わった返事を見つけ、
 // 隠し指示つきでもう1回だけ（ツール有効のまま）問い合わせて、答えを2つ目の吹き出しとして返す
 // v1.0 2026-10-30 - 新規作成（1ユーザー発言につき最大1回。隠し指示は画面・履歴・記憶に残さない）
+// v1.1 2026-10-30 - 隠し指示を強化（知識が要る質問は必ず web_search を呼ぶ・結果にない数字は書かない）、ツール名を state.followToolNames に、toolLabel 追加
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
@@ -10,9 +11,11 @@ const PromiseFollowup = (() => {
   const MAX_TOKENS = 2048;
 
   /** AIにだけ渡す隠し指示（画面・履歴・記憶には入れない） */
-  const HIDDEN_INSTRUCTION = '（システムからの自動指示）さっき「調べる・確認する・待ってて」と言ったので、' +
-    '今すぐツール（web_search / get_datetime / calculate）を使って答えを出して。' +
-    '調べられないなら正直に「わからない」と言って。また「待ってて」とは言わない。短く答える。';
+  const HIDDEN_INSTRUCTION = '（システムからの自動指示）さっき「調べる・確認する・待ってて」と言ったので、今すぐ答えを出して。' +
+    '事実・歴史・天気・数字・ニュースなど知識が要る質問は、答える前に必ず web_search ツールを呼ぶこと。' +
+    '日付・曜日・時刻は get_datetime、計算は calculate を使う。' +
+    'ツールの結果に書いていない数字や事実は書かない（記憶の数字を「調べた」と言わない）。' +
+    '結果で分からなければ正直に「わからない」と言う。また「待ってて」とは言わない。短く答える。';
 
   // 控えめな判定: 返事の「最後の文」が、調べる/確認する/待ってて系の約束で終わっている時だけ
   const PROMISE_RE = /(調べ(て|る|よう)|確認(して|する|しよう)|検索(して|する|しよう)|チェック(して|する)|(ちょっと|少し|しばらく)?待って(て|ね|てね|ください)?)[^。！？!?\n]{0,16}$/;
@@ -56,8 +59,17 @@ const PromiseFollowup = (() => {
     const opts = { model: p.model, maxTokens: MAX_TOKENS, followUp: true };
     console.log('[PromiseFollowup] 約束で止まった返事を検出 → 自動で1回だけ追加問い合わせ');
     // トークン記録は各api-*.jsの既存TokenMonitor.recordで自動的に1回分として残る
-    return await p.apiModule.sendMessage(HIDDEN_INSTRUCTION, p.systemPrompt, history, opts);
+    const text = await p.apiModule.sendMessage(HIDDEN_INSTRUCTION, p.systemPrompt, history, opts);
+    state.followToolNames = opts.toolNames || [];
+    return text;
   }
 
-  return { isPromiseOnly, shouldFollowUp, run, HIDDEN_INSTRUCTION, MAX_TOKENS };
+  /** 吹き出しの「ツールを使ったよ」印（chat-ui の addMessage options.toolNames 用） */
+  function toolLabel(names) {
+    if (!names || !names.length) return '';
+    const L = { web_search: '🔎検索したよ', get_datetime: '🕒時計を見たよ', calculate: '🧮計算したよ' };
+    return [...new Set(names)].map(n => L[n] || '🛠ツール').join(' ');
+  }
+
+  return { toolLabel, isPromiseOnly, shouldFollowUp, run, HIDDEN_INSTRUCTION, MAX_TOKENS };
 })();
