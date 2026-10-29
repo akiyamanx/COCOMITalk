@@ -2,6 +2,8 @@
 // このファイルは全ツール定義・3社フォーマット変換・実行振り分けを一元管理する
 // search-caller.jsと連携し、新ツール追加はこのファイルに定義を足すだけでOK
 // v1.0 2026-03-11 - Phase 2c 新規作成（web_search + get_datetime + calculate）
+// v1.1 2026-10-30 - web_search の結果に「分かった中身（名前・数字・日付）を2〜4文で入れて答える」指示を添える（RESULT_NOTE）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
 /**
@@ -221,6 +223,9 @@ const ToolRegistry = (() => {
    * @param {Object} args - ツール引数
    * @returns {Promise<string>} ツール実行結果テキスト
    */
+  /** v1.1: 検索結果に添える答え方の指示 */
+  const RESULT_NOTE = '【答え方】検索したときは、分かった中身（名前・数字・日付など）を短く入れて答える。ふんわりした感想だけで終わらない。2〜4文で、口調はいつもの自分のまま。分かれば出どころ（サイト名など）も一言。';
+
   async function execute(name, args) {
     const executor = executors[name];
     if (!executor) {
@@ -228,7 +233,9 @@ const ToolRegistry = (() => {
       return `未知のツール「${name}」が呼ばれました。`;
     }
     console.log(`[ToolRegistry] ツール実行: ${name}(${JSON.stringify(args)})`);
-    return await executor(args);
+    const result = await executor(args);
+    // v1.1: 検索結果の後ろに答え方の指示を付ける（4つのapi-*.jsの2回目の送信すべてに効く）
+    return name === 'web_search' ? `${result}\n\n${RESULT_NOTE}` : result;
   }
 
   /**
@@ -249,6 +256,7 @@ const ToolRegistry = (() => {
   }
 
   return {
+    RESULT_NOTE,
     execute,
     getGeminiTools,
     getOpenAITools,

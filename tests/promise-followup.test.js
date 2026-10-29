@@ -1,7 +1,7 @@
 // COCOMITalk - テスト: 約束だけで止まった返事の自動フォローアップ（promise-followup.js）と Gemini thoughtSignature 保持
 // このファイルは判定の正誤・最大1回・隠し指示が履歴に残らないこと・2回目にpartsがそのまま返ることを確かめる
 // v1.0 2026-10-30 - 新規作成
-// v1.1 2026-10-30 - v3.84 の検索指示テストを追加
+// v1.1 2026-10-30 - v3.85 の検索指示テストを追加
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 const test = require('node:test');
@@ -67,9 +67,20 @@ test('Gemini: 2回目の送信に functionCall の part（thoughtSignature含む
   assert.ok(!('tools' in sent[1]));
 });
 
-test('v3.84: 共通プロンプトと隠し指示に「知識に無い・最近/今の出来事は推測せず web_search」、雑談は検索しない', () => {
+test('v3.85: 共通プロンプトと隠し指示に「知識に無い・最近/今の出来事は推測せず web_search」、雑談は検索しない', () => {
   const L = '自分の知識に無いこと・最近や今の出来事・数字・昔の事実は、推測や憶測で答えずに web_search で調べてから答える。調べても分からなければ『わからない』と言う。';
   const env = require('fs').readFileSync(require('path').join(__dirname, '..', 'prompts/common-env.js'), 'utf8');
   assert.ok(env.includes(L) && env.includes('雑談や気持ちの話では検索しない。'));
   assert.ok(PF.HIDDEN_INSTRUCTION.includes(L));
+});
+
+test('v3.85: web_search の結果にだけ答え方の指示が付く／共通プロンプトにも同じ文', async () => {
+  const N = '検索したときは、分かった中身（名前・数字・日付など）を短く入れて答える。ふんわりした感想だけで終わらない。';
+  const SearchCaller = { execute: async () => '【検索結果】RTX 5090 発売 2025年1月' };
+  const { ToolRegistry } = load(['tool-registry.js'], ['ToolRegistry'], { SearchCaller, Intl, Date });
+  const r = await ToolRegistry.execute('web_search', { query: 'GPU 最新' });
+  assert.ok(r.startsWith('【検索結果】RTX 5090') && r.includes(N) && r.includes('2〜4文'));
+  assert.ok(!(await ToolRegistry.execute('calculate', { expression: '1+1' })).includes(N));
+  const env = require('fs').readFileSync(require('path').join(__dirname, '..', 'prompts/common-env.js'), 'utf8');
+  assert.ok(env.includes(N));
 });
