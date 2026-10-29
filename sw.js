@@ -18,6 +18,7 @@
 // v3.83 2026-10-30 - 「最新の会話へ」ボタン（scroll-latest.js追加）、ツールを使った吹き出しに小さな印、フォローアップ指示の強化
 // v3.84 2026-10-30 - 知識に無いこと・最近/今の出来事は推測せず検索する指示（common-env v1.4 / promise-followup v1.2）
 // v3.85 2026-10-30 - 検索したら分かった中身（名前・数字・日付）を短く入れて答える（tool-registry v1.1 / common-env v1.5）
+// v3.86 2026-10-30 - 吹き出しの太字補正（md-fix.js追加: 日本語・全角記号に隣接した**も太字、余った**は消す）
 // v3.79 2026-10-29 - 目の顔から口を外し、全画面のbody直下fixed表示に変更（mascot-eyes.js/css v1.1、app.jsで取り付け。名前ボタンは元の位置へ）
 // v3.78 2026-10-29 - 上の帯に目が動く小さな顔を追加（mascot-eyes.js / mascot-eyes.css、layout2-ui.jsで取り付け）
 // v3.77 2026-10-29 - 配色を落ち着いた青に（styles/design-tokens/layout/各CSSと一部JSの色のみ。姉妹の色は識別用に彩度控えめ）
@@ -27,7 +28,7 @@
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
-const CACHE_NAME = 'cocomitalk-v3.85';
+const CACHE_NAME = 'cocomitalk-v3.86';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
@@ -42,7 +43,7 @@ const CACHE_FILES = [
   './meeting-ui.js', './meeting-archive-ui.js', './memory-ui.js',
   './memory-import-ui.js', './memory-ui-styles.css', './search-ui.js',
   './search-ui-styles.css', './token-monitor-styles.css',
-  './search-caller.js', './tool-registry.js', './prompt-builder.js', './promise-followup.js', './scroll-latest.js',
+  './search-caller.js', './tool-registry.js', './prompt-builder.js', './promise-followup.js', './scroll-latest.js', './md-fix.js',
   './consultation-ui.js',
   './meeting-voice.js', './doc-generator.js', './file-handler.js',
   './tone-style.js', './tts-provider.js', './openai-tts-provider.js', './gemini-tts-provider.js',

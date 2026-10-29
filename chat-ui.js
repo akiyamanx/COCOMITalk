@@ -2,6 +2,7 @@
 // v1.0 2026-03-10 - chat-core.jsから表示系ロジックを分離
 // v1.1 2026-03-27 - #77 吹き出しタップ読み上げ（AI返答bubbleをタップ→TTS再生）
 // v1.2 2026-03-27 - #77改善: 再タップで読み上げ停止トグル（再生中→停止/停止中→再生）
+// v1.6 2026-10-30 - 太字補正: MdFix.render（md-fix.js）で「）**に」等の生**を<strong>に
 // v1.5 2026-10-30 - ツールを実際に使った返事の吹き出しに小さな印（options.toolNames → 🔎検索したよ 等）
 // v1.4 2026-10-29 - 音が鳴っている間の吹き出しタップで停止（準備中・鳴り始め700msのタップは無視）
 // v1.3 2026-10-29 - 連打で声が重なる不具合の修正: 読み上げ中(準備中含む)のタップは無視。停止はマイクの🔊ボタン。読み上げ中の吹き出しに speaking 表示
@@ -62,9 +63,9 @@ const ChatUi = (() => {
     // テキスト本文（Markdownパース対応）
     const textNode = document.createElement('div');
     textNode.className = 'msg-text';
-    if (role === 'ai' && typeof marked !== 'undefined' && marked.parse) {
+    if (role === 'ai' && typeof MdFix !== 'undefined') {
       try {
-        textNode.innerHTML = marked.parse(text, { breaks: true, gfm: true });
+        textNode.innerHTML = MdFix.render(text); // v1.6 日本語隣接の**も太字に
       } catch (e) {
         textNode.textContent = text;
       }

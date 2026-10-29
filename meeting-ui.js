@@ -6,6 +6,7 @@
 // v1.8.1 2026-03-28 - バグ修正: 回答ダイアログ表示時にhide()が先に走って見えない問題を修正
 // v1.9 2026-04-05 - ワイワイモード: meeting-full時のスタイルボタングレーアウト制御追加
 // v3.77 2026-10-29 - 姉妹の色を彩度控えめに
+// v3.86 2026-10-30 - 太字補正: _renderMarkdownをMdFix.render（md-fix.js）経由に
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
@@ -292,9 +293,7 @@ const MeetingUI = (() => {
   function _clearChat() { if (chatArea) chatArea.innerHTML = ''; }
 
   function _renderMarkdown(text) {
-    if (typeof marked !== 'undefined' && marked.parse) {
-      try { return marked.parse(text, { breaks: true, gfm: true }); } catch (e) { console.warn('[MeetingUI] Markdownパースエラー:', e); }
-    }
+    if (typeof MdFix !== 'undefined') return MdFix.render(text); // 太字補正（md-fix.js）
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
   }
 
