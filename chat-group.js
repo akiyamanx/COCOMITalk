@@ -13,6 +13,7 @@
 // 2026-10-28 - 話しかけ先(targetSister): 帯の札タップで選んだ子を、次の1通だけ先頭＋主担当にする（setTarget/takeTarget。1回で解除）
 // v3.77 2026-10-29 - グループのタイピング名の色を彩度控えめに
 // v1.8 2026-10-30 - 自動フォローアップ: 約束(調べるね等)で止まりツール未使用の子に、全員の後で1回だけ続き（最大2回/ターン・葵/きみ除外・停止で中止）。吹き出しにツール印
+// v1.9 2026-10-30 - 葵・きみも三姉妹と同じに: 発言順(既定=SISTERSの全員)・自動フォローアップ対象・グループ会話ルールの参加者名・タイピング色
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
@@ -30,8 +31,8 @@ const ChatGroup = (() => {
   // --- 前ターンのリレー履歴を保持（ターン間で引き継ぐ） ---
   let prevTurnRelay = [];
 
-  // --- 自動フォローアップ（ツールを呼べる子だけ。葵/きみは中継がtools未対応なので除外） ---
-  const FOLLOWUP_OK = ['koko', 'gpt', 'claude'];
+  // --- 自動フォローアップ（ツールを呼べる子。v1.9: 中継がtools対応したので葵/きみも対象） ---
+  const FOLLOWUP_OK = ['koko', 'gpt', 'claude', 'aoi', 'kimi'];
   const MAX_FOLLOWUPS_PER_TURN = 2;
   let _stopped = false;
   /** 停止ボタン（chat-core._handleCancel）から呼ぶ。このターンの残りのフォローアップをやめる */
@@ -70,7 +71,7 @@ const ChatGroup = (() => {
     const promised = []; // 約束で止まった子（話した順）
 
     // 動的ルーティングで発言順を決定
-    let order = ['koko', 'gpt', 'claude'];
+    let order = Object.keys(SISTERS); // v1.9: ルーター無しでも今いる全員（三姉妹＋有効な葵/きみ）
     let lead = 'koko';
 
     if (typeof MeetingRouter !== 'undefined') {
@@ -232,10 +233,11 @@ const ChatGroup = (() => {
     const otherNames = [...complementNames, ...prevNames];
 
     let groupInstruction = '\n\n【グループ会話ルール — 最重要】';
-    groupInstruction += '\nこれは三姉妹＋アキヤの家族グループチャットです。';
+    const others = Object.keys(SISTERS).filter(k => k !== sisterKey).map(k => `「${SISTERS[k].icon}${SISTERS[k].name}:」`);
+    groupInstruction += `\nこれは${Object.values(SISTERS).map(x => x.name).join('・')}＋アキヤの家族グループチャットです。`;
     groupInstruction += '\n★絶対厳守★ あなたの応答には【自分自身の言葉だけ】を書いてください。';
     groupInstruction += '\n・他の姉妹のセリフを代弁・代筆してはいけません。';
-    groupInstruction += '\n・「🌙お姉ちゃん:」「🔮クロちゃん:」「🌸ここちゃん:」のような他の姉妹の発言は絶対に含めないでください。';
+    groupInstruction += `\n・${others.join('')}のような他の子の発言は絶対に含めないでください。`;
     groupInstruction += '\n・他の姉妹にはそれぞれ自分のAPIがあり、自分の言葉で応答します。あなたが代わりに書く必要はありません。';
     groupInstruction += '\n・アキヤの発言に答えるだけでなく、他の姉妹の発言にも自然に反応してください。';
     groupInstruction += '\n・「ここちゃんの○○いいね」「クロちゃんが言ってた○○だけど」など、名前を出して触れてOK。';
@@ -286,7 +288,7 @@ const ChatGroup = (() => {
 
   function _showGroupTyping(sisterKey, sister, chatArea, hideTyping) {
     hideTyping();
-    const colors = { koko: '#A5426C', gpt: '#4F449E', claude: '#A8531F' };
+    const colors = { koko: '#A5426C', gpt: '#4F449E', claude: '#A8531F', aoi: '#1F6E96', kimi: '#94650A' };
     const color = colors[sisterKey] || '#888';
 
     const msgDiv = document.createElement('div');

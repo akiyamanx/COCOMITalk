@@ -1,6 +1,8 @@
 // COCOMITalk - 会議ルーター（議題分析＋動的ルーティング）
 // このファイルは議題を分析して三姉妹の発言順と主担当を動的に決定する
 // v0.8 Step 3 - 新規作成
+// v1.0 2026-10-30 - 登録簿で有効な葵・きみも発言順の後ろに並べる（三姉妹の順と主担当は今まで通り。5人なら1ターン5回の返事）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
 'use strict';
 
@@ -194,9 +196,18 @@ JSONのみ返してください。他のテキストは不要です。
       category: categoryKey,
       label: cat.label,
       lead: cat.lead,
-      order: [...cat.order],
+      order: withExtras(cat.order),
       reason: cat.reason,
     };
+  }
+
+  /** 三姉妹の順の後ろに、登録簿で有効なほかの子（葵・きみ）を登録順で足す。無効な子・登録簿なしなら元の順のまま */
+  function withExtras(order) {
+    const out = [...order];
+    if (typeof CharacterRegistry === 'undefined') return out;
+    const on = CharacterRegistry.enabledList().map(c => c.key);
+    on.forEach(k => { if (!out.includes(k)) out.push(k); });
+    return out.filter(k => on.includes(k));
   }
 
   /**
@@ -209,6 +220,7 @@ JSONのみ返してください。他のテキストは不要です。
   return {
     analyzeTopic,
     getCategories,
+    withExtras,
     DEFAULT_ORDER,
     DEFAULT_LEAD,
   };
