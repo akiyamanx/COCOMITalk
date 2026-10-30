@@ -15,6 +15,7 @@
 // v2.5 2026-10-30 - 停止ボタンでグループの自動フォローアップも止める（ChatGroup.abort）
 // v2.4 2026-10-30 - 1対1: 約束(調べるね/待っててね)だけで止まった返事に1回だけ自動フォローアップ（promise-followup.js）
 // v2.5 2026-10-30 - 実行したツール名を吹き出しに渡す（🔎検索したよ 等の小さな印）
+// v2.6 2026-10-30 - 登録簿で有効な葵/きみを1対1の表(SISTERS)・履歴に入れる（staging試験用に enabled:true）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 //
 // ■ 葵ちゃん/きみちゃんを有効にする手順（スイッチの場所）。まだ全部OFF。実際の中継には一度もつないでいない
@@ -61,6 +62,8 @@ const ChatCore = (() => {
 
   /** 登録簿で有効なキャラか（登録簿が無ければ false） */
   const _isOn = (key) => (typeof CharacterRegistry !== 'undefined') && CharacterRegistry.isEnabled(key);
+  // v2.6 有効な葵/きみだけ1対1で選べる（無効の間は表に入らない）
+  for (const [k, n, i] of [['aoi', '葵ちゃん', '🦋'], ['kimi', 'きみちゃん', '🌟']]) if (_isOn(k)) SISTERS[k] = { name: n, icon: i, welcomeIcon: i, welcomeText: `${n}とお話ししよう！`, placeholder: `${n}に話しかけてね...` };
 
   const SISTER_API = {
     koko: {
@@ -86,13 +89,8 @@ const ChatCore = (() => {
     },
   };
 
-  const chatHistories = {
-    koko: [],
-    gpt: [],
-    claude: []
-  };
-
-  const sessionStartIndex = { koko: 0, gpt: 0, claude: 0 };
+  const chatHistories = { koko: [], gpt: [], claude: [], aoi: [], kimi: [] };
+  const sessionStartIndex = { koko: 0, gpt: 0, claude: 0, aoi: 0, kimi: 0 };
 
   let currentSister = 'koko';
 
@@ -116,7 +114,7 @@ const ChatCore = (() => {
 
     await _loadAllHistories();
 
-    for (const key of ['koko', 'gpt', 'claude']) {
+    for (const key of Object.keys(SISTERS)) {
       sessionStartIndex[key] = chatHistories[key].length;
     }
 
@@ -465,9 +463,7 @@ const ChatCore = (() => {
         await ChatHistory.clear(sisterKey);
       }
     } else {
-      chatHistories.koko = [];
-      chatHistories.gpt = [];
-      chatHistories.claude = [];
+      for (const k of Object.keys(chatHistories)) chatHistories[k] = [];
       if (typeof ChatHistory !== 'undefined') {
         await ChatHistory.clearAll();
       }

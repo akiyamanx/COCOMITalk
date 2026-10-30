@@ -1,5 +1,5 @@
 // COCOMITalk - 葵(xAI)/きみ(Kimi)のAPIモジュールと呼び出しの表（SISTER_API/SISTERS）のテスト（step2: 有効化の準備・無効のまま）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30（aoi/kimi有効化をstagingで試験）
 // ★全部モック。実際の中継・xAI・Kimiには一度もつないでいない。
 'use strict';
 const test = require('node:test');
@@ -56,16 +56,19 @@ test('呼び出しの表: 無効（enabled:false）の間は両方 null＝何も
   assert.equal(bare.ChatCore.getGroupContext().SISTER_API.aoi.module(), null);
 });
 
-test('本物の登録簿: aoi/kimi は enabled:false のまま・有効一覧は三姉妹だけ・provider/apiModule は新モジュールと一致', () => {
-  const R = load(['characters.js'], ['CharacterRegistry']).CharacterRegistry;
-  assert.deepEqual(plain(R.enabledList().map(c => c.key)), ['koko', 'gpt', 'claude']);
-  for (const [k, p, m] of [['aoi', 'xai', 'ApiXai'], ['kimi', 'moonshot', 'ApiKimi']]) {
+test('本物の登録簿(2026-10-30 staging試験で有効化): aoi/kimi は enabled:true・provider/apiModule は新モジュールと一致・1対1の表にも入る', () => {
+  const R = load(['characters.js'], ['CharacterRegistry'], { realRegistry: true }).CharacterRegistry;
+  assert.deepEqual(plain(R.enabledList().map(c => c.key)), ['koko', 'gpt', 'claude', 'aoi', 'kimi']);
+  for (const [k, p, m, v] of [['aoi', 'xai', 'ApiXai', 'Leda'], ['kimi', 'moonshot', 'ApiKimi', 'Zephyr']]) {
     const c = R.get(k);
-    assert.equal(c.enabled, false); assert.equal(c.status, 'coming-soon'); assert.equal(c.provider, p); assert.equal(c.apiModule, m);
+    assert.equal(c.enabled, true); assert.equal(c.status, 'active'); assert.equal(c.provider, p); assert.equal(c.apiModule, m); assert.equal(c.voice.gemini, v);
   }
-  // 無効の間は ChatCore の1対1の表(SISTERS)・会話履歴にも出ない＝選べない
-  const e = load(['chat-core.js'], ['ChatCore'], { window: {}, localStorage: makeStorage() });
-  assert.deepEqual(plain(Object.keys(e.ChatCore.SISTERS)), ['koko', 'gpt', 'claude']);
+  const e = load(['characters.js', 'chat-core.js'], ['ChatCore'], { realRegistry: true, window: {}, localStorage: makeStorage() });
+  assert.deepEqual(plain(Object.keys(e.ChatCore.SISTERS)), ['koko', 'gpt', 'claude', 'aoi', 'kimi']);
+  assert.equal(e.ChatCore.SISTERS.aoi.name, '葵ちゃん'); assert.deepEqual(plain(e.ChatCore.getHistory('kimi')), []);
+  // 準備中の版(テスト用固定)では従来どおり三姉妹だけ
+  const off = load(['characters.js', 'chat-core.js'], ['ChatCore'], { window: {}, localStorage: makeStorage() });
+  assert.deepEqual(plain(Object.keys(off.ChatCore.SISTERS)), ['koko', 'gpt', 'claude']);
 });
 
 // ---- APIモジュール本体（ApiCommon はモック）----
@@ -175,7 +178,7 @@ test('中継の提案パッチ(あれば)との一致: 送るモデルIDが許�
   for (const k of [...forbidden.matchAll(/'([^']+)'/g)].map(m => m[1])) assert.ok(!new RegExp(`body\\.${k}\\b|\\b${k}:`).test(src.replace(/\/\/.*$/gm, '')), 'sends ' + k);
 });
 
-test('配線: index.html（api-common/model-tiersの後・api-claudeの後）とsw.js（cache v3.87・3ファイル）、1ファイル500行以内、先頭に「このファイルは」', () => {
+test('配線: index.html（api-common/model-tiersの後・api-claudeの後）とsw.js（cache v3.88・3ファイル）、1ファイル500行以内、先頭に「このファイルは」', () => {
   const html = read('index.html'), sw = read('sw.js');
   const pos = f => html.indexOf(`src="${f}"`);
   for (const f of ['api-compat-core.js', 'api-xai.js', 'api-kimi.js']) {
@@ -186,7 +189,7 @@ test('配線: index.html（api-common/model-tiersの後・api-claudeの後）と
     assert.match(t, /作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-29/);
   }
   assert.ok(pos('api-compat-core.js') < pos('api-xai.js') && pos('api-xai.js') < pos('api-kimi.js'));
-  assert.ok(sw.includes("'cocomitalk-v3.87'"));
+  assert.ok(sw.includes("'cocomitalk-v3.88'"));
   // 有効化の手順（スイッチの場所）が冒頭に書いてある
   assert.match(read('chat-core.js').split('\n').slice(0, 25).join('\n'), /characters\.js の aoi \/ kimi を enabled:true/);
   assert.match(read('api-xai.js').split('\n').slice(0, 10).join('\n'), /characters\.js の aoi を enabled:true/);

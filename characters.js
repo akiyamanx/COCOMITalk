@@ -1,13 +1,14 @@
 // COCOMITalk - キャラクター登録簿
 // このファイルはCOCOMIファミリー5人（三姉妹＋葵＋キミ）の名前・プロバイダ・既定段階・声スロットを1か所で定義する
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 // v1.0 2026-10-28 - 新規作成（step1: 登録のみ。chat-core等の3人固定コードはまだ置き換えていない）
 // v1.1 2026-10-28 - Gemini TTSの声を割り当て（オーナー決定: 澪=Despina / クロ=Achernar / ここ=Autonoe / 葵=Leda / キミ=Zephyr）
 // v1.2 2026-10-29 - 正式名を ひらがな「きみちゃん」に統一（旧カタカナ表記はaliasesに残す）。promptModuleOf/promptOf追加（キー→そのキャラ自身のプロンプト。知らないキーは claude に落とさず空）
 // v1.3 2026-10-29 - 葵のプロバイダ=xAIをオーナー確定（「オーナー未確認」注記を削除）
 // v1.4 2026-10-29 - aoi/kimi の apiModule を ApiXai/ApiKimi に（api-xai.js/api-kimi.js 追加。enabled は false のまま。有効化の手順は chat-core.js 冒頭）
+// v1.5 2026-10-30 - 中継に /xai /kimi /gemini-tts がデプロイされたので aoi/kimi を enabled:true（まずstagingで試験。声はGemini TTS Leda/Zephyr）
 //
-// ・葵(aoi)=xAI Grok / キミ(kimi)=Moonshot Kimi は中継(Worker)が未対応のため enabled:false（準備中）。
+// ・葵(aoi)=xAI Grok / キミ(kimi)=Moonshot Kimi は v1.5 から enabled:true（1対1のみ。グループ/会議の発言順は未対応）。
 //   葵のプロバイダ = xAI（オーナー確定 2026-10-29）。
 // ・voice.gemini = Gemini TTSの声（5人とも決定済み。葵・キミは準備中でも声は設定済み）。voicevox/openai 欄は未使用(null)で、
 //   既存3人のOpenAI/VOICEVOXの声は tts-provider.js の SISTER_VOICE_MAP が今も有効（Gemini欄はここと同じ値。tests/voices.test.js で一致を確認）。
@@ -48,13 +49,13 @@ const CharacterRegistry = (() => {
       key: 'aoi', name: '葵ちゃん', aliases: ['葵', 'Aoi'], icon: '🦋', family: 'family',
       provider: 'xai', apiModule: 'ApiXai',
       defaultTiers: { ...DEFAULT_TIERS }, voice: _voice('Leda'),
-      enabled: false, status: 'coming-soon', statusNote: '準備中（中継がxAI未対応）',
+      enabled: true, status: 'active', statusNote: '',
     },
     {
       key: 'kimi', name: 'きみちゃん', aliases: ['きみ', 'キミ', 'キミちゃん', 'Kimi'], icon: '🌟', family: 'family',
       provider: 'moonshot', apiModule: 'ApiKimi',
       defaultTiers: { ...DEFAULT_TIERS }, voice: _voice('Zephyr'),
-      enabled: false, status: 'coming-soon', statusNote: '準備中（中継がKimi未対応）',
+      enabled: true, status: 'active', statusNote: '',
     },
   ];
 
