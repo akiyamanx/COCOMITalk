@@ -6,7 +6,7 @@
 // v2.4.1 修正 - pause済みWhisperのhealthCheckスキップ（recorder=inactive誤判定回避）
 // v2.5.0 修正 - STT再開ガードを_canResumeSTT()に一元化（isPlaying欠落drift解消）＋
 //   フェイルセーフのTTS再生中誤爆防止＋onPlayError後のマイク復帰経路追加（音声途切れバグ根本修正）
-// v2.5.1 2026-10-29 修正 - speakBubbleを二重再生ガード付き(AudioPlaybackManager.speakBubble)に委譲
+// v2.5.1 2026-10-29 修正 - speakBubbleを二重再生ガード付き(AudioPlaybackManager.speakBubble)に委譲 / v2.5.2 2026-10-30 発光の消灯を登録簿の全員に（葵/きみが光りっぱなしにならない）
 
 class VoiceController {
   constructor() {
@@ -195,7 +195,7 @@ class VoiceController {
 
     // v2.4.0追加 - キュー中の姉妹切替（アイコン発光のみ）
     this._playback.onSisterChange = (sisterId) => {
-      ['koko', 'gpt', 'claude'].forEach(id => this._ui.highlightSister(id, false));
+      (typeof CharacterRegistry !== 'undefined' ? CharacterRegistry.keys() : ['koko', 'gpt', 'claude']).forEach(id => this._ui.highlightSister(id, false)); // 2026-10-30 葵/きみも消灯
       this._ui.highlightSister(sisterId, true);
     };
 
@@ -210,7 +210,7 @@ class VoiceController {
     // onQueueEnd: キュー全完了 → フラグクリア＋全姉妹消灯＋フェイルセーフ付き復帰
     this._playback.onQueueEnd = () => {
       this._waitingForTTS = false;
-      ['koko', 'gpt', 'claude'].forEach(id => this._ui.highlightSister(id, false));
+      (typeof CharacterRegistry !== 'undefined' ? CharacterRegistry.keys() : ['koko', 'gpt', 'claude']).forEach(id => this._ui.highlightSister(id, false)); // 2026-10-30 葵/きみも消灯
       this._voiceState.transition('recovering_input');
       if (this._enabled) {
         this._resumeSTTAfterTTS();
@@ -454,7 +454,7 @@ class VoiceController {
         }
         console.warn('[Voice] フェイルセーフ発動: recovering 7秒超過 → 強制STT再開');
         this._waitingForTTS = false;
-        ['koko', 'gpt', 'claude'].forEach(id => this._ui.highlightSister(id, false));
+        (typeof CharacterRegistry !== 'undefined' ? CharacterRegistry.keys() : ['koko', 'gpt', 'claude']).forEach(id => this._ui.highlightSister(id, false)); // 2026-10-30 葵/きみも消灯
         this._voiceState.forceReset();
         this._voiceState.transition('listening');
         this.startListening();

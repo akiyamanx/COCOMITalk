@@ -66,9 +66,9 @@ const SISTER_VOICE_MAP = {
     voicevox: { voice: '46',     label: '🔮 クロちゃん' },  // WhiteCUL（ノーマル）
     gemini:   { voice: 'Achernar', label: '🔮 クロちゃん' }
   },
-  // 葵・キミは準備中（チャットは無効）。声だけ先に設定。OpenAI/VOICEVOXの声は無し→getSisterVoiceが既定('alloy')に戻す
-  aoi:  { gemini: { voice: 'Leda',   label: '葵ちゃん' } },
-  kimi: { gemini: { voice: 'Zephyr', label: 'きみちゃん' } }
+  // 葵・きみ: Geminiの声だけ決定済み。OpenAI/VOICEVOXの声は未決定→getSisterVoiceが既定('alloy')に戻す（2026-10-30 札に絵文字を付けて三姉妹と揃えた）
+  aoi:  { gemini: { voice: 'Leda',   label: '🦋 葵ちゃん' } },
+  kimi: { gemini: { voice: 'Zephyr', label: '🌟 きみちゃん' } }
 };
 
 // v1.1追加 - 現在のTTSプロバイダー名（'gemini' | 'openai' | 'voicevox'）。v1.4から既定はgemini（openai/voicevoxは選べる控え兼、失敗時の自動戻し先）

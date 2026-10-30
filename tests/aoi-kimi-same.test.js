@@ -44,3 +44,18 @@ test('記憶: 持ち主の札・名前・取り込み先に 葵/きみ がある
   assert.match(read('chat-memory.js'), /CharacterRegistry\.info\(CharacterRegistry\.keyFromDbId\(sisterId\)\)\.name/);
   assert.match(read('index.html'), /dot-aoi[\s\S]*dot-kimi/);
 });
+
+test('声: 「葵ちゃんにして」「きみちゃん」で切替、普通の呼びかけは切替にしない。発光の消灯は全員', () => {
+  const g = load(['characters.js', 'voice-command.js'], ['CharacterRegistry', 'VoiceCommand'], { realRegistry: true, window: {} });
+  const VC = g.VoiceCommand || g.window?.VoiceCommand;
+  const m = t => { const r = VC.prototype._matchSisterSwitch.call({}, t); return r && r.key; };
+  assert.equal(m('葵ちゃんにして'), 'aoi');
+  assert.equal(m('あおいちゃん'), 'aoi');
+  assert.equal(m('きみちゃんお願い'), 'kimi');
+  assert.equal(m('キミチャン'), 'kimi');
+  assert.equal(m('クロちゃん'), 'claude');
+  assert.equal(m('葵ちゃんおはよう'), null);
+  const vi = read('voice-input.js');
+  assert.ok(!/\['koko', 'gpt', 'claude'\]\.forEach/.test(vi), '3人固定の消灯ループが残っていない');
+  assert.ok(vi.includes('CharacterRegistry.keys()'));
+});
