@@ -9,6 +9,7 @@
 // v1.8 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定。temperatureは段階表で送信可否を判定（Claude 4.7+は送らない）
 // v1.9 2026-10-28 - 思考の強さ: 設定で選ばれた時だけ output_config.effort を送る（未選択はAPI既定。xhigh/maxは出力枠を16000に拡大）
 // v2.0 2026-10-30 - 音声会話中(options.onDelta)は受け取りながら返す（voice-stream.js が最初の1文から読み上げ）。ツール使用・失敗時は今まで通りの送り方でやり直す
+// v2.1 2026-10-30 - ストリームで届いた tool_use をそのまま実行（ツール付きの送り直しを省く。組み立てられない時だけ今まで通り）
 // 2026-10-30 - ツール使用時に options.toolUsed / toolNames を立てる（自動フォローアップ判定・吹き出しの印用）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
@@ -80,8 +81,14 @@ const ApiClaude = (() => {
 
     // v2.0追加 - 音声会話: 受け取りながら返す（null=ツール/失敗 → 下の今まで通りの送り方）
     if (typeof options.onDelta === 'function' && typeof ApiCommon.streamText === 'function') {
-      const streamed = await ApiCommon.streamText('claude', body, options.onDelta);
-      if (streamed) return streamed;
+      const sd = typeof ApiCommon.streamData === 'function' ? await ApiCommon.streamData('claude', body, options.onDelta) : null;
+      if (sd && sd._toolCall && sd._toolsReady) { // v2.1: 届いた tool_use をそのまま実行 → 結果を渡して最終回答（2回目）
+        const tuText = await _handleToolUse(sd, body, modelName, options);
+        if (tuText) return tuText;
+      } else if (sd && !sd._toolCall) {
+        const t = _extractText(sd);
+        if (sd.content[0].text && sd.content[0].text.trim()) return t;
+      }
     }
 
     try {

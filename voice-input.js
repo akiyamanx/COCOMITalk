@@ -1,4 +1,4 @@
-// voice-input.js v2.6.0
+// voice-input.js v2.6.1
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
 // UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
 // v2.0〜v2.3.0: 履歴省略（バッファ方式/TTS待機フラグ/voice-state連携/吹き出し読み上げ）
@@ -6,7 +6,7 @@
 // v2.4.1 修正 - pause済みWhisperのhealthCheckスキップ（recorder=inactive誤判定回避）
 // v2.5.0 修正 - STT再開ガードを_canResumeSTT()に一元化（isPlaying欠落drift解消）＋
 //   フェイルセーフのTTS再生中誤爆防止＋onPlayError後のマイク復帰経路追加（音声途切れバグ根本修正）
-// v2.5.1 2026-10-29 修正 - speakBubbleを二重再生ガード付き(AudioPlaybackManager.speakBubble)に委譲 / v2.6.0 2026-10-30 速く: 送信前の待ち3.5→1.0秒(話し中・文字起こし中は延長)＋こだま除け＋時間ログ（マイク復帰の1.5秒待ちは変えない） / v2.5.2 2026-10-30 発光の消灯を登録簿の全員に（葵/きみが光りっぱなしにならない）
+// v2.5.1 2026-10-29 修正 - speakBubbleを二重再生ガード付き(AudioPlaybackManager.speakBubble)に委譲 / v2.6.0 2026-10-30 速く: 送信前の待ち3.5→1.0秒(話し中・文字起こし中は延長)＋こだま除け＋時間ログ（マイク復帰の1.5秒待ちは変えない） / v2.5.2 2026-10-30 発光の消灯を登録簿の全員に（葵/きみが光りっぱなしにならない） / v2.6.1 2026-10-30 送信前の待ち1.0→0.5秒・確認0.5→0.25秒（延長ルールとマイク復帰1.5秒・こだま除けは変えない）
 
 class VoiceController {
   constructor() {
@@ -22,8 +22,8 @@ class VoiceController {
     this._bufferTimer = null;
     this._confirmTimer = null;
     this._lastBufferText = '';
-    this._BUFFER_DELAY = 1000; // v2.6.0: 3500→1000（無音判定の後の待ち。まだ話し中/文字起こし中なら延長する）
-    this._CONFIRM_DELAY = 500;
+    this._BUFFER_DELAY = 500; // v2.6.1: 1000→500（v2.6.0: 3500→1000）文字起こしの前に無音判定(1.2〜5秒)が済んでいるので短く。まだ話し中/文字起こし中なら今まで通り延長
+    this._CONFIRM_DELAY = 250; // v2.6.1: 500→250（「送信するよ」表示の時間）
     this._NOISE_MIN_LENGTH = 2;
     this._lastText = '';
     this._sttStartTime = 0;

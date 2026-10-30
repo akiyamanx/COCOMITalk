@@ -7,6 +7,7 @@
 // v0.9 2026-07-17 - 孤立サロゲート検知＋消毒（絵文字の片割れによる400対策・検知時は必ずログ）
 // v0.10 2026-07-17 - 400番台エラー時のbody全文＋本家エラー詳細ダンプ（真犯人特定用・DebugLogger稼働時のみ）
 // v0.11 2026-10-30 - callAPIStream に onDelta（届いた文字をすぐ渡す）とツール呼び出し検知（_toolCall）を追加。streamText() 追加（音声会話の読み上げ用・失敗時は null で今まで通りに戻す）
+// v0.12 2026-10-30 - hooks.keepTools: Claude の tool_use を止めずに最後まで受け取り、content(text/tool_use)を組み立てて返す（やり直し送信を1回減らす）。streamData() 追加
 
 'use strict';
 
@@ -223,9 +224,11 @@ const ApiCommon = (() => {
       let stopReason = null;
       let buffer = '';
       let toolCall = false; // v0.11: ツールを呼ぼうとしたら止める（呼び出し側が普通の送り方でやり直す）
+      const keep = !!hooks.keepTools && endpoint === 'claude'; // v0.12: 止めずに tool_use の中身まで受け取る
+      const blocks = []; // v0.12: Claude の content ブロック（index順）
       const emit = (d) => { fullText += d; if (hooks.onDelta) { try { hooks.onDelta(d); } catch (e) { /* 読み上げ側の失敗で受信を止めない */ } } };
 
-      while (!toolCall) {
+      while (!toolCall || keep) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -252,9 +255,12 @@ const ApiCommon = (() => {
               // Claude SSE: delta.text (content_block_delta) or delta.stop_reason (message_delta)
               if (parsed.type === 'content_block_delta') {
                 const delta = parsed.delta?.text;
-                if (delta) emit(delta);
-              } else if (parsed.type === 'content_block_start' && parsed.content_block?.type === 'tool_use') {
-                toolCall = true;
+                if (delta) { emit(delta); const b = blocks[parsed.index]; if (b && b.type === 'text') b.text += delta; }
+                if (parsed.delta?.type === 'input_json_delta') { const b = blocks[parsed.index]; if (b) b._json += parsed.delta.partial_json || ''; }
+              } else if (parsed.type === 'content_block_start') {
+                const cb = parsed.content_block || {};
+                if (cb.type === 'tool_use') { toolCall = true; blocks[parsed.index] = { type: 'tool_use', id: cb.id, name: cb.name, _json: '' }; }
+                else if (cb.type === 'text') blocks[parsed.index] = { type: 'text', text: cb.text || '' };
               } else if (parsed.type === 'message_delta') {
                 stopReason = parsed.delta?.stop_reason || null;
               }
@@ -271,6 +277,13 @@ const ApiCommon = (() => {
         ? { choices: [{ message: { content: fullText }, finish_reason: finishReason || 'stop' }] }
         : { content: [{ type: 'text', text: fullText }], stop_reason: stopReason || 'end_turn' };
       if (toolCall) out._toolCall = true;
+      if (toolCall && keep) { // v0.12: tool_use の input を組み立てる（読めなければ _toolCall のまま＝やり直し）
+        try {
+          out.content = blocks.filter(b => b && (b.type !== 'text' || b.text)).map(b => b.type === 'tool_use'
+            ? { type: 'tool_use', id: b.id, name: b.name, input: b._json ? JSON.parse(b._json) : {} } : { type: 'text', text: b.text });
+          out._toolsReady = out.content.some(b => b.type === 'tool_use' && b.id && b.name);
+        } catch (e) { out._toolsReady = false; }
+      }
       return out;
     } catch (err) {
       if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
@@ -296,6 +309,19 @@ const ApiCommon = (() => {
     } catch (e) {
       if (e && e.name === 'AbortError') throw e;
       console.warn('[ApiCommon] streamText 失敗→通常送信へ:', e && e.message);
+      return null;
+    }
+  }
+
+  /**
+   * v0.12追加 - streamText と同じだが、Claude のツール呼び出しも組み立てて返す（{content, stop_reason, _toolCall, _toolsReady}）。失敗は null
+   */
+  async function streamData(endpoint, body, onDelta) {
+    try {
+      return await callAPIStream(endpoint, { ...body, stream: true }, { onDelta, keepTools: true });
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw e;
+      console.warn('[ApiCommon] streamData 失敗→通常送信へ:', e && e.message);
       return null;
     }
   }
@@ -327,6 +353,7 @@ const ApiCommon = (() => {
     callAPI,
     callAPIStream,
     streamText,
+    streamData,
     getWorkerURL,
     abortAll,
     hasActiveRequests,

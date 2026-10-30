@@ -14,7 +14,8 @@
 // v1.7 2026-04-05 - ワイワイモード: スタイルプロンプト末尾アペンド（ChatStyleModes連携）
 // v1.8 2026-04-05 - エスケープハッチ統合: ユーザー発話からトリガー検出→一時的にじっくりモードで回答（Sprint 2+3統合）
 // v1.9 2026-10-29 - 現在の日本時間(JST)の1行を全キャラ・全モードの注入文の先頭に追加（nowLine。時計は options.now で差し替え可）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// v1.10 2026-10-30 - 注入テキストの取得（記憶/話題/ベクトル/会話メモリー）を並列化（音声会話の「送信→AI」短縮。順番・中身は同じ）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
 const PromptBuilder = (() => {
@@ -103,27 +104,16 @@ const PromptBuilder = (() => {
 
     let extra = nowLine(options.now);
 
-    if (options.preBuiltMemory) {
-      extra += options.preBuiltMemory;
-    } else if (!skipMemory) {
-      extra += await _getMemoryText(memoryLimit);
-    }
-
-    if (!skipHotTopic) {
-      extra += await _getHotTopicText(mode, sister);
-    }
-
-    if (!skipSearch) {
-      extra += _getSearchText(clearSearch);
-    }
-
-    if (!options.skipVector && options.userText) {
-      extra += await _getVectorSearchText(options.userText, undefined, mode, sister);
-    }
-
-    if (!options.skipChatMemory && mode === 'chat') {
-      extra += await _getChatMemoryText(options.chatMemoryLimit || 3);
-    }
+    // v1.10: 記憶・話題・ベクトル検索・会話メモリーは同時に取りに行く（順番に待っていた分を短縮。つなぐ順は今まで通り）
+    const none = Promise.resolve('');
+    const pMem = options.preBuiltMemory ? Promise.resolve(options.preBuiltMemory) : (!skipMemory ? _getMemoryText(memoryLimit) : none);
+    const pHot = !skipHotTopic ? _getHotTopicText(mode, sister) : none;
+    const pVec = (!options.skipVector && options.userText) ? _getVectorSearchText(options.userText, undefined, mode, sister) : none;
+    const pChat = (!options.skipChatMemory && mode === 'chat') ? _getChatMemoryText(options.chatMemoryLimit || 3) : none;
+    const [tMem, tHot, tVec, tChat] = await Promise.all([pMem, pHot, pVec, pChat]);
+    extra += tMem + tHot;
+    if (!skipSearch) extra += _getSearchText(clearSearch);
+    extra += tVec + tChat;
 
     // v1.8更新 - ワイワイモード + エスケープハッチ統合
     if (typeof ChatStyleModes !== 'undefined' && sister) {

@@ -127,3 +127,27 @@ test('Gemini TTS: Server-Timing の upstream ms を読む', () => {
   assert.equal(e.GeminiTTSProvider.upstreamMs('cache;desc=x, upstream;dur=50'), 50);
   assert.equal(e.GeminiTTSProvider.upstreamMs(''), null);
 });
+
+test('v3.94 api-common: Claude の tool_use をストリームのまま組み立てる（送り直さない）', async () => {
+  const enc = new TextEncoder();
+  const lines = [
+    'data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}\n',
+    'data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"調べるね"}}\n',
+    'data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tu1","name":"web_search"}}\n',
+    'data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":"}}\n',
+    'data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\\"天気\\"}"}}\n',
+    'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}\n'];
+  const fetch = async () => ({ ok: true, body: { getReader() { let i = 0; return { read: async () => i < lines.length ? { done: false, value: enc.encode(lines[i++]) } : { done: true }, cancel: async () => {} }; } } });
+  const e = load(['api-common.js'], ['ApiCommon'], { window: {}, localStorage: { getItem: () => '{"geminiKey":"tok"}', setItem() {} }, fetch, TextEncoder, TextDecoder, AbortController });
+  const r = await e.ApiCommon.streamData('claude', { model: 'm' }, () => {});
+  assert.equal(r._toolsReady, true);
+  assert.deepEqual(JSON.parse(JSON.stringify(r.content)), [{ type: 'text', text: '調べるね' }, { type: 'tool_use', id: 'tu1', name: 'web_search', input: { query: '天気' } }]);
+});
+
+test('v3.94 送信前の待ち: 0.5秒＋確認0.25秒（延長ルール・1.5秒のマイク復帰待ちはそのまま）、記憶などは並列取得', () => {
+  const vi = src('voice-input.js');
+  assert.match(vi, /_BUFFER_DELAY = 500;/); assert.match(vi, /_CONFIRM_DELAY = 250;/);
+  assert.match(vi, /_hasVoiceStarted \|\| this\._stt\._processing\) \{ this\._resetBufferTimer\(\)/);
+  assert.match(vi, /setTimeout\(r, 1500\)\); \/\/ ★ハウリング防止/);
+  assert.match(src('prompt-builder.js'), /Promise\.all\(\[pMem, pHot, pVec, pChat\]\)/);
+});

@@ -291,7 +291,7 @@ const ChatCore = (() => {
       // v2.0変更 - PromptBuilder.buildにsister引数追加（ownerベース記憶注入制御）
       let fullPrompt = systemPrompt;
       if (typeof PromptBuilder !== 'undefined') {
-        const extra = await PromptBuilder.build({ mode: 'chat', sister: currentSister, userText });
+        const t0 = Date.now(); const extra = await PromptBuilder.build({ mode: 'chat', sister: currentSister, userText }); if (typeof VoiceFast !== 'undefined' && VoiceFast.isVoiceOn()) VoiceFast.tlog(`🧩 記憶などの準備 ${Date.now() - t0}ms`);
         fullPrompt = systemPrompt + extra;
       }
 

@@ -64,7 +64,7 @@ test('音声中は lite＋短く。じっくり等を頼まれたら短くしな
 
 test('voice-input: 送信前の待ち1.0秒・話し中/文字起こし中は待ちを延ばす・こだま除け・再開待ち1500msはそのまま', () => {
   const s = src('voice-input.js');
-  assert.match(s, /_BUFFER_DELAY = 1000/);
+  assert.match(s, /_BUFFER_DELAY = 500/);
   assert.match(s, /_hasVoiceStarted \|\| this\._stt\._processing/);
   assert.match(s, /VoiceFast\.isEcho/);
   assert.match(s, /1500\)/, 'ハウリング防止の1.5秒待ちは短くしない');

@@ -199,7 +199,7 @@ test('配線: CSS(淡く・準備中の札を流用・44px)、札の列は横ス
   assert.ok(!/\.lx2-strip \{[^}]*overflow-x/.test(css));
   assert.ok(ui.includes("'lx2-strip-scroll'"));
   assert.ok(ui.includes("'aria-disabled'") && ui.includes('Layout2Core.stripChips') && !ui.includes("attrs.disabled"));
-  assert.ok(sw.includes("'cocomitalk-v3.93'"));
+  assert.ok(sw.includes("'cocomitalk-v3.94'"));
   for (const f of ['layout2-core.js', 'layout2-ui.js', 'layout2-main.css', 'tests/strip-soon.test.js']) {
     const s = read(f);
     assert.ok(/最終更新: 葵\(Aoi\), 2026-10-(28|29)/.test(s), f);
