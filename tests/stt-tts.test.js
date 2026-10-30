@@ -75,7 +75,7 @@ test('STT: 無音区切りは 1.2/1.5/3/4/5 秒・既定1.5秒（v3.92で速く�
   assert.equal(S.setSilenceMs(1), 1500);
   storage.setItem('cocomitalk-stt-silence-ms', '999999');
   assert.equal(S.getSilenceMs(), 1500);
-  assert.deepEqual(plain(S.SILENCE_CHOICES), [1200, 1500, 3000, 4000, 5000]);
+  assert.deepEqual(plain(S.SILENCE_CHOICES), [1200, 1500, 2000, 2500, 3000, 4000, 5000]);
 });
 
 // ---- Gemini TTS ----

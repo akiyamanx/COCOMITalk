@@ -17,7 +17,7 @@
 // v2.5 2026-10-30 - 実行したツール名を吹き出しに渡す（🔎検索したよ 等の小さな印）
 // v2.6 2026-10-30 - 登録簿で有効な葵/きみを1対1の表(SISTERS)・履歴に入れる（staging試験用に enabled:true）
 // v2.7 2026-10-30 - 履歴の読み込みも SISTERS の全員（葵/きみの履歴が戻らなかった）
-// v2.8 2026-10-30 - 音声会話中は軽いモデル(lite)＋短い話し言葉の指示、LLM返答の⏱計測（VoiceFast）
+// v2.8 2026-10-30 - 音声会話中は軽いモデル(lite)＋短い話し言葉の指示、LLM返答の⏱計測（VoiceFast） / v2.9 同日 - 音声会話中は返事を受け取りながら最初の1文から読み上げ（voice-stream.js。対応APIだけ・ほかは今まで通り）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 //
 // ■ 葵ちゃん/きみちゃんを有効にする手順（スイッチの場所）。まだ全部OFF。実際の中継には一度もつないでいない
@@ -284,6 +284,7 @@ const ChatCore = (() => {
   }
 
   async function _apiReply(userText, apiModule, systemPrompt, attachment) {
+    let ss = null; // v2.9 受け取りながら読み上げる係（音声会話中・対応APIのみ）
     try {
       const history = chatHistories[currentSister];
 
@@ -303,6 +304,7 @@ const ChatCore = (() => {
       if (attachment) opts.attachment = attachment;
       const mode = (typeof ModeSwitcher !== 'undefined') ? ModeSwitcher.getMode() : 'normal';
       if (mode !== 'normal') opts.maxTokens = 2048;
+      if (typeof VoiceStream !== 'undefined' && (ss = VoiceStream.begin(apiModule, currentSister))) opts.onDelta = ss.push;
 
       // v2.x 声のトーンタグ[tone:xxx]を画面・履歴・読み上げ用の文から外す（無くても/壊れていても本文はそのまま）
       let reply = _stripTone(await apiModule.sendMessage(userText, fullPrompt, history, opts));
@@ -324,7 +326,7 @@ const ChatCore = (() => {
 
       if (window.voiceController && window.voiceController.isEnabled()) {
         if (typeof VoiceFast !== 'undefined') VoiceFast.tlog(`🗣 読み上げへ渡す ${reply.length}字`);
-        window.voiceController.speakResponse(reply, currentSister);
+        if (!(ss && ss.finish(reply))) window.voiceController.speakResponse(reply, currentSister);
       }
       // v2.4 約束だけで止まった返事 → 1回だけ自動で続き（隠し指示は履歴に入れない）
       if (typeof PromiseFollowup !== 'undefined' && PromiseFollowup.shouldFollowUp(reply, opts)) {
@@ -335,6 +337,7 @@ const ChatCore = (() => {
       }
 
     } catch (error) {
+      if (ss) ss.finish(null); // 読み上げ途中なら、届いた分で締める（マイクを止めたままにしない）
       if (error.name === 'AbortError') {
         console.log('[ChatCore] API呼び出しがキャンセルされました');
         hideTyping();

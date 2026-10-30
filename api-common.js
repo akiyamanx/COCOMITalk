@@ -6,6 +6,7 @@
 // v0.8 2026-07-16 - 送信直前JSON記録デバッグログ追加（お姉ちゃんJSON破損バグ調査用・DebugLogger稼働時のみ）
 // v0.9 2026-07-17 - 孤立サロゲート検知＋消毒（絵文字の片割れによる400対策・検知時は必ずログ）
 // v0.10 2026-07-17 - 400番台エラー時のbody全文＋本家エラー詳細ダンプ（真犯人特定用・DebugLogger稼働時のみ）
+// v0.11 2026-10-30 - callAPIStream に onDelta（届いた文字をすぐ渡す）とツール呼び出し検知（_toolCall）を追加。streamText() 追加（音声会話の読み上げ用・失敗時は null で今まで通りに戻す）
 
 'use strict';
 
@@ -186,7 +187,7 @@ const ApiCommon = (() => {
    * @param {Object} body - APIリクエストボディ（stream:trueを含む）
    * @returns {Promise<Object>} OpenAI形式 or Claude形式のレスポンスオブジェクト
    */
-  async function callAPIStream(endpoint, body) {
+  async function callAPIStream(endpoint, body, hooks = {}) {
     const authToken = getAuthToken();
     if (!authToken) {
       throw new Error('COCOMI認証トークンが設定されていません');
@@ -221,8 +222,10 @@ const ApiCommon = (() => {
       let finishReason = null;
       let stopReason = null;
       let buffer = '';
+      let toolCall = false; // v0.11: ツールを呼ぼうとしたら止める（呼び出し側が普通の送り方でやり直す）
+      const emit = (d) => { fullText += d; if (hooks.onDelta) { try { hooks.onDelta(d); } catch (e) { /* 読み上げ側の失敗で受信を止めない */ } } };
 
-      while (true) {
+      while (!toolCall) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -241,14 +244,17 @@ const ApiCommon = (() => {
             if (endpoint === 'openai') {
               // OpenAI SSE: choices[0].delta.content
               const delta = parsed.choices?.[0]?.delta?.content;
-              if (delta) fullText += delta;
+              if (parsed.choices?.[0]?.delta?.tool_calls) toolCall = true;
+              if (delta) emit(delta);
               const fr = parsed.choices?.[0]?.finish_reason;
               if (fr) finishReason = fr;
             } else if (endpoint === 'claude') {
               // Claude SSE: delta.text (content_block_delta) or delta.stop_reason (message_delta)
               if (parsed.type === 'content_block_delta') {
                 const delta = parsed.delta?.text;
-                if (delta) fullText += delta;
+                if (delta) emit(delta);
+              } else if (parsed.type === 'content_block_start' && parsed.content_block?.type === 'tool_use') {
+                toolCall = true;
               } else if (parsed.type === 'message_delta') {
                 stopReason = parsed.delta?.stop_reason || null;
               }
@@ -259,17 +265,13 @@ const ApiCommon = (() => {
         }
       }
 
+      if (toolCall) { try { await reader.cancel(); } catch (e) { /* ignore */ } }
       // 各API形式に合わせたレスポンスオブジェクトを組み立てて返す
-      if (endpoint === 'openai') {
-        return {
-          choices: [{ message: { content: fullText }, finish_reason: finishReason || 'stop' }],
-        };
-      } else {
-        return {
-          content: [{ type: 'text', text: fullText }],
-          stop_reason: stopReason || 'end_turn',
-        };
-      }
+      const out = endpoint === 'openai'
+        ? { choices: [{ message: { content: fullText }, finish_reason: finishReason || 'stop' }] }
+        : { content: [{ type: 'text', text: fullText }], stop_reason: stopReason || 'end_turn' };
+      if (toolCall) out._toolCall = true;
+      return out;
     } catch (err) {
       if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -278,6 +280,23 @@ const ApiCommon = (() => {
       throw err;
     } finally {
       _activeControllers = _activeControllers.filter(c => c !== controller);
+    }
+  }
+
+  /**
+   * v0.11追加 - 文字を受け取りながら返事を作る（音声会話用）。返事の文字列を返す。
+   * ツールを呼ぼうとした・空・通信エラーの時は null（呼び出し側が今まで通りの送り方でやり直す）。中断(AbortError)はそのまま投げる
+   */
+  async function streamText(endpoint, body, onDelta) {
+    try {
+      const r = await callAPIStream(endpoint, { ...body, stream: true }, { onDelta });
+      if (r._toolCall) return null;
+      const t = endpoint === 'openai' ? r.choices[0].message.content : r.content[0].text;
+      return t && t.trim() ? t : null;
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw e;
+      console.warn('[ApiCommon] streamText 失敗→通常送信へ:', e && e.message);
+      return null;
     }
   }
 
@@ -307,6 +326,7 @@ const ApiCommon = (() => {
     hasAuthToken,
     callAPI,
     callAPIStream,
+    streamText,
     getWorkerURL,
     abortAll,
     hasActiveRequests,

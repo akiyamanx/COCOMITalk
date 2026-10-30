@@ -24,6 +24,7 @@
 // v3.90 2026-10-30 - 葵/きみを三姉妹と全部同じに（ツール・グループ追いかけ・料金集計・記憶/会議の表示・声コマンド・起動画面の点）
 // v3.91 2026-10-30 - 音声を速く（送信前の待ち3.5→1.0秒・無音区切り既定1.5秒・最初の1文を先に読み上げ＋先読み・音声中はlite＋短い返事・⏱計測）。ハウリング防止: 再生中はマイク停止のまま/再開1.5秒待ちは据え置き/こだま除け（voice-fast.js 新規）
 // v3.92 2026-10-30 - 読み上げの鳴り始めを速く（1つ目を20〜30字に・絵文字を読まない・2つ同時に先読み・TTSの送信/受信/再生の⏱）（voice-fast v1.1 / voice-output v2.9 / gemini-tts-provider v1.3）
+// v3.93 2026-10-30 - 音声会話で返事を受け取りながら最初の1文から読み上げ（voice-stream.js新規 / api-common v0.11 / api-openai v2.1 / api-claude v2.0 / chat-core v2.9）、無音区切り2秒/2.5秒（stt-model v1.2）、TTSのGoogle側時間⏱（gemini-tts-provider v1.4 / voice-output v3.0）
 // v3.88 2026-10-30 - 葵/きみを有効化（characters v1.5 / chat-core v2.6。1対1で試験・声はGemini TTS）
 // v3.79 2026-10-29 - 目の顔から口を外し、全画面のbody直下fixed表示に変更（mascot-eyes.js/css v1.1、app.jsで取り付け。名前ボタンは元の位置へ）
 // v3.78 2026-10-29 - 上の帯に目が動く小さな顔を追加（mascot-eyes.js / mascot-eyes.css、layout2-ui.jsで取り付け）
@@ -33,8 +34,8 @@
 // v3.74 2026-10-29 - 吹き出しタップの二重再生ガード（voice-output v2.6 / voice-input v2.5.1 / chat-ui v1.3 / styles.css）
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
-const CACHE_NAME = 'cocomitalk-v3.92';
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+const CACHE_NAME = 'cocomitalk-v3.93';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
@@ -56,7 +57,7 @@ const CACHE_FILES = [
   './voicevox-tts-provider.js', './speech-provider.js',
   './web-speech-provider.js', './debug-logger.js', './whisper-provider.js', './stt-model.js',
   './voice-output.js', './voice-ui.js', './audio-health.js',
-  './voice-state.js', './voice-command.js', './voice-input.js', './voice-fast.js',
+  './voice-state.js', './voice-command.js', './voice-input.js', './voice-fast.js', './voice-stream.js',
   './voice-sender.js', './effort-settings-ui.js', './app-settings.js',
   './chat-style-modes.js', './style-resolver.js',
   './escape-hatch-detector.js',

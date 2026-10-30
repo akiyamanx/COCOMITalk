@@ -14,6 +14,7 @@
 // v1.8 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定。GPT-6系対応（reasoning_effort付与・Terra/Astraはツール不可）
 // v1.9 2026-10-28 - Terra/Astra: 設定スイッチON時は Responses API（api-openai-responses.js）でツール付き。失敗時は従来のChat Completions（ツール無し）へ自動フォールバック
 // v2.0 2026-10-28 - 高頭脳をAstraに。強さ(reasoning_effort)は設定で変更可（tier.params経由）。xhigh/maxは出力枠を32000に拡大。Lunaは強さnone以外だとChat Completionsでツール無し
+// v2.1 2026-10-30 - 音声会話中(options.onDelta)は Chat Completions を受け取りながら返す（voice-stream.js が最初の1文から読み上げ）。ツール呼び出し・失敗時は今まで通りの送り方でやり直す
 // 2026-10-30 - ツール使用時に options.toolUsed / toolNames を立てる（自動フォローアップ判定・吹き出しの印用）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
@@ -95,6 +96,12 @@ const ApiOpenAI = (() => {
       body.max_completion_tokens = options.maxTokens || (typeof ModelEffort !== 'undefined' ? ModelEffort.maxTokensFor('openai', tier.effort, 8192) : 8192);
     } else {
       body.max_tokens = options.maxTokens || 1024;
+    }
+
+    // v2.1追加 - 音声会話: 受け取りながら返す（null=ツール/失敗 → 下の今まで通りの送り方）
+    if (typeof options.onDelta === 'function' && typeof ApiCommon.streamText === 'function') {
+      const streamed = await ApiCommon.streamText('openai', body, options.onDelta);
+      if (streamed) return streamed;
     }
 
     // v1.4追加 - リトライロジック（安全ガイド準拠: 最大2回リトライ）
@@ -264,6 +271,7 @@ const ApiOpenAI = (() => {
   }
 
   return {
+    supportsStream: true, // v2.1: 音声会話で受け取りながら返せる
     sendMessage,
     hasApiKey,
     getModels,

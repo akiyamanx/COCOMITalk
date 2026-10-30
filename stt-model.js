@@ -3,6 +3,7 @@
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 // v1.0 2026-10-28 - 新規作成（既定 gpt-transcribe、whisper-1 は 2027-02-26 の停止日まで選べる／自動フォールバック。無音区切り秒数の設定つき）
 // v1.1 2026-10-30 - 無音区切りに1.2秒/1.5秒を追加し既定を1.5秒に。旧既定(3秒)のまま保存されていた人は1回だけ1.5秒へ移す（4/5秒を選んだ人はそのまま）
+// v1.2 2026-10-30 - 無音区切りに2秒/2.5秒を追加（既定1.5秒・保存済みの値は変えない）
 //
 // ★未確認★ gpt-transcribe を /whisper 経由で実際に呼んだことはない（公式docs 2026-10-28 のみ）。
 //   公式docs: gpt-transcribe は language ではなく languages[] を使う（両方は送らない）。アプリは従来どおり language=ja を送り、
@@ -18,7 +19,7 @@ const SttModel = (() => {
   const LEGACY_MODEL = 'whisper-1';
   const LEGACY_RETIRE = '2027-02-26';          // OpenAI廃止予定表（whisper-1停止日）
   const RETRY_AFTER_MS = 10 * 60 * 1000;       // 新モデル失敗後、しばらくは旧モデルで送る
-  const SILENCE_CHOICES = [1200, 1500, 3000, 4000, 5000];  // 長くすると文の途中で区切られにくい（反応は遅くなる）
+  const SILENCE_CHOICES = [1200, 1500, 2000, 2500, 3000, 4000, 5000];  // 長くすると文の途中で区切られにくい（反応は遅くなる）
   const SILENCE_DEFAULT = 1500;                // v1.1: 3000→1500（文の途中で切れても送信前の待ちで1つにまとめる）
   const SILENCE_MIGRATED_KEY = 'cocomitalk-stt-silence-v2'; // 旧既定3000→1500 の移行を1回だけ（以後3秒を選び直したら尊重）
 

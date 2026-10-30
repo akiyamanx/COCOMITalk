@@ -52,7 +52,7 @@ test('CSS: 44px・--app-primary・動きを減らす設定に対応／index.html
   assert.ok(s.includes('width:44px;height:44px') && s.includes('var(--app-primary') && s.includes('prefers-reduced-motion'));
   assert.ok(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').includes('<script src="scroll-latest.js"></script>'));
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  assert.ok(sw.includes("'./scroll-latest.js'") && sw.includes("'cocomitalk-v3.92'"));
+  assert.ok(sw.includes("'./scroll-latest.js'") && sw.includes("'cocomitalk-v3.93'"));
 });
 
 test('ツールの印: 名前→ラベル、無ければ空', () => {

@@ -8,6 +8,7 @@
 // v1.7 2026-03-19 - skipToolsオプション追加（会議モードでtool_useエラー防止）
 // v1.8 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定。temperatureは段階表で送信可否を判定（Claude 4.7+は送らない）
 // v1.9 2026-10-28 - 思考の強さ: 設定で選ばれた時だけ output_config.effort を送る（未選択はAPI既定。xhigh/maxは出力枠を16000に拡大）
+// v2.0 2026-10-30 - 音声会話中(options.onDelta)は受け取りながら返す（voice-stream.js が最初の1文から読み上げ）。ツール使用・失敗時は今まで通りの送り方でやり直す
 // 2026-10-30 - ツール使用時に options.toolUsed / toolNames を立てる（自動フォローアップ判定・吹き出しの印用）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
@@ -75,6 +76,12 @@ const ApiClaude = (() => {
     // v1.7修正 - skipToolsオプションで会議モード等ツール不要時はスキップ
     if (typeof ToolRegistry !== 'undefined' && !options.skipTools) {
       body.tools = ToolRegistry.getClaudeTools();
+    }
+
+    // v2.0追加 - 音声会話: 受け取りながら返す（null=ツール/失敗 → 下の今まで通りの送り方）
+    if (typeof options.onDelta === 'function' && typeof ApiCommon.streamText === 'function') {
+      const streamed = await ApiCommon.streamText('claude', body, options.onDelta);
+      if (streamed) return streamed;
     }
 
     try {
@@ -220,6 +227,7 @@ const ApiClaude = (() => {
   }
 
   return {
+    supportsStream: true, // v2.0: 音声会話で受け取りながら返せる
     sendMessage,
     hasApiKey,
     getModels,

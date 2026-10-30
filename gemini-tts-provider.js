@@ -1,8 +1,9 @@
-// gemini-tts-provider.js v1.3
+// gemini-tts-provider.js v1.4
 // このファイルはGemini TTS（gemini-3.8-flash-lite-tts / gemini-3.8-flash-tts）を中継Worker経由で呼ぶ読み上げプロバイダー
 // TTSProviderインターフェースに準拠（openai-tts-provider.js と同じ使い方）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 // v1.3 2026-10-30 - ⏱用に audio._ttsModel / _ttsBytes を付ける（音声の中身・送り方は変更なし）
+// v1.4 2026-10-30 - 中継の Server-Timing(upstream;dur=ms) を読んで audio._ttsUpstreamMs に（⏱で「Google側の時間」と「通信など」を分ける）
 // v1.0 2026-10-28 - 新規作成。声が空なら例外を投げ、voice-output側がOpenAIへ戻す
 // v1.1 2026-10-28 - 5人の声が決定（割り当ては tts-provider.js の SISTER_VOICE_MAP.gemini / characters.js）。本ファイルのコード変更なし（コメントのみ）
 // v1.2 2026-10-28 - 場面ごとの話し方: options.style(英語の自由文・200字以内)を中継の style 欄で送る（tone-style.js が作る）。空なら送らない
@@ -38,6 +39,12 @@ class GeminiTTSProvider extends TTSProvider {
   }
 
   /** WAV(RIFF)の長さ(秒)。ヘッダが読めなければ 0 */
+  /** 'upstream;dur=1234.5' → 1235（ms）。無い/読めない時は null */
+  static upstreamMs(h) {
+    const m = /(?:^|,)\s*upstream\s*;[^,]*?dur=([\d.]+)/.exec(String(h || ''));
+    return m ? Math.round(Number(m[1])) : null;
+  }
+
   static wavSeconds(buf) {
     try {
       const v = new DataView(buf);
@@ -80,6 +87,7 @@ class GeminiTTSProvider extends TTSProvider {
     audio._ttsVoice = voice;
     audio._ttsProvider = 'gemini';
     audio._ttsModel = model; audio._ttsBytes = buf.byteLength;
+    audio._ttsUpstreamMs = GeminiTTSProvider.upstreamMs(res.headers && res.headers.get ? res.headers.get('Server-Timing') : '');
     return audio; // 速さは呼び出し側が playbackRate で変える（Geminiは速度パラメータなし）
   }
 

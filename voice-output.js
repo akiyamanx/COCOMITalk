@@ -1,4 +1,4 @@
-// voice-output.js v2.9
+// voice-output.js v3.0
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -18,6 +18,7 @@
 // v2.8 2026-10-30 - 速く: 最初の1文だけ先に声にして鳴らし、その間に次の文を先読み（つなぎ目の無音なし）。返事全体を1つの「話し中」として扱う（文の間でマイクを開けない）。話した文をこだま除け(VoiceFast)に記録
 // v2.9 2026-10-30 - 1つ目のかたまりを20〜30字に短く・絵文字を読まない・2つ同時に先読み・TTSの送信/受信/再生を⏱で記録（VoiceFast v1.1）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// v3.0 2026-10-30 - ⏱に中継のGoogle側の時間(upstream ms)を表示。受け取りながら読み上げは voice-stream.js（mixin）
 
 class AudioPlaybackManager {
   constructor() {
@@ -197,7 +198,7 @@ class AudioPlaybackManager {
 
   /** v2.9 細かい⏱（VoiceFastが無ければ何もしない） */
   _tlog(t) { if ((typeof VoiceFast !== 'undefined')) VoiceFast.tlog(t); }
-  _ttsInfo(a) { return a ? `${a._ttsProvider || '?'} ${a._ttsModel || ''} ${a._ttsBytes ? Math.round(a._ttsBytes / 1024) + 'KB' : ''}`.trim() : ''; }
+  _ttsInfo(a) { return a ? `${a._ttsProvider || '?'} ${a._ttsModel || ''} ${a._ttsBytes ? Math.round(a._ttsBytes / 1024) + 'KB' : ''}${a._ttsUpstreamMs != null ? ` ⏱upstream ${a._ttsUpstreamMs}ms` : ''}`.trim() : ''; }
 
   _splitTextToChunks(text) {
     if ((typeof VoiceFast !== 'undefined')) return VoiceFast.splitForTTS(text); // v2.9 1つ目を短く
