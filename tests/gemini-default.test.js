@@ -208,5 +208,5 @@ test('受け取り口: 1対1・グループ・会議の返信はすべてToneSty
   const pos = f => html.indexOf(`src="${f}"`);
   assert.ok(pos('tone-style.js') > 0 && pos('tone-style.js') < pos('prompts/koko-system.js'));
   assert.ok(pos('tone-style.js') < pos('tts-provider.js') && pos('tone-style.js') < pos('voice-output.js'));
-  assert.ok(sw.includes("'./tone-style.js'") && sw.includes("'cocomitalk-v3.95'"));
+  assert.ok(sw.includes("'./tone-style.js'") && sw.includes("'cocomitalk-v3.96'"));
 });

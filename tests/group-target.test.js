@@ -146,7 +146,7 @@ test('配線: 札はbutton+aria-pressed+44px、準備中toast、v1/🔄/発言�
   assert.match(css, /\.lx2-chip \{[^}]*height: var\(--lx-tap\)/);
   assert.match(css, /\.lx2-chip\[aria-pressed="true"\]/);
   assert.ok(css.includes('.lx2-chip.lx2-speaking'));
-  assert.ok(sw.includes("'cocomitalk-v3.95'"));
+  assert.ok(sw.includes("'cocomitalk-v3.96'"));
   assert.ok(read('chat-group.js').includes('takeTarget()'));
   for (const f of ['layout2-core.js', 'layout2-ui.js', 'chat-group.js', 'tests/group-target.test.js']) {
     const s = read(f);

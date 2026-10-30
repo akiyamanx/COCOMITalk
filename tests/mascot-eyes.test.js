@@ -330,7 +330,7 @@ test('配線: index.html(css/js)・sw.js(CACHE_FILES・v3.92)・app.jsのtry/cat
   assert.ok(html.indexOf('src="mascot-eyes.js"') > 0 && html.indexOf('src="mascot-eyes.js"') < html.indexOf('src="app.js"'));
   const files = sw.slice(sw.indexOf('const CACHE_FILES'), sw.indexOf('const CACHE_FONTS'));
   assert.ok(files.includes("'./mascot-eyes.js'") && files.includes("'./mascot-eyes.css'"));
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.95';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.96';"));
   assert.ok(/try \{ if \(typeof MascotEyes !== 'undefined'\) MascotEyes\.mountFixed\(document\); \} catch/.test(app));
   assert.ok(!/typeof MascotEyes/.test(ui), '帯(layout2-ui)には付けない');
 });

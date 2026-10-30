@@ -1,10 +1,12 @@
-// gemini-tts-provider.js v1.4
+// gemini-tts-provider.js v1.6
 // このファイルはGemini TTS（gemini-3.8-flash-lite-tts / gemini-3.8-flash-tts）を中継Worker経由で呼ぶ読み上げプロバイダー
 // TTSProviderインターフェースに準拠（openai-tts-provider.js と同じ使い方）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 // v1.3 2026-10-30 - ⏱用に audio._ttsModel / _ttsBytes を付ける（音声の中身・送り方は変更なし）
 // v1.4 2026-10-30 - 中継の Server-Timing(upstream;dur=ms) を読んで audio._ttsUpstreamMs に（⏱で「Google側の時間」と「通信など」を分ける）
 // v1.5 2026-10-30 - 中継が upstream-ttfb（Googleのヘッダ到着）と upstream（本文読了）の2つを返すので両方読む（audio._ttsTtfbMs）
+// v1.6 2026-10-31 - stream:true を付けて送り、応答が audio/L16 なら PcmStreamPlayer で受け取りながら鳴らす（中継が未対応で WAV が来たら今まで通り）。
+//   0バイト/失敗は stream なしで送り直し。設定 cocomitalk-gemini-tts-stream='off' で止める。音程を変えないため stream 時は1.0倍で鳴らす
 // v1.0 2026-10-28 - 新規作成。声が空なら例外を投げ、voice-output側がOpenAIへ戻す
 // v1.1 2026-10-28 - 5人の声が決定（割り当ては tts-provider.js の SISTER_VOICE_MAP.gemini / characters.js）。本ファイルのコード変更なし（コメントのみ）
 // v1.2 2026-10-28 - 場面ごとの話し方: options.style(英語の自由文・200字以内)を中継の style 欄で送る（tone-style.js が作る）。空なら送らない
@@ -69,11 +71,25 @@ class GeminiTTSProvider extends TTSProvider {
     const model = options.model || GeminiTTSProvider.modelId();
     const sendText = text.substring(0, GeminiTTSProvider.MAX_TEXT);
     const style = (typeof options.style === 'string') ? options.style.trim().substring(0, GeminiTTSProvider.MAX_STYLE) : '';
-    const res = await fetch(`${ApiCommon.getWorkerURL()}/gemini-tts`, {
+    const payload = style ? { text: sendText, voice, model, style } : { text: sendText, voice, model };
+    const wantStream = !options.noStream && GeminiTTSProvider.streamEnabled();
+    const ac = (wantStream && typeof AbortController !== 'undefined') ? new AbortController() : null;
+    const t0 = Date.now();
+    let res = await fetch(`${ApiCommon.getWorkerURL()}/gemini-tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-COCOMI-AUTH': ApiCommon.getAuthToken() },
-      body: JSON.stringify(style ? { text: sendText, voice, model, style } : { text: sendText, voice, model }),
+      body: JSON.stringify(wantStream ? { ...payload, stream: true } : payload),
+      ...(ac ? { signal: ac.signal } : {}),
     });
+    if (wantStream && res.ok && GeminiTTSProvider.isPcm(res)) {
+      const a = await this._streamAudio(res, ac, { text: sendText, voice, model, style, t0 });
+      if (a) return a;
+      return this.synthesize(text, voice, { ...options, noStream: true }); // 0バイト/失敗 → WAV で送り直し
+    }
+    if (wantStream && (res.status === 502 || res.status === 504)) { // 最初の音の前に失敗（中継は再試行しない）→ WAV で1回だけ
+      if (typeof VoiceFast !== 'undefined' && VoiceFast.tlog) VoiceFast.tlog(`⚠️ TTS stream ${res.status} → WAVで送り直し`);
+      return this.synthesize(text, voice, { ...options, noStream: true });
+    }
     if (!res.ok) {
       let msg = `Gemini TTS エラー: ${res.status}`;
       try { const j = await res.json(); msg = j.error || msg; } catch (e) { /* ステータスのまま */ }
@@ -93,6 +109,34 @@ class GeminiTTSProvider extends TTSProvider {
     return audio; // 速さは呼び出し側が playbackRate で変える（Geminiは速度パラメータなし）
   }
 
+  /** stream の設定（既定ON。'off' で今まで通り）。AudioContext が無い環境では使わない */
+  static streamEnabled() {
+    let off = false; try { off = localStorage.getItem(GeminiTTSProvider.STREAM_KEY) === 'off'; } catch (e) { /* 既定 */ }
+    return !off && typeof PcmStreamPlayer !== 'undefined' && !!PcmStreamPlayer.ctx();
+  }
+  static isPcm(res) { return /^audio\/l16\b/i.test((res.headers && res.headers.get && res.headers.get('Content-Type')) || ''); }
+
+  /** audio/L16 の応答: 最初のかたまりを受け取ってから再生物を返す（0バイト/失敗なら null＝WAVで送り直し） */
+  async _streamAudio(res, ac, m) {
+    const log = (t) => { if (typeof VoiceFast !== 'undefined' && VoiceFast.tlog) VoiceFast.tlog(t); };
+    let reader, first = null;
+    try {
+      reader = res.body.getReader();
+      for (;;) { const r = await reader.read(); if (r.done) break; if (r.value && r.value.length) { first = r.value; break; } }
+    } catch (e) { first = null; }
+    if (!first) { try { ac && ac.abort(); } catch (e) { /* ignore */ } log('⚠️ TTS stream 0バイト → WAVで送り直し'); return null; }
+    const firstMs = Date.now() - m.t0;
+    const st = res.headers.get('Server-Timing') || '';
+    log(`🎵 TTS 最初の音のかたまり ${firstMs}ms（stream ${first.length}B${GeminiTTSProvider.upstreamMs(st, 'upstream-first') != null ? ` ⏱upstream-first ${GeminiTTSProvider.upstreamMs(st, 'upstream-first')}ms` : ''}）`);
+    PcmStreamPlayer.unlock();
+    const a = PcmStreamPlayer.create(reader, first, { abort: () => ac && ac.abort(), log });
+    a._ttsVoice = m.voice; a._ttsProvider = 'gemini'; a._ttsModel = m.model + ' stream'; a._ttsFirstMs = firstMs;
+    a._ttsTtfbMs = GeminiTTSProvider.upstreamMs(st, 'upstream-ttfb'); a._ttsUpstreamMs = null;
+    a.addEventListener('ended', () => this._recordUsage(m.model, m.text, a._ttsStreamBytes / 48000, m.style.length));
+    const lock = a; Object.defineProperty(lock, 'playbackRate', { get: () => 1, set: () => {} }); // 音程を変えない（1.0倍）
+    return a;
+  }
+
   /** コスト見積り用: 出力は音声25トークン/秒（公式）、入力は文字数≒トークンの粗い見積り。2027-01-01から単価2倍はTokenMonitor側で日付判定 */
   _recordUsage(model, text, seconds, styleChars = 0) {
     if (typeof TokenMonitor === 'undefined') return;
@@ -101,6 +145,7 @@ class GeminiTTSProvider extends TTSProvider {
 }
 
 GeminiTTSProvider.QUALITY_KEY = 'cocomitalk-gemini-tts-quality';
+GeminiTTSProvider.STREAM_KEY = 'cocomitalk-gemini-tts-stream'; // v1.6: 'off' で受け取りながら再生を止める
 GeminiTTSProvider.MAX_STYLE = 200; // 中継の上限と同じ
 GeminiTTSProvider.MAX_TEXT = 1500; // 中継側にも同じ上限（提案パッチ）。voice-outputが150〜200字ごとに分割するので余裕あり
 GeminiTTSProvider.PREBUILT_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe',
