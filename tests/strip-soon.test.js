@@ -188,7 +188,7 @@ test('発言順: 準備中を話しかけ先にしても/ルーターが準備�
   assert.ok(!read('chat-group.js').includes('stripChips'));                                             // 帯の札の一覧は発言順の元にならない
 });
 
-test('配線: CSS(淡く・準備中の札を流用・44px)、札の列は横スクロール＋🔄つづきは列の外(右端固定)、sw v3.90、行数と最終更新', () => {
+test('配線: CSS(淡く・準備中の札を流用・44px)、札の列は横スクロール＋🔄つづきは列の外(右端固定)、sw v3.91、行数と最終更新', () => {
   const css = read('layout2-main.css'), ui = read('layout2-ui.js'), sw = read('sw.js');
   assert.match(css, /\.lx2-chip-soon \{[^}]*--lx2-soon-bg[^}]*--lx2-soon-dot/);
   assert.match(css, /\.lx2-chip \{[^}]*height: var\(--lx-tap\)/);                      // 準備中の札も.lx2-chipなので44px
@@ -199,7 +199,7 @@ test('配線: CSS(淡く・準備中の札を流用・44px)、札の列は横ス
   assert.ok(!/\.lx2-strip \{[^}]*overflow-x/.test(css));
   assert.ok(ui.includes("'lx2-strip-scroll'"));
   assert.ok(ui.includes("'aria-disabled'") && ui.includes('Layout2Core.stripChips') && !ui.includes("attrs.disabled"));
-  assert.ok(sw.includes("'cocomitalk-v3.90'"));
+  assert.ok(sw.includes("'cocomitalk-v3.91'"));
   for (const f of ['layout2-core.js', 'layout2-ui.js', 'layout2-main.css', 'tests/strip-soon.test.js']) {
     const s = read(f);
     assert.ok(/最終更新: 葵\(Aoi\), 2026-10-(28|29)/.test(s), f);

@@ -67,15 +67,15 @@ test('STT: 旧モデル停止日(2027-02-26)の翌日以降は戻さない', asy
   assert.equal(S.LEGACY_RETIRE, '2027-02-26');
 });
 
-test('STT: 無音区切りは 3/4/5 秒のみ・既定3秒（今の動作のまま）', () => {
+test('STT: 無音区切りは 1.2/1.5/3/4/5 秒・既定1.5秒（v3.91で速く）', () => {
   const { S, storage } = stt({}, ok);
-  assert.equal(S.getSilenceMs(), 3000);
+  assert.equal(S.getSilenceMs(), 1500);
   assert.equal(S.setSilenceMs(5000), 5000);
   assert.equal(S.getSilenceMs(), 5000);
-  assert.equal(S.setSilenceMs(1), 3000);
+  assert.equal(S.setSilenceMs(1), 1500);
   storage.setItem('cocomitalk-stt-silence-ms', '999999');
-  assert.equal(S.getSilenceMs(), 3000);
-  assert.deepEqual(plain(S.SILENCE_CHOICES), [3000, 4000, 5000]);
+  assert.equal(S.getSilenceMs(), 1500);
+  assert.deepEqual(plain(S.SILENCE_CHOICES), [1200, 1500, 3000, 4000, 5000]);
 });
 
 // ---- Gemini TTS ----

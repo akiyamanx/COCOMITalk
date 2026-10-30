@@ -17,6 +17,7 @@
 // v2.5 2026-10-30 - 実行したツール名を吹き出しに渡す（🔎検索したよ 等の小さな印）
 // v2.6 2026-10-30 - 登録簿で有効な葵/きみを1対1の表(SISTERS)・履歴に入れる（staging試験用に enabled:true）
 // v2.7 2026-10-30 - 履歴の読み込みも SISTERS の全員（葵/きみの履歴が戻らなかった）
+// v2.8 2026-10-30 - 音声会話中は軽いモデル(lite)＋短い話し言葉の指示、LLM返答の⏱計測（VoiceFast）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 //
 // ■ 葵ちゃん/きみちゃんを有効にする手順（スイッチの場所）。まだ全部OFF。実際の中継には一度もつないでいない
@@ -293,9 +294,10 @@ const ChatCore = (() => {
         fullPrompt = systemPrompt + extra;
       }
 
-      const modelKey = (typeof ModeSwitcher !== 'undefined')
-        ? ModeSwitcher.getModelKey(currentSister)
-        : undefined;
+      const normalKey = (typeof ModeSwitcher !== 'undefined') ? ModeSwitcher.getModelKey(currentSister) : undefined;
+      // v2.8 音声会話中は軽い段階(lite: 思考なし/最弱)＋「短く話し言葉で」（じっくり等を頼まれた時は足さない）
+      const modelKey = (typeof VoiceFast !== 'undefined') ? VoiceFast.modelKey(normalKey) : normalKey;
+      if ((typeof VoiceFast !== 'undefined')) fullPrompt += VoiceFast.promptExtra(userText);
 
       const opts = { model: modelKey };
       if (attachment) opts.attachment = attachment;
@@ -304,6 +306,7 @@ const ChatCore = (() => {
 
       // v2.x 声のトーンタグ[tone:xxx]を画面・履歴・読み上げ用の文から外す（無くても/壊れていても本文はそのまま）
       let reply = _stripTone(await apiModule.sendMessage(userText, fullPrompt, history, opts));
+      if ((typeof VoiceFast !== 'undefined') && VoiceFast.isVoiceOn()) VoiceFast.mark('llm');
 
       if (typeof ChatMemory !== 'undefined' && reply.includes('💾SAVE:')) {
         reply = await ChatMemory.detectAndSave(reply, currentSister, chatHistories[currentSister]);

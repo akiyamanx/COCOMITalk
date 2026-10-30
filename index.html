@@ -278,7 +278,9 @@
             </select>
             <label style="font-size:0.85em; color:#888; display:block; margin-top:8px;">発話の区切り（無音の長さ）</label>
             <select id="sel-stt-silence" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
-              <option value="3000">3秒（標準）</option>
+              <option value="1200">1.2秒（いちばん速い・文の途中で切れやすい）</option>
+              <option value="1500">1.5秒（標準・速い）</option>
+              <option value="3000">3秒（前の標準）</option>
               <option value="4000">4秒（文の途中で切れにくい）</option>
               <option value="5000">5秒（さらに切れにくい・反応は遅め）</option>
             </select>
@@ -448,6 +450,7 @@
   <script src="web-speech-provider.js"></script>
   <script src="debug-logger.js"></script>
   <script src="stt-model.js"></script>
+  <script src="voice-fast.js"></script>
   <script src="whisper-provider.js"></script>
   <script src="voice-output.js"></script>
   <script src="voice-ui.js"></script>

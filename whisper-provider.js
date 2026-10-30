@@ -1,8 +1,8 @@
-// whisper-provider.js v1.11
+// whisper-provider.js v1.12
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
-// v1.11 2026-10-28 - STTモデルを設定値化（SttModel）、無音区切り秒数を設定値化（既定3000msで挙動不変）
+// v1.11 2026-10-28 - STTモデルを設定値化（SttModel）、無音区切り秒数を設定値化（既定3000msで挙動不変） / v1.12 2026-10-30 時間ログ(VoiceFast.mark)
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
 // v1.10 2026-07-17 - 無音セグメント連続送信ループ修正（継続録音のhasVoiceStarted維持を廃止）＋
 //   無発話50秒で予防グラフ張替（maxVol>0で生存判定なのに感度低下する「半死」対策）
@@ -307,7 +307,7 @@ class WhisperProvider extends SpeechProvider {
 
         if (this._hasVoiceStarted && !this._silenceTimer && !this._processing) {
           this._silenceTimer = setTimeout(() => {
-            this._debugLog(`無音${this._SILENCE_DURATION}ms検出 → セグメント送信`);
+            this._debugLog(`無音${this._SILENCE_DURATION}ms検出 → セグメント送信`); if (typeof VoiceFast !== 'undefined') VoiceFast.mark('segment', { silenceMs: this._SILENCE_DURATION });
             this._onSegmentEnd();
           }, this._SILENCE_DURATION);
         }
@@ -453,7 +453,7 @@ class WhisperProvider extends SpeechProvider {
       if (result.text && result.text.trim()) {
         const text = result.text.trim();
         if (this._isHallucination(text)) { this._debugLog(`ハルシネーション除外: "${text}"`); }
-        else { this._debugLog(`認識結果: "${text}" [session=${sentSessionId}]`); if (this.onFinal) this.onFinal(text); }
+        else { this._debugLog(`認識結果: "${text}" [session=${sentSessionId}]`); if (typeof VoiceFast !== 'undefined') VoiceFast.mark('stt'); if (this.onFinal) this.onFinal(text); }
       } else { this._debugLog('認識結果: 空（無音と判定）'); }
     } catch (err) { this._debugLog(`API送信エラー: ${err.message}`); }
     this._afterWhisperResponse();

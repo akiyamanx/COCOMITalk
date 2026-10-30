@@ -50,7 +50,7 @@ test('通常の返事でもツール印が付く。ツールを使った子は�
   assert.deepEqual([...s.shown[0].tools], ['web_search']);
 });
 
-test('1ターン最大2回・葵/きみも三姉妹と同じく対象（v3.90。中継がtools対応したため）', async () => {
+test('1ターン最大2回・葵/きみも三姉妹と同じく対象（v3.91。中継がtools対応したため）', async () => {
   const p = '確認してみるね';
   const s = setup({ koko: [p, 'a1'], gpt: [p, 'a2'], claude: [p, 'a3'], aoi: [p, 'x'] }, ['aoi', 'koko', 'gpt', 'claude']);
   await s.env.ChatGroup.handleGroupReply('質問', s.ctx);

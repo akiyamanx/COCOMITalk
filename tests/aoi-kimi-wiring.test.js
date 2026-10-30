@@ -175,11 +175,11 @@ test('中継の提案パッチ(あれば)との一致: 送るモデルIDが許�
   assert.ok(patch.includes("case 'xai':") && patch.includes("case 'kimi':"));
   const forbidden = patch.match(/FORBIDDEN_PARAMS = \[([^\]]*)\]/)[1];
   const src = read('api-compat-core.js');
-  // v3.90: tools/tool_choice は今の中継(relay-compat.js)が受け付けるので、古い提案パッチの禁止リストから外して確かめる
+  // v3.91: tools/tool_choice は今の中継(relay-compat.js)が受け付けるので、古い提案パッチの禁止リストから外して確かめる
   for (const k of [...forbidden.matchAll(/'([^']+)'/g)].map(m => m[1]).filter(k => k !== 'tools' && k !== 'tool_choice')) assert.ok(!new RegExp(`body\\.${k}\\b|\\b${k}:`).test(src.replace(/\/\/.*$/gm, '')), 'sends ' + k);
 });
 
-test('配線: index.html（api-common/model-tiersの後・api-claudeの後）とsw.js（cache v3.90・3ファイル）、1ファイル500行以内、先頭に「このファイルは」', () => {
+test('配線: index.html（api-common/model-tiersの後・api-claudeの後）とsw.js（cache v3.91・3ファイル）、1ファイル500行以内、先頭に「このファイルは」', () => {
   const html = read('index.html'), sw = read('sw.js');
   const pos = f => html.indexOf(`src="${f}"`);
   for (const f of ['api-compat-core.js', 'api-xai.js', 'api-kimi.js']) {
@@ -190,7 +190,7 @@ test('配線: index.html（api-common/model-tiersの後・api-claudeの後）と
     assert.match(t, /作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-(29|30)/);
   }
   assert.ok(pos('api-compat-core.js') < pos('api-xai.js') && pos('api-xai.js') < pos('api-kimi.js'));
-  assert.ok(sw.includes("'cocomitalk-v3.90'"));
+  assert.ok(sw.includes("'cocomitalk-v3.91'"));
   // 有効化の手順（スイッチの場所）が冒頭に書いてある
   assert.match(read('chat-core.js').split('\n').slice(0, 25).join('\n'), /characters\.js の aoi \/ kimi を enabled:true/);
   assert.match(read('api-xai.js').split('\n').slice(0, 10).join('\n'), /characters\.js の aoi を enabled:true/);

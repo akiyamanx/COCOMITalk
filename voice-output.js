@@ -1,4 +1,4 @@
-// voice-output.js v2.7
+// voice-output.js v2.8
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -15,7 +15,8 @@
 // v2.5 2026-10-28 - 既定をGeminiに。場面の話し方(style)をGeminiへ渡す。Gemini→OpenAI→VOICEVOXの順に戻す。声が使えない時は選択名もOpenAIへ揃える
 // v2.6 2026-10-29 - 吹き出しタップの二重再生を根本修正: ①speakBubble(準備中+再生中+キューを1つのガードで無視・finally/stop/保険タイマーで必ず解除) ②stop()/新しい読み上げの時に合成待ちの古い音声を捨てる(世代番号_gen)
 // v2.7 2026-10-29 - 音が鳴っている間の吹き出しタップで停止できるように（鳴り始め700msの連打は無視。準備中は引き続き無視）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// v2.8 2026-10-30 - 速く: 最初の1文だけ先に声にして鳴らし、その間に次の文を先読み（つなぎ目の無音なし）。返事全体を1つの「話し中」として扱う（文の間でマイクを開けない）。話した文をこだま除け(VoiceFast)に記録
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
 class AudioPlaybackManager {
   constructor() {
@@ -61,6 +62,7 @@ class AudioPlaybackManager {
 
   /** 読み上げ音声を作る。Gemini選択時だけ、声が未割り当て/失敗ならOpenAIの声 → それも失敗ならVOICEVOXの声へ戻す（OpenAI TTSは2027-01-06停止まで） */
   async _synth(text, voice, sisterId, speed, style) {
+    if ((typeof VoiceFast !== 'undefined')) VoiceFast.rememberSpoken(text); // こだま除け: 自分が話す言葉を覚えておく
     try {
       return await this._ttsProvider.synthesize(text, voice, { speed, style });
     } catch (e) {
@@ -100,9 +102,9 @@ class AudioPlaybackManager {
     if (cleanText.length === 0) return;
     if (options.style === undefined) options = { ...options, style: this._styleFor(text) }; // 返信全体で1つのトーン（チャンクごとに変えない）
 
-    const CHUNK_LIMIT = 200;
-    if (cleanText.length > CHUNK_LIMIT) {
-      this._log(`${cleanText.length}字 → チャンク分割再生`);
+    // v2.8: 40字を超えて2文以上なら分割再生（最初の1文を先に鳴らす）。短い返事は1回で作る方が速い
+    if (cleanText.length > 40 && this._splitTextToChunks(cleanText).length > 1) {
+      this._log(`${cleanText.length}字 → チャンク分割再生（最初の1文を先に）`);
       await this._speakChunked(cleanText, sisterId, options);
       return;
     }
@@ -122,10 +124,16 @@ class AudioPlaybackManager {
     this._playing = true;
     if (this.onPlayStart) this.onPlayStart(sisterId);
 
+    // v2.8 先読み: i番目の合成が終わったらすぐ i+1番目を作り始める（鳴っている間に次ができる）
+    const synthOf = (i) => this._synth(chunks[i], voiceConfig.voice, sisterId, options.speed || 1.0, options.style);
+    let next = synthOf(0);
     for (let i = 0; i < chunks.length; i++) {
+      const pre = next; pre.catch(() => {});
+      next = (i + 1 < chunks.length) ? pre.then(() => synthOf(i + 1), () => synthOf(i + 1)) : null;
+      if (next) next.catch(() => {});
       if (this._queueCancelled || gen !== this._gen) break;
       try {
-        await this._speakOneChunk(chunks[i], voiceConfig.voice, sisterId, options);
+        await this._speakOneChunk(chunks[i], voiceConfig.voice, sisterId, options, pre);
       } catch (e) {
         this._log(`chunk ${i+1} エラー: ${e.message}`);
       }
@@ -139,10 +147,10 @@ class AudioPlaybackManager {
   }
 
   // v2.1修正 - VOICEVOX残りチャンク再生を追加（#77読み飛ばし根本修正）
-  _speakOneChunk(chunkText, voice, sisterId, options = {}) {
+  _speakOneChunk(chunkText, voice, sisterId, options = {}, pre = null) {
     return new Promise(async (resolve, reject) => {
       try {
-        const audio = await this._synth(chunkText, voice, sisterId, options.speed || 1.0, options.style);
+        const audio = await (pre || this._synth(chunkText, voice, sisterId, options.speed || 1.0, options.style));
         if (options._gen !== this._gen) { resolve(); return; } // 合成待ち中にstopされた: 鳴らさない
 
         // v2.1追加 - VOICEVOX残りチャンク情報を取得
@@ -163,7 +171,7 @@ class AudioPlaybackManager {
         }, { once: true });
         audio.addEventListener('error', () => resolve(), { once: true });
 
-        await audio.play();
+        await audio.play(); if ((typeof VoiceFast !== 'undefined')) VoiceFast.mark('tts');
       } catch (error) {
         // v1.5追加 - VOICEVOX→OpenAIフォールバック
         if (this._ttsProvider === this._voicevoxProvider && this._openaiProvider.isAvailable()) {
@@ -197,7 +205,8 @@ class AudioPlaybackManager {
         if (sub) cur = sub;
         continue;
       }
-      if ((cur + s).length <= MAX_CHUNK) cur += s;
+      // v2.8: 最初の1文(8字以上)はそれだけで1チャンク（早く鳴らす）
+      if ((cur + s).length <= MAX_CHUNK && !(chunks.length === 0 && cur.trim().length >= 8)) cur += s;
       else { if (cur) chunks.push(cur.trim()); cur = s; }
     }
     if (cur.trim()) chunks.push(cur.trim());
@@ -215,6 +224,7 @@ class AudioPlaybackManager {
       this._currentAudio = audio; this._playing = true; this._audioStartAt = Date.now();
       this._speed = options.speed || 1.0; audio.playbackRate = this._speed;
       if (this.onPlayStart) this.onPlayStart(sisterId);
+      if ((typeof VoiceFast !== 'undefined')) VoiceFast.mark('tts');
       const rc = audio._vvRemainingChunks || [];
       const sid = audio._vvSpeakerId, ak = audio._vvApiKey;
       audio.addEventListener('ended', async () => {

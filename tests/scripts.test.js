@@ -34,7 +34,7 @@ test('sw.js のキャッシュ一覧に新規ファイルがあり、index.html 
 test('新規ファイルのヘッダ（作成: 葵(Aoi) / 最終更新）と行数上限', () => {
   for (const f of ['model-effort.js', 'gemini-tts-provider.js', 'stt-model.js', 'effort-settings-ui.js', 'tests/model-effort.test.js', 'tests/stt-tts.test.js', 'tone-style.js', 'tests/tone.test.js', 'tests/gemini-default.test.js', 'walk-spend-core.js', 'walk-spend.js', 'walk-spend-ui.js', 'tests/walk-spend-core.test.js', 'tests/walk-spend.test.js', 'layout-ui.js', 'layout-main.css', 'layout-panels.css', 'tests/layout-ui.test.js', 'layout2-core.js', 'layout2-ui.js', 'layout2-main.css', 'layout2-panels.css', 'tests/layout2.test.js']) {
     const s = read(f);
-    assert.ok(/作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-(28|29)/.test(s), f);
+    assert.ok(/作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-(28|29|30)/.test(s), f);
     assert.ok(s.split('\n').length <= 500, f);
   }
   assert.ok(read('whisper-provider.js').split('\n').length <= 500);
