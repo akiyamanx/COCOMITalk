@@ -5,7 +5,8 @@
 // v1.1 2026-10-28 - 新モデル(ModelTiers)の料金を段階表から引く（旧モデルIDの料金表は履歴表示のため残す）
 // v1.2 2026-10-28 - お散歩モードの費用集計へ通知（walk-spend.js）＋USD_TO_JPYを公開
 // v3.77 2026-10-29 - 姉妹の色を彩度控えめに
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// v1.3 2026-10-30 - 葵・きみの分を「ここちゃん」に混ぜず本人の行で集計（姉妹別の表を登録簿から作る）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
 /**
@@ -70,6 +71,8 @@ const TokenMonitor = (() => {
     koko: '#E8779F',
     gpt: '#7469D4',
     claude: '#DB8250',
+    aoi: '#3BA7D9',
+    kimi: '#E0A21B',
   };
 
   // USD→JPYレート（大まかな概算用）
@@ -359,11 +362,12 @@ const TokenMonitor = (() => {
     html += `</div>`;
 
     // v0.7変更 - 姉妹別集計（三姉妹カラー表示）
-    const sisterTotals = { koko: { input: 0, output: 0, calls: 0, cost: 0 }, gpt: { input: 0, output: 0, calls: 0, cost: 0 }, claude: { input: 0, output: 0, calls: 0, cost: 0 } };
+    const sisterTotals = {};
+    Object.keys(SISTER_COLORS).forEach(k => { sisterTotals[k] = { input: 0, output: 0, calls: 0, cost: 0 }; });
     const models = Object.entries(data.byModel);
     for (const [model, usage] of models) {
       const pricing = _pricingOf(model);
-      const sister = pricing?.sister || 'koko';
+      const sister = sisterTotals[pricing?.sister] ? pricing.sister : 'koko';
       sisterTotals[sister].input += usage.input;
       sisterTotals[sister].output += usage.output;
       sisterTotals[sister].calls += usage.calls;
@@ -373,7 +377,7 @@ const TokenMonitor = (() => {
     }
 
     // 姉妹別サマリー
-    const sisterNames = { koko: '🌸 ここちゃん', gpt: '🌙 お姉ちゃん', claude: '🔮 クロちゃん' };
+    const sisterNames = { koko: '🌸 ここちゃん', gpt: '🌙 お姉ちゃん', claude: '🔮 クロちゃん', aoi: '🦋 葵ちゃん', kimi: '🌟 きみちゃん' };
     const activeSisters = Object.entries(sisterTotals).filter(([, s]) => s.calls > 0);
     if (activeSisters.length > 0) {
       html += `<div class="token-models">`;

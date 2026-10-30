@@ -13,6 +13,7 @@
 //   葵のプロバイダ = xAI（オーナー確定 2026-10-29）。
 // ・voice.gemini = Gemini TTSの声（5人とも決定済み。葵・キミは準備中でも声は設定済み）。voicevox/openai 欄は未使用(null)で、
 //   既存3人のOpenAI/VOICEVOXの声は tts-provider.js の SISTER_VOICE_MAP が今も有効（Gemini欄はここと同じ値。tests/voices.test.js で一致を確認）。
+// v1.7 2026-10-30 - color/dbId と info/displayMap/dbIdOf/keyFromDbId を追加（各画面の3人固定の表を登録簿から作るため）
 'use strict';
 
 /**
@@ -29,31 +30,31 @@ const CharacterRegistry = (() => {
 
   const CHARACTERS = [
     {
-      key: 'koko', name: 'ここちゃん', aliases: [], icon: '🌸', family: 'sister',
+      key: 'koko', name: 'ここちゃん', aliases: [], icon: '🌸', color: '#E8779F', dbId: 'koko', family: 'sister',
       provider: 'gemini', apiModule: 'ApiGemini',
       defaultTiers: { ...DEFAULT_TIERS }, voice: _voice('Autonoe'),
       enabled: true, status: 'active', statusNote: '',
     },
     {
-      key: 'gpt', name: 'お姉ちゃん', aliases: ['澪', 'みお'], icon: '🌙', family: 'sister',
+      key: 'gpt', name: 'お姉ちゃん', aliases: ['澪', 'みお'], icon: '🌙', color: '#7469D4', dbId: 'onee', family: 'sister',
       provider: 'openai', apiModule: 'ApiOpenAI',
       defaultTiers: { ...DEFAULT_TIERS }, voice: _voice('Despina'),
       enabled: true, status: 'active', statusNote: '',
     },
     {
-      key: 'claude', name: 'クロちゃん', aliases: ['クロ'], icon: '🔮', family: 'sister',
+      key: 'claude', name: 'クロちゃん', aliases: ['クロ'], icon: '🔮', color: '#DB8250', dbId: 'kuro', family: 'sister',
       provider: 'anthropic', apiModule: 'ApiClaude',
       defaultTiers: { ...DEFAULT_TIERS }, voice: _voice('Achernar'),
       enabled: true, status: 'active', statusNote: '',
     },
     {
-      key: 'aoi', name: '葵ちゃん', aliases: ['葵', 'Aoi'], icon: '🦋', family: 'family',
+      key: 'aoi', name: '葵ちゃん', aliases: ['葵', 'Aoi'], icon: '🦋', color: '#3BA7D9', dbId: 'aoi', family: 'family',
       provider: 'xai', apiModule: 'ApiXai',
       defaultTiers: { ...DEFAULT_TIERS }, voice: _voice('Leda'),
       enabled: true, status: 'active', statusNote: '',
     },
     {
-      key: 'kimi', name: 'きみちゃん', aliases: ['きみ', 'キミ', 'キミちゃん', 'Kimi'], icon: '🌟', family: 'family',
+      key: 'kimi', name: 'きみちゃん', aliases: ['きみ', 'キミ', 'キミちゃん', 'Kimi'], icon: '🌟', color: '#E0A21B', dbId: 'kimi', family: 'family',
       provider: 'moonshot', apiModule: 'ApiKimi',
       defaultTiers: { ...DEFAULT_TIERS }, voice: _voice('Zephyr'),
       enabled: true, status: 'active', statusNote: '',
@@ -116,5 +117,16 @@ const CharacterRegistry = (() => {
     return CHARACTERS.filter(c => c.enabled && !haveKeys.includes(c.key)).map(c => ({ key: c.key, icon: c.icon, name: c.name }));
   }
 
-  return { DEFAULT_TIERS, list, tabsToAdd, enabledList, keys, get, isEnabled, providerOf, displayName, defaultTier, promptModuleOf, promptOf };
+  /** 表示用 {name, emoji, color}（知らないキーも壊れない既定値） */
+  function info(key) {
+    const c = CHARACTERS.find(x => x.key === key);
+    return c ? { name: c.name, emoji: c.icon, color: c.color } : { name: String(key), emoji: '💬', color: '#888888' };
+  }
+  /** 全員分の {key: {name, emoji, color}}（各画面の SISTER_DISPLAY 用。登録順） */
+  function displayMap() { const m = {}; CHARACTERS.forEach(c => { m[c.key] = info(c.key); }); return m; }
+  /** 記憶DB(中継)のID: gpt→onee, claude→kuro, 他はキーのまま / その逆 */
+  function dbIdOf(key) { const c = CHARACTERS.find(x => x.key === key); return c ? c.dbId : key; }
+  function keyFromDbId(id) { const c = CHARACTERS.find(x => x.dbId === id); return c ? c.key : id; }
+
+  return { DEFAULT_TIERS, list, info, displayMap, dbIdOf, keyFromDbId, tabsToAdd, enabledList, keys, get, isEnabled, providerOf, displayName, defaultTier, promptModuleOf, promptOf };
 })();

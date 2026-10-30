@@ -33,12 +33,16 @@ const PromptBuilder = (() => {
     koko: '🌸ここちゃん',
     onee: '🌙お姉ちゃん',
     kuro: '🔮クロちゃん',
+    aoi: '🦋葵ちゃん',   // 2026-10-30 葵・きみの記憶にも持ち主の札を付ける（今までは "aoi" のまま出ていた）
+    kimi: '🌟きみちゃん',
   };
 
   const SISTER_KEY_TO_DB = {
     koko: 'koko',
     gpt: 'onee',
     claude: 'kuro',
+    aoi: 'aoi',
+    kimi: 'kimi',
   };
 
   const SHARED_CATEGORIES = ['会議決定', '共通認識', '開発ルール', 'ロードマップ'];

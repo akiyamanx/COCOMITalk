@@ -64,6 +64,8 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
 .dot-koko { background: var(--koko-primary); animation-delay: 0s; }
 .dot-gpt { background: var(--gpt-primary); animation-delay: 0.2s; }
 .dot-claude { background: var(--claude-primary); animation-delay: 0.4s; }
+.dot-aoi { background: var(--aoi-primary); animation-delay: 0.6s; }
+.dot-kimi { background: var(--kimi-primary); animation-delay: 0.8s; }
 .splash.fade-out { animation: splashFadeOut 0.4s ease-in forwards; }
 
 /* ===== メインアプリ ===== */

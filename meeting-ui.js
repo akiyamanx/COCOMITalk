@@ -13,7 +13,8 @@
 /** 会議UIモジュール */
 const MeetingUI = (() => {
 
-  const SISTER_DISPLAY = {
+  // 2026-10-30 - 登録簿から作る（葵・きみも同じ表示に）。登録簿が無い時だけ従来の3人
+  const SISTER_DISPLAY = (typeof CharacterRegistry !== 'undefined') ? CharacterRegistry.displayMap() : {
     koko: { name: 'ここちゃん', emoji: '🌸', color: '#E8779F' },
     gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#7469D4' },
     claude: { name: 'クロちゃん', emoji: '🔮', color: '#DB8250' },

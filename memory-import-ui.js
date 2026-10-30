@@ -65,6 +65,8 @@ const MemoryImportUI = (() => {
             <option value="koko">ここちゃん</option>
             <option value="kuro">クロちゃん</option>
             <option value="onee">お姉ちゃん</option>
+            <option value="aoi">葵ちゃん</option>
+            <option value="kimi">きみちゃん</option>
           </select>
           <label>カテゴリ</label>
           <input type="text" id="mi-category" placeholder="例: 開発/雑談/ドライブ" maxlength="20">

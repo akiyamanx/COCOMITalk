@@ -27,8 +27,8 @@ const ModelTiers = (() => {
     high: { icon: '🧠', label: '高頭脳' },
   };
 
-  /** プロバイダ → 価格集計用の姉妹キー（xai/moonshotは未対応なのでnull＝TokenMonitor側の既定に任せる） */
-  const PROVIDER_SISTER = { gemini: 'koko', openai: 'gpt', anthropic: 'claude', xai: null, moonshot: null };
+  /** プロバイダ → 価格集計用のキャラキー（2026-10-30: 葵=xai / きみ=moonshot。今まではnullで「ここちゃん」に混ざっていた） */
+  const PROVIDER_SISTER = { gemini: 'koko', openai: 'gpt', anthropic: 'claude', xai: 'aoi', moonshot: 'kimi' };
 
   /**
    * 段階表。price は USD/100万トークン。配列なら期間つき（until=その日まで / from=その日から、YYYY-MM-DD）。

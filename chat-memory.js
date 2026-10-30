@@ -255,8 +255,11 @@ const ChatMemory = (() => {
 
   /** 姉妹IDから表示名に変換 */
   function _getSisterName(sisterId) {
+    if (!sisterId) return '不明';
+    // 2026-10-30 登録簿から（葵・きみも名前で出す。中継の onee/kuro も解決）
+    if (typeof CharacterRegistry !== 'undefined') return CharacterRegistry.info(CharacterRegistry.keyFromDbId(sisterId)).name;
     const names = { koko: 'ここちゃん', gpt: 'お姉ちゃん', claude: 'クロちゃん' };
-    return names[sisterId] || sisterId || '不明';
+    return names[sisterId] || sisterId;
   }
 
   /** 画面上にトースト通知を表示（3秒で自動消去） */
