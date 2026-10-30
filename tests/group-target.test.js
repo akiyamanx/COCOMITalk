@@ -137,7 +137,7 @@ test('発言順: ルーターが無い/失敗しても動く。話しかけな�
   assert.deepEqual(f.calls.map(c => c.k), ['gpt', 'koko', 'claude']);
 });
 
-test('配線: 札はbutton+aria-pressed+44px、準備中toast、v1/🔄/発言ハイライトは残る、sw v3.89', () => {
+test('配線: 札はbutton+aria-pressed+44px、準備中toast、v1/🔄/発言ハイライトは残る、sw v3.90', () => {
   const ui = read('layout2-ui.js'), css = read('layout2-main.css'), sw = read('sw.js');
   assert.match(ui, /_el\('button', 'lx2-chip'/);
   assert.ok(ui.includes("'aria-pressed'") && ui.includes('data-sister'));
@@ -146,7 +146,7 @@ test('配線: 札はbutton+aria-pressed+44px、準備中toast、v1/🔄/発言�
   assert.match(css, /\.lx2-chip \{[^}]*height: var\(--lx-tap\)/);
   assert.match(css, /\.lx2-chip\[aria-pressed="true"\]/);
   assert.ok(css.includes('.lx2-chip.lx2-speaking'));
-  assert.ok(sw.includes("'cocomitalk-v3.89'"));
+  assert.ok(sw.includes("'cocomitalk-v3.90'"));
   assert.ok(read('chat-group.js').includes('takeTarget()'));
   for (const f of ['layout2-core.js', 'layout2-ui.js', 'chat-group.js', 'tests/group-target.test.js']) {
     const s = read(f);
