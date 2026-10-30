@@ -10,6 +10,7 @@
 // v1.9 2026-10-28 - 思考の強さ: 設定で選ばれた時だけ output_config.effort を送る（未選択はAPI既定。xhigh/maxは出力枠を16000に拡大）
 // v2.0 2026-10-30 - 音声会話中(options.onDelta)は受け取りながら返す（voice-stream.js が最初の1文から読み上げ）。ツール使用・失敗時は今まで通りの送り方でやり直す
 // v2.1 2026-10-30 - ストリームで届いた tool_use をそのまま実行（ツール付きの送り直しを省く。組み立てられない時だけ今まで通り）
+// v2.2 2026-10-30 - 送り直しに落ちた時は⏱に「🔁 送り直し n回目（理由）」を出す（ストリーム実行が効いているか見る）
 // 2026-10-30 - ツール使用時に options.toolUsed / toolNames を立てる（自動フォローアップ判定・吹き出しの印用）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
@@ -27,6 +28,7 @@ const ApiClaude = (() => {
 
   // デフォルトモデル（段階名。コスト安全・まず安いモデル）
   const DEFAULT_MODEL = 'lite';
+  let _resends = 0; // v2.2: 送り直しの回数（⏱表示用）
 
   /** 思考トークンも max_tokens に含まれるため、xhigh/max では枠を広げる（model-effort.js） */
   function _maxTokens(effort) {
@@ -89,6 +91,9 @@ const ApiClaude = (() => {
         const t = _extractText(sd);
         if (sd.content[0].text && sd.content[0].text.trim()) return t;
       }
+      _resends++; // v2.2: ここに来た＝今まで通りの送り方でやり直し
+      const why = !sd ? '受信失敗' : (sd._toolCall ? (sd._toolsReady ? 'ツール実行後の失敗' : 'ツール組み立て不可') : '空の返事');
+      if (typeof VoiceFast !== 'undefined' && VoiceFast.tlog) VoiceFast.tlog(`🔁 送り直し ${_resends}回目（${why}）`);
     }
 
     try {

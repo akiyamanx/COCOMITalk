@@ -8,6 +8,7 @@
 // v0.10 2026-07-17 - 400番台エラー時のbody全文＋本家エラー詳細ダンプ（真犯人特定用・DebugLogger稼働時のみ）
 // v0.11 2026-10-30 - callAPIStream に onDelta（届いた文字をすぐ渡す）とツール呼び出し検知（_toolCall）を追加。streamText() 追加（音声会話の読み上げ用・失敗時は null で今まで通りに戻す）
 // v0.12 2026-10-30 - hooks.keepTools: Claude の tool_use を止めずに最後まで受け取り、content(text/tool_use)を組み立てて返す（やり直し送信を1回減らす）。streamData() 追加
+// v0.13 2026-10-30 - tool_use は content_block_stop まで届いたものだけ実行可（input_json_delta が揃う前に組み立てない）
 
 'use strict';
 
@@ -261,6 +262,8 @@ const ApiCommon = (() => {
                 const cb = parsed.content_block || {};
                 if (cb.type === 'tool_use') { toolCall = true; blocks[parsed.index] = { type: 'tool_use', id: cb.id, name: cb.name, _json: '' }; }
                 else if (cb.type === 'text') blocks[parsed.index] = { type: 'text', text: cb.text || '' };
+              } else if (parsed.type === 'content_block_stop') {
+                const b = blocks[parsed.index]; if (b) b._stop = true; // v0.13: このブロックの断片は全部届いた
               } else if (parsed.type === 'message_delta') {
                 stopReason = parsed.delta?.stop_reason || null;
               }
@@ -281,7 +284,8 @@ const ApiCommon = (() => {
         try {
           out.content = blocks.filter(b => b && (b.type !== 'text' || b.text)).map(b => b.type === 'tool_use'
             ? { type: 'tool_use', id: b.id, name: b.name, input: b._json ? JSON.parse(b._json) : {} } : { type: 'text', text: b.text });
-          out._toolsReady = out.content.some(b => b.type === 'tool_use' && b.id && b.name);
+          const tus = blocks.filter(b => b && b.type === 'tool_use');
+          out._toolsReady = tus.length > 0 && tus.every(b => b._stop && b.id && b.name); // v0.13: 全部 stop 済みの時だけ
         } catch (e) { out._toolsReady = false; }
       }
       return out;

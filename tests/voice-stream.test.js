@@ -126,6 +126,10 @@ test('Gemini TTS: Server-Timing の upstream ms を読む', () => {
   assert.equal(e.GeminiTTSProvider.upstreamMs('upstream;dur=1234.6'), 1235);
   assert.equal(e.GeminiTTSProvider.upstreamMs('cache;desc=x, upstream;dur=50'), 50);
   assert.equal(e.GeminiTTSProvider.upstreamMs(''), null);
+  const st = 'upstream-ttfb;dur=4800;desc="google headers", upstream;dur=5100;desc="google total"'; // v3.95: 中継は2つ返す
+  assert.equal(e.GeminiTTSProvider.upstreamMs(st), 5100);
+  assert.equal(e.GeminiTTSProvider.upstreamMs(st, 'upstream-ttfb'), 4800);
+  assert.equal(e.GeminiTTSProvider.upstreamMs('upstream;dur=9', 'upstream-ttfb'), null);
 });
 
 test('v3.94 api-common: Claude の tool_use をストリームのまま組み立てる（送り直さない）', async () => {
@@ -136,12 +140,19 @@ test('v3.94 api-common: Claude の tool_use をストリームのまま組み立
     'data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tu1","name":"web_search"}}\n',
     'data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\\"query\\":"}}\n',
     'data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"\\"天気\\"}"}}\n',
+    'data: {"type":"content_block_stop","index":1}\n',
     'data: {"type":"message_delta","delta":{"stop_reason":"tool_use"}}\n'];
   const fetch = async () => ({ ok: true, body: { getReader() { let i = 0; return { read: async () => i < lines.length ? { done: false, value: enc.encode(lines[i++]) } : { done: true }, cancel: async () => {} }; } } });
   const e = load(['api-common.js'], ['ApiCommon'], { window: {}, localStorage: { getItem: () => '{"geminiKey":"tok"}', setItem() {} }, fetch, TextEncoder, TextDecoder, AbortController });
   const r = await e.ApiCommon.streamData('claude', { model: 'm' }, () => {});
   assert.equal(r._toolsReady, true);
   assert.deepEqual(JSON.parse(JSON.stringify(r.content)), [{ type: 'text', text: '調べるね' }, { type: 'tool_use', id: 'tu1', name: 'web_search', input: { query: '天気' } }]);
+  // v3.95: content_block_stop が来ていない tool_use は実行しない（送り直し）
+  const cut = lines.filter(l => !l.includes('content_block_stop'));
+  const f2 = async () => ({ ok: true, body: { getReader() { let i = 0; return { read: async () => i < cut.length ? { done: false, value: enc.encode(cut[i++]) } : { done: true }, cancel: async () => {} }; } } });
+  const e2 = load(['api-common.js'], ['ApiCommon'], { window: {}, localStorage: { getItem: () => '{"geminiKey":"tok"}', setItem() {} }, fetch: f2, TextEncoder, TextDecoder, AbortController });
+  assert.equal((await e2.ApiCommon.streamData('claude', { model: 'm' }, () => {}))._toolsReady, false);
+  assert.match(src('api-claude.js'), /VoiceFast\.tlog\(`🔁 送り直し \$\{_resends\}回目/);
 });
 
 test('v3.94 送信前の待ち: 0.5秒＋確認0.25秒（延長ルール・1.5秒のマイク復帰待ちはそのまま）、記憶などは並列取得', () => {

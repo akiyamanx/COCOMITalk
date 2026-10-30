@@ -190,7 +190,7 @@ test('配線: index.html（api-common/model-tiersの後・api-claudeの後）と
     assert.match(t, /作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-(29|30)/);
   }
   assert.ok(pos('api-compat-core.js') < pos('api-xai.js') && pos('api-xai.js') < pos('api-kimi.js'));
-  assert.ok(sw.includes("'cocomitalk-v3.94'"));
+  assert.ok(sw.includes("'cocomitalk-v3.95'"));
   // 有効化の手順（スイッチの場所）が冒頭に書いてある
   assert.match(read('chat-core.js').split('\n').slice(0, 25).join('\n'), /characters\.js の aoi \/ kimi を enabled:true/);
   assert.match(read('api-xai.js').split('\n').slice(0, 10).join('\n'), /characters\.js の aoi を enabled:true/);
