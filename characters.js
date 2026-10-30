@@ -6,6 +6,7 @@
 // v1.2 2026-10-29 - 正式名を ひらがな「きみちゃん」に統一（旧カタカナ表記はaliasesに残す）。promptModuleOf/promptOf追加（キー→そのキャラ自身のプロンプト。知らないキーは claude に落とさず空）
 // v1.3 2026-10-29 - 葵のプロバイダ=xAIをオーナー確定（「オーナー未確認」注記を削除）
 // v1.4 2026-10-29 - aoi/kimi の apiModule を ApiXai/ApiKimi に（api-xai.js/api-kimi.js 追加。enabled は false のまま。有効化の手順は chat-core.js 冒頭）
+// v1.6 2026-10-30 - tabsToAdd: 有効なのに隠しタブ(.tab)が無い子の一覧（app.js がタブを足す。無いと切替できなかった）
 // v1.5 2026-10-30 - 中継に /xai /kimi /gemini-tts がデプロイされたので aoi/kimi を enabled:true（まずstagingで試験。声はGemini TTS Leda/Zephyr）
 //
 // ・葵(aoi)=xAI Grok / キミ(kimi)=Moonshot Kimi は v1.5 から enabled:true（1対1のみ。グループ/会議の発言順は未対応）。
@@ -110,5 +111,10 @@ const CharacterRegistry = (() => {
     return (c && c.defaultTiers[mode]) || 'lite';
   }
 
-  return { DEFAULT_TIERS, list, enabledList, keys, get, isEnabled, providerOf, displayName, defaultTier, promptModuleOf, promptOf };
+  /** 有効な子のうち、既存タブ(haveKeys)に無いもの [{key,icon,name}]（順は登録順） */
+  function tabsToAdd(haveKeys = []) {
+    return CHARACTERS.filter(c => c.enabled && !haveKeys.includes(c.key)).map(c => ({ key: c.key, icon: c.icon, name: c.name }));
+  }
+
+  return { DEFAULT_TIERS, list, tabsToAdd, enabledList, keys, get, isEnabled, providerOf, displayName, defaultTier, promptModuleOf, promptOf };
 })();

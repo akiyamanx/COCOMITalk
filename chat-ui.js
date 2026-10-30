@@ -7,7 +7,8 @@
 // v1.4 2026-10-29 - 音が鳴っている間の吹き出しタップで停止（準備中・鳴り始め700msのタップは無視）
 // v1.3 2026-10-29 - 連打で声が重なる不具合の修正: 読み上げ中(準備中含む)のタップは無視。停止はマイクの🔊ボタン。読み上げ中の吹き出しに speaking 表示
 // v3.77 2026-10-29 - AIの吹き出しに data-sister を付与（CSSがその子の色を付ける）／名前札の色を彩度控えめに
-// 最終更新: 葵(Aoi), 2026-10-29
+// v1.7 2026-10-30 - 名前札の色に葵/きみを追加
+// 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
 /** チャットUI表示モジュール */
@@ -26,7 +27,7 @@ const ChatUi = (() => {
 
   // 姉妹テーマカラー
   function getSisterColor(sisterKey) {
-    const colors = { koko: '#A5426C', gpt: '#4F449E', claude: '#A8531F' };
+    const colors = { koko: '#A5426C', gpt: '#4F449E', claude: '#A8531F', aoi: '#1F6E96', kimi: '#94650A' };
     return colors[sisterKey] || '#888';
   }
 

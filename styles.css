@@ -140,11 +140,15 @@ input,textarea,select { font-family: inherit; font-size: 16px; }
 .message[data-sister="koko"] .msg-avatar { background: var(--koko-light); }
 .message[data-sister="gpt"] .msg-avatar { background: var(--gpt-light); }
 .message[data-sister="claude"] .msg-avatar { background: var(--claude-light); }
+.message[data-sister="aoi"] .msg-avatar { background: var(--aoi-light); }
+.message[data-sister="kimi"] .msg-avatar { background: var(--kimi-light); }
 .message[data-sister="aoi"] .msg-avatar { background: #E3F2FB; }
 .message[data-sister="kimi"] .msg-avatar { background: #FFF4D6; }
 .message.ai[data-sister="koko"] .msg-bubble { box-shadow: var(--shadow-sm), inset 3px 0 0 var(--koko-primary); }
 .message.ai[data-sister="gpt"] .msg-bubble { box-shadow: var(--shadow-sm), inset 3px 0 0 var(--gpt-primary); }
 .message.ai[data-sister="claude"] .msg-bubble { box-shadow: var(--shadow-sm), inset 3px 0 0 var(--claude-primary); }
+.message.ai[data-sister="aoi"] .msg-bubble { box-shadow: var(--shadow-sm), inset 3px 0 0 var(--aoi-primary); }
+.message.ai[data-sister="kimi"] .msg-bubble { box-shadow: var(--shadow-sm), inset 3px 0 0 var(--kimi-primary); }
 .message.ai[data-sister="aoi"] .msg-bubble { box-shadow: var(--shadow-sm), inset 3px 0 0 #3BA7D9; }
 .message.ai[data-sister="kimi"] .msg-bubble { box-shadow: var(--shadow-sm), inset 3px 0 0 #E0A21B; }
 .msg-bubble {

@@ -9,14 +9,15 @@
 // v2.2 2026-10-29 - オープニング(スキップ含む)の後にロゴ画面(COCOMITalk)を1秒見せてからアプリ表示
 // v3.77 2026-10-29 - 選んだ子の色は --sister-* だけ切替。全体の基調(--active-*)は青のまま／theme-colorは青固定
 // v3.79 2026-10-29 - 目だけの小さな顔(mascot-eyes.js)を全画面のbody直下に出す（待機中の合図。オープニング中は隠す）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// v3.89 2026-10-30 - 登録簿で有効な葵/きみのタブ(.tab)を足す（切替は全部この隠しタブのclick経由なので、無いと選べなかった）＋色
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 /** アプリケーションモジュール */
 const App = (() => {
   // 三姉妹のCSS変数マッピング
   // v2.3: 切り替えるのは“選んだ子の色”(--sister-*)だけ。画面全体の基調(--active-*)は落ち着いた青のまま
   const _theme = (k) => ({ '--sister-primary': `var(--${k}-primary)`, '--sister-light': `var(--${k}-light)`, '--sister-dark': `var(--${k}-dark)`, '--sister-bg': `var(--${k}-bg)` });
-  const SISTER_THEMES = { koko: _theme('koko'), gpt: _theme('gpt'), claude: _theme('claude') };
+  const SISTER_THEMES = { koko: _theme('koko'), gpt: _theme('gpt'), claude: _theme('claude'), aoi: _theme('aoi'), kimi: _theme('kimi') };
   // アプリ起動
   async function init() {
     _handleSplash();
@@ -105,6 +106,17 @@ const App = (() => {
   }
   // 三姉妹タブの設定
   function _setupTabs() {
+    // v3.89 - index.html は三姉妹のタブだけ。登録簿で有効な子(葵/きみ)のタブをここで足す
+    const nav = document.querySelector('.sister-tabs');
+    if (nav && typeof CharacterRegistry !== 'undefined') {
+      const have = [...nav.querySelectorAll('.tab')].map(t => t.dataset.sister);
+      CharacterRegistry.tabsToAdd(have).forEach(({ key, icon, name }) => {
+        const b = document.createElement('button'); b.className = 'tab'; b.dataset.sister = key;
+        const i = document.createElement('span'); i.className = 'tab-icon'; i.textContent = icon;
+        const n = document.createElement('span'); n.className = 'tab-name'; n.textContent = name;
+        b.append(i, n); nav.appendChild(b);
+      });
+    }
     const tabs = document.querySelectorAll('.tab');
 
     tabs.forEach(tab => {

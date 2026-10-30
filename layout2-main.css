@@ -136,6 +136,8 @@ html.lx2 .lx2-chip-icon { font-size: 18px; }
 html.lx2 .lx2-chip[data-sister="koko"] { --lx2-c: var(--koko-primary); --lx2-cl: var(--koko-light); --lx2-cd: var(--koko-dark); }
 html.lx2 .lx2-chip[data-sister="gpt"] { --lx2-c: var(--gpt-primary); --lx2-cl: var(--gpt-light); --lx2-cd: var(--gpt-dark); }
 html.lx2 .lx2-chip[data-sister="claude"] { --lx2-c: var(--claude-primary); --lx2-cl: var(--claude-light); --lx2-cd: var(--claude-dark); }
+html.lx2 .lx2-chip[data-sister="aoi"] { --lx2-c: var(--aoi-primary); --lx2-cl: var(--aoi-light); --lx2-cd: var(--aoi-dark); }
+html.lx2 .lx2-chip[data-sister="kimi"] { --lx2-c: var(--kimi-primary); --lx2-cl: var(--kimi-light); --lx2-cd: var(--kimi-dark); }
 html.lx2 .lx2-chip[data-sister="aoi"] { --lx2-c: #3BA7D9; --lx2-cl: #E3F2FB; --lx2-cd: #1F6E96; }
 html.lx2 .lx2-chip.lx2-speaking { background: var(--lx2-cl, var(--active-light)); border-color: var(--lx2-c, var(--active-primary)); color: var(--lx2-cd, var(--active-dark)); font-weight: 700; transform: scale(1.05); box-shadow: 0 0 0 3px var(--lx2-cl, var(--active-light)); }
 /* 話しかけ先に選んだ札: 二重の濃い輪＋✓（話している子の「薄い地＋大きく光る」とは別。両方同時でも見分けられる） */

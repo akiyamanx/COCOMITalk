@@ -324,13 +324,13 @@ test('CSS: ピョンは顔(内側 .me-face)だけに transform。外側の left/
   assert.ok(/translateY\(-\d+px\)/.test(kf), 'ジャンプで上がる');
   assert.ok(/prefers-reduced-motion: reduce\) \{[\s\S]*\.me-hop \.me-face \{ animation: none/.test(css));
 });
-test('配線: index.html(css/js)・sw.js(CACHE_FILES・v3.88)・app.jsのtry/catch取り付け・layout2-uiは帯に付けない', () => {
+test('配線: index.html(css/js)・sw.js(CACHE_FILES・v3.89)・app.jsのtry/catch取り付け・layout2-uiは帯に付けない', () => {
   const html = read('index.html'), sw = read('sw.js'), ui = read('layout2-ui.js'), app = read('app.js');
   assert.ok(html.includes('href="mascot-eyes.css"'));
   assert.ok(html.indexOf('src="mascot-eyes.js"') > 0 && html.indexOf('src="mascot-eyes.js"') < html.indexOf('src="app.js"'));
   const files = sw.slice(sw.indexOf('const CACHE_FILES'), sw.indexOf('const CACHE_FONTS'));
   assert.ok(files.includes("'./mascot-eyes.js'") && files.includes("'./mascot-eyes.css'"));
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.88';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.89';"));
   assert.ok(/try \{ if \(typeof MascotEyes !== 'undefined'\) MascotEyes\.mountFixed\(document\); \} catch/.test(app));
   assert.ok(!/typeof MascotEyes/.test(ui), '帯(layout2-ui)には付けない');
 });
@@ -338,7 +338,7 @@ test('CI: 各ファイル500行以内・ヘッダー(作成/最終更新・バ�
   for (const f of ['mascot-eyes.js', 'mascot-eyes.css', 'tests/mascot-eyes.test.js', 'layout2-ui.js', 'app.js']) {
     const t = read(f); assert.ok(t.split('\n').length <= 500, f);
     const head = t.split('\n').slice(0, 14).join('\n');
-    assert.ok(head.includes('作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29'), f);
+    assert.ok(/作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-(29|30)/.test(head), f);
     assert.ok(/v\d+\.\d+/.test(head), f);
   }
   for (const f of ['mascot-eyes.js', 'mascot-eyes.css', 'tests/mascot-eyes.test.js']) assert.ok(/このファイルは|COCOMITalk/.test(read(f).split('\n').slice(0, 5).join('\n')), f);

@@ -19,6 +19,8 @@
   --koko-primary: #E8779F; --koko-light: #FCE7EE; --koko-dark: #A5426C; --koko-bg: #FFF7FA;
   --gpt-primary: #7469D4; --gpt-light: #ECEAFA; --gpt-dark: #4F449E; --gpt-bg: #F8F7FD;
   --claude-primary: #DB8250; --claude-light: #FBEBDF; --claude-dark: #A8531F; --claude-bg: #FEF8F3;
+  --aoi-primary: #3BA7D9; --aoi-light: #E3F2FB; --aoi-dark: #1F6E96; --aoi-bg: #F5FAFE;
+  --kimi-primary: #E0A21B; --kimi-light: #FFF4D6; --kimi-dark: #94650A; --kimi-bg: #FFFBF0;
 
   /* ========== 背景・テキスト（青みのニュートラル） ========== */
   --bg-main: #F6F9FC;

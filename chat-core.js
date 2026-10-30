@@ -16,6 +16,7 @@
 // v2.4 2026-10-30 - 1対1: 約束(調べるね/待っててね)だけで止まった返事に1回だけ自動フォローアップ（promise-followup.js）
 // v2.5 2026-10-30 - 実行したツール名を吹き出しに渡す（🔎検索したよ 等の小さな印）
 // v2.6 2026-10-30 - 登録簿で有効な葵/きみを1対1の表(SISTERS)・履歴に入れる（staging試験用に enabled:true）
+// v2.7 2026-10-30 - 履歴の読み込みも SISTERS の全員（葵/きみの履歴が戻らなかった）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 //
 // ■ 葵ちゃん/きみちゃんを有効にする手順（スイッチの場所）。まだ全部OFF。実際の中継には一度もつないでいない
@@ -435,7 +436,7 @@ const ChatCore = (() => {
     try {
       await ChatHistory.init();
 
-      for (const key of ['koko', 'gpt', 'claude']) {
+      for (const key of Object.keys(SISTERS)) {
         const saved = await ChatHistory.load(key);
         if (saved && saved.length > 0) {
           chatHistories[key] = saved;
