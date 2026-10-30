@@ -1,4 +1,4 @@
-// gemini-tts-provider.js v1.6
+// gemini-tts-provider.js v1.7
 // このファイルはGemini TTS（gemini-3.8-flash-lite-tts / gemini-3.8-flash-tts）を中継Worker経由で呼ぶ読み上げプロバイダー
 // TTSProviderインターフェースに準拠（openai-tts-provider.js と同じ使い方）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
@@ -7,6 +7,8 @@
 // v1.5 2026-10-30 - 中継が upstream-ttfb（Googleのヘッダ到着）と upstream（本文読了）の2つを返すので両方読む（audio._ttsTtfbMs）
 // v1.6 2026-10-31 - stream:true を付けて送り、応答が audio/L16 なら PcmStreamPlayer で受け取りながら鳴らす（中継が未対応で WAV が来たら今まで通り）。
 //   0バイト/失敗は stream なしで送り直し。設定 cocomitalk-gemini-tts-stream='off' で止める。音程を変えないため stream 時は1.0倍で鳴らす
+// v1.7 2026-10-31 - クロ指摘(j): stream で !res.ok ならステータスを問わず1回だけ stream なし(WAV)で送り直し。
+//   (i): AudioContext が running の時だけ stream（止まっていたら WAV の <audio> で鳴らし、ended が来ないままマイクが戻らない事故を防ぐ）
 // v1.0 2026-10-28 - 新規作成。声が空なら例外を投げ、voice-output側がOpenAIへ戻す
 // v1.1 2026-10-28 - 5人の声が決定（割り当ては tts-provider.js の SISTER_VOICE_MAP.gemini / characters.js）。本ファイルのコード変更なし（コメントのみ）
 // v1.2 2026-10-28 - 場面ごとの話し方: options.style(英語の自由文・200字以内)を中継の style 欄で送る（tone-style.js が作る）。空なら送らない
@@ -86,7 +88,7 @@ class GeminiTTSProvider extends TTSProvider {
       if (a) return a;
       return this.synthesize(text, voice, { ...options, noStream: true }); // 0バイト/失敗 → WAV で送り直し
     }
-    if (wantStream && (res.status === 502 || res.status === 504)) { // 最初の音の前に失敗（中継は再試行しない）→ WAV で1回だけ
+    if (wantStream && !res.ok) { // v1.7: 400/429/502/504など何でも → stream なし(WAV)で1回だけ（noStream なのでそれ以上は繰り返さない）
       if (typeof VoiceFast !== 'undefined' && VoiceFast.tlog) VoiceFast.tlog(`⚠️ TTS stream ${res.status} → WAVで送り直し`);
       return this.synthesize(text, voice, { ...options, noStream: true });
     }
@@ -109,10 +111,12 @@ class GeminiTTSProvider extends TTSProvider {
     return audio; // 速さは呼び出し側が playbackRate で変える（Geminiは速度パラメータなし）
   }
 
-  /** stream の設定（既定ON。'off' で今まで通り）。AudioContext が無い環境では使わない */
+  /** stream の設定（既定ON。'off' で今まで通り）。AudioContext が無い/running でない時は使わない */
   static streamEnabled() {
     let off = false; try { off = localStorage.getItem(GeminiTTSProvider.STREAM_KEY) === 'off'; } catch (e) { /* 既定 */ }
-    return !off && typeof PcmStreamPlayer !== 'undefined' && !!PcmStreamPlayer.ctx();
+    if (off || typeof PcmStreamPlayer === 'undefined' || !PcmStreamPlayer.ctx()) return false;
+    PcmStreamPlayer.unlock(); // 次回のために起こしておく（resume は非同期なので今回は判定に使わない）
+    return PcmStreamPlayer.isRunning(); // v1.7: running の時だけ stream（suspended なら WAV）
   }
   static isPcm(res) { return /^audio\/l16\b/i.test((res.headers && res.headers.get && res.headers.get('Content-Type')) || ''); }
 
