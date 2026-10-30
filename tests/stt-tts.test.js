@@ -67,7 +67,7 @@ test('STT: 旧モデル停止日(2027-02-26)の翌日以降は戻さない', asy
   assert.equal(S.LEGACY_RETIRE, '2027-02-26');
 });
 
-test('STT: 無音区切りは 1.2/1.5/3/4/5 秒・既定1.5秒（v3.91で速く）', () => {
+test('STT: 無音区切りは 1.2/1.5/3/4/5 秒・既定1.5秒（v3.92で速く）', () => {
   const { S, storage } = stt({}, ok);
   assert.equal(S.getSilenceMs(), 1500);
   assert.equal(S.setSilenceMs(5000), 5000);

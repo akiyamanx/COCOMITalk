@@ -1,7 +1,8 @@
-// gemini-tts-provider.js v1.2
+// gemini-tts-provider.js v1.3
 // このファイルはGemini TTS（gemini-3.8-flash-lite-tts / gemini-3.8-flash-tts）を中継Worker経由で呼ぶ読み上げプロバイダー
 // TTSProviderインターフェースに準拠（openai-tts-provider.js と同じ使い方）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// v1.3 2026-10-30 - ⏱用に audio._ttsModel / _ttsBytes を付ける（音声の中身・送り方は変更なし）
 // v1.0 2026-10-28 - 新規作成。声が空なら例外を投げ、voice-output側がOpenAIへ戻す
 // v1.1 2026-10-28 - 5人の声が決定（割り当ては tts-provider.js の SISTER_VOICE_MAP.gemini / characters.js）。本ファイルのコード変更なし（コメントのみ）
 // v1.2 2026-10-28 - 場面ごとの話し方: options.style(英語の自由文・200字以内)を中継の style 欄で送る（tone-style.js が作る）。空なら送らない
@@ -78,6 +79,7 @@ class GeminiTTSProvider extends TTSProvider {
     audio.addEventListener('error', () => URL.revokeObjectURL(url));
     audio._ttsVoice = voice;
     audio._ttsProvider = 'gemini';
+    audio._ttsModel = model; audio._ttsBytes = buf.byteLength;
     return audio; // 速さは呼び出し側が playbackRate で変える（Geminiは速度パラメータなし）
   }
 

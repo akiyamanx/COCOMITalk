@@ -323,6 +323,7 @@ const ChatCore = (() => {
       }
 
       if (window.voiceController && window.voiceController.isEnabled()) {
+        if (typeof VoiceFast !== 'undefined') VoiceFast.tlog(`🗣 読み上げへ渡す ${reply.length}字`);
         window.voiceController.speakResponse(reply, currentSister);
       }
       // v2.4 約束だけで止まった返事 → 1回だけ自動で続き（隠し指示は履歴に入れない）

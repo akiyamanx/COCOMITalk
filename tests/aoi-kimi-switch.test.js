@@ -1,4 +1,4 @@
-// COCOMITalk - 葵/きみに1対1で切り替えられることの回帰テスト（v3.91）
+// COCOMITalk - 葵/きみに1対1で切り替えられることの回帰テスト（v3.92）
 // このファイルは「葵/きみの札を押しても話す子が変わらない」不具合(隠しタブ.tabが三姉妹分しか無かった)の再発防止
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
@@ -42,7 +42,7 @@ test('1対1の切替: switchSister(aoi/kimi) で今の子・入力欄の案内�
   assert.equal(e.ChatCore.getCurrentSister(), 'koko');
 });
 
-test('配線: app.js がタブを足し(tabsToAdd)、色(テーマ・CSS)と声(Leda/Zephyr)が葵/きみにもある。sw v3.91', () => {
+test('配線: app.js がタブを足し(tabsToAdd)、色(テーマ・CSS)と声(Leda/Zephyr)が葵/きみにもある。sw v3.92', () => {
   const app = read('app.js');
   assert.match(app, /CharacterRegistry\.tabsToAdd\(/);
   assert.match(app, /aoi: _theme\('aoi'\), kimi: _theme\('kimi'\)/);
@@ -51,5 +51,5 @@ test('配線: app.js がタブを足し(tabsToAdd)、色(テーマ・CSS)と声(
   assert.match(read('tts-provider.js'), /aoi: +\{ gemini: \{ voice: 'Leda'/);
   assert.match(read('tts-provider.js'), /kimi: \{ gemini: \{ voice: 'Zephyr'/);
   assert.doesNotMatch(read('chat-core.js'), /for \(const key of \['koko', 'gpt', 'claude'\]\)/);
-  assert.ok(read('sw.js').includes("'cocomitalk-v3.91'"));
+  assert.ok(read('sw.js').includes("'cocomitalk-v3.92'"));
 });

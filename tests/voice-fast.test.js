@@ -1,4 +1,4 @@
-// COCOMITalk - 音声の速さ改善(v3.91)のテスト（voice-fast.js / voice-output.js / voice-input.js / stt-model.js / chat-core.js）
+// COCOMITalk - 音声の速さ改善(v3.92)のテスト（voice-fast.js / voice-output.js / voice-input.js / stt-model.js / chat-core.js）
 // このファイルは node --test tests/ で実行する。ハウリング防止（再生中はマイクを開けない・1.5秒待ち・こだま除け）も確かめる
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
@@ -113,14 +113,14 @@ function env() {
 
 test('最初の1文を先に鳴らし、鳴っている間に次を先読み。文の間もずっと「話し中」（マイクを開けない）', async () => {
   const x = env();
-  const text = 'こんにちは、今日もいい天気だね。お散歩に行くならお昼過ぎがちょうどいいと思うよ。帽子と水筒を忘れずに持っていってね。';
+  const text = 'こんにちは、今日もいい天気だね。お散歩に行くならお昼過ぎがちょうどいいと思うよ。帽子と水筒を忘れずに持っていってね。帰ってきたら、どんなお花が咲いていたか、どんな人に会ったか、ゆっくり聞かせてほしいな。楽しみに待ってるね。';
   const p = x.m.speak(text, 'koko');
   await tick(5);
-  assert.equal(x.synths.length, 1);
-  assert.equal(x.synths[0].text, 'こんにちは、今日もいい天気だね。', '最初の1文だけ先に作る');
+  assert.equal(x.synths.length, 2, '最初から2つ同時に作る');
+  assert.equal(x.synths[0].text, 'こんにちは、今日もいい天気だね。', '1つ目は短い1文');
   x.synths[0].ok(); await tick(5);
-  assert.equal(x.ev.filter(e => e.startsWith('play')).length, 1, '1文目がすぐ鳴る');
-  assert.equal(x.synths.length, 2, '鳴っている間に次を先読みしている');
+  assert.equal(x.ev.filter(e => e.startsWith('play')).length, 1, '1つ目ができたらすぐ鳴る');
+  assert.equal(x.synths.length, 3, '1つ目ができたら3つ目も作り始める');
   x.synths[1].ok(); await tick(5);
   assert.equal(x.m.isPlaying(), true);
   x.audios[0].end(); await tick(5);
@@ -133,6 +133,26 @@ test('最初の1文を先に鳴らし、鳴っている間に次を先読み。�
   assert.ok(x.ev.filter(e => e === 'end' || e === 'qend').length >= 1);
   assert.equal(x.m.isPlaying(), false);
   assert.equal(x.V.isEcho('お散歩に行くならお昼過ぎがちょうどいい'), true, '話した文はこだま除けに記録');
+});
+
+test('読み上げの分け方: 1つ目は30字以内の自然な切れ目・絵文字は読まない・。が無くても分かれる', () => {
+  const { V } = vf();
+  const c = V.ttsClean('わぁ、いいね✨今日はお散歩に行ったんだね！楽しかった？どこまで行ったのかな、また教えてね♪');
+  assert.ok(!/✨/.test(c));
+  const a = V.splitForTTS(c);
+  assert.ok(a.length >= 2 && a[0].length <= 30, JSON.stringify(a));
+  const b = V.splitForTTS('うんうん、それはね、昨日のお話の続きなんだけど、ちょっと長くなっちゃうかもしれないけど聞いてね');
+  assert.ok(b.length >= 2 && b[0].length <= 30 && b[0].endsWith('、'), JSON.stringify(b));
+  assert.equal(V.splitForTTS('えっと…そうだねぇ…たぶん大丈夫だよ！').join(''), 'えっと…そうだねぇ…たぶん大丈夫だよ！', '文字は欠けない');
+  const long = 'あ'.repeat(40) + '。' + 'い'.repeat(100) + '。' + 'う'.repeat(100) + '。';
+  assert.equal(V.splitForTTS(long).join(''), long);
+  assert.equal(V.ttsClean('🌸こんにちは🎉'), 'こんにちは');
+});
+
+test('ハウリング防止は据え置き: 再生前の固定待ちを足していない・再開1500ms・こだま除け', () => {
+  const o = src('voice-output.js');
+  assert.ok(!/setTimeout\([^)]*\d{3,}\)[\s\S]{0,80}play\(\)/.test(o));
+  assert.match(src('voice-input.js'), /1500\)/);
 });
 
 test('CI: voice-fast.js は sw.js と index.html に入っていて、ヘッダと行数上限を守る', () => {
