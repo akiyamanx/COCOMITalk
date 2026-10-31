@@ -1,4 +1,4 @@
-// COCOMITalk - Gemini TTS を受け取りながら鳴らす(v3.96・v3.97)のテスト（pcm-stream-player.js / gemini-tts-provider.js v1.6）
+// COCOMITalk - Gemini TTS を受け取りながら鳴らす(v3.96〜v3.98)のテスト（pcm-stream-player.js / gemini-tts-provider.js v1.6〜v1.8）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 'use strict';
 const test = require('node:test');
@@ -108,8 +108,8 @@ test("provider: 設定 'off' なら stream を送らない", async () => {
   assert.equal(calls[0].body.stream, undefined);
 });
 
-test('v3.97(j): stream で 400/429/401/403(502)/504 など !ok なら必ず1回だけ WAV で送り直す', async () => {
-  for (const status of [400, 401, 403, 429, 500, 502, 504]) {
+test('v3.97(j): stream で 400/401/403/500/502/504 など !ok(429以外) なら必ず1回だけ WAV で送り直す', async () => {
+  for (const status of [400, 401, 403, 500, 502, 504]) {
     const { g, calls } = provider([{ ok: false, status, headers: hdr({}), json: async () => ({}) }, wavRes()]);
     const a = await g.synthesize('やあ', 'Kore', {});
     assert.equal(calls.length, 2, `status ${status}`); assert.equal(calls[0].body.stream, true); assert.equal(calls[1].body.stream, undefined); assert.equal(a.src, 'blob:x');
@@ -118,8 +118,8 @@ test('v3.97(j): stream で 400/429/401/403(502)/504 など !ok なら必ず1回�
 
 test('v3.97(j): 送り直し(WAV)も失敗したらそれ以上は繰り返さずエラー', async () => {
   const bad = (s) => ({ ok: false, status: s, headers: hdr({}), json: async () => ({ error: 'x' + s }) });
-  const { g, calls } = provider([bad(429), bad(429), wavRes()]);
-  await assert.rejects(g.synthesize('やあ', 'Kore', {}), /x429/);
+  const { g, calls } = provider([bad(500), bad(503), wavRes()]);
+  await assert.rejects(g.synthesize('やあ', 'Kore', {}), /x503/);
   assert.equal(calls.length, 2);
   const p2 = provider([pcmRes([]), bad(500), wavRes()]);
   await assert.rejects(p2.g.synthesize('やあ', 'Kore', {}));
@@ -137,4 +137,31 @@ test('v3.97(i): PcmStreamPlayer.isRunning は state===running の時だけ true'
   const ctx = fakeCtx(); const p = P({ window: { AudioContext: function () { return ctx; } } });
   assert.equal(p.isRunning(), false); p.ctx(); assert.equal(p.isRunning(), true);
   ctx.state = 'suspended'; assert.equal(p.isRunning(), false);
+});
+
+// ---- v3.98(j'): 429 は送り直さず、しばらく Google を呼ばない ----
+const r429 = (ra) => ({ ok: false, status: 429, headers: hdr(ra == null ? {} : { 'retry-after': ra }), json: async () => ({ error: 'rate' }) });
+test("v3.98(j'): stream で 429 → WAV で送り直さずエラー（呼び出しは1回）", async () => {
+  const { g, calls } = provider([r429('5'), wavRes()]);
+  await assert.rejects(g.synthesize('やあ', 'Kore', {}), /429/);
+  assert.equal(calls.length, 1); assert.ok(g.inCooldown());
+});
+test("v3.98(j'): Retry-After 秒の間は fetch せずすぐ例外、過ぎたらまた呼ぶ", async () => {
+  const { g, calls } = provider([r429('5'), wavRes()]);
+  const t = Date.now();
+  await assert.rejects(g.synthesize('やあ', 'Kore', {}));
+  assert.ok(Math.abs(g._cooldownUntil - (t + 5000)) < 1000);
+  await assert.rejects(g.synthesize('もう一回', 'Kore', {}), /待ち中/);
+  assert.equal(calls.length, 1, '待ち中は Google（中継）を呼ばない');
+  g._cooldownUntil = Date.now() - 1;
+  const a = await g.synthesize('やあ', 'Kore', { noStream: true });
+  assert.equal(a.src, 'blob:x'); assert.equal(calls.length, 2);
+});
+test("v3.98(j'): Retry-After が無い/読めない時は20秒、WAV(noStream)の429でも同じ", async () => {
+  for (const ra of [null, 'abc']) {
+    const { g } = provider([r429(ra)]);
+    const t = Date.now();
+    await assert.rejects(g.synthesize('やあ', 'Kore', { noStream: true }), /429/);
+    assert.ok(Math.abs(g._cooldownUntil - (t + 20000)) < 1000, String(ra));
+  }
 });

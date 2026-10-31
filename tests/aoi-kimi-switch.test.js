@@ -51,5 +51,5 @@ test('配線: app.js がタブを足し(tabsToAdd)、色(テーマ・CSS)と声(
   assert.match(read('tts-provider.js'), /aoi: +\{ gemini: \{ voice: 'Leda'/);
   assert.match(read('tts-provider.js'), /kimi: \{ gemini: \{ voice: 'Zephyr'/);
   assert.doesNotMatch(read('chat-core.js'), /for \(const key of \['koko', 'gpt', 'claude'\]\)/);
-  assert.ok(read('sw.js').includes("'cocomitalk-v3.97'"));
+  assert.ok(read('sw.js').includes("'cocomitalk-v3.98'"));
 });

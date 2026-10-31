@@ -1,4 +1,4 @@
-// gemini-tts-provider.js v1.7
+// gemini-tts-provider.js v1.8
 // このファイルはGemini TTS（gemini-3.8-flash-lite-tts / gemini-3.8-flash-tts）を中継Worker経由で呼ぶ読み上げプロバイダー
 // TTSProviderインターフェースに準拠（openai-tts-provider.js と同じ使い方）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
@@ -9,6 +9,8 @@
 //   0バイト/失敗は stream なしで送り直し。設定 cocomitalk-gemini-tts-stream='off' で止める。音程を変えないため stream 時は1.0倍で鳴らす
 // v1.7 2026-10-31 - クロ指摘(j): stream で !res.ok ならステータスを問わず1回だけ stream なし(WAV)で送り直し。
 //   (i): AudioContext が running の時だけ stream（止まっていたら WAV の <audio> で鳴らし、ended が来ないままマイクが戻らない事故を防ぐ）
+// v1.8 2026-10-31 - クロ宿題(j'): 429 は WAV で送り直さない。Retry-After 秒（無ければ20秒）の間は Google を呼ばずにすぐ例外
+//   → voice-output の既存フォールバック（OpenAI の声）が使われる。待ち時間はこのプロバイダーの _cooldownUntil に持つ
 // v1.0 2026-10-28 - 新規作成。声が空なら例外を投げ、voice-output側がOpenAIへ戻す
 // v1.1 2026-10-28 - 5人の声が決定（割り当ては tts-provider.js の SISTER_VOICE_MAP.gemini / characters.js）。本ファイルのコード変更なし（コメントのみ）
 // v1.2 2026-10-28 - 場面ごとの話し方: options.style(英語の自由文・200字以内)を中継の style 欄で送る（tone-style.js が作る）。空なら送らない
@@ -69,6 +71,7 @@ class GeminiTTSProvider extends TTSProvider {
     if (!text || text.trim().length === 0) throw new Error('テキストが空です');
     if (!voice) throw new Error('Gemini TTSの声が未割り当てです');
     if (typeof ApiCommon === 'undefined' || !ApiCommon.hasAuthToken()) throw new Error('Worker URLまたは認証トークンが未設定です');
+    if (this.inCooldown()) throw new Error('Gemini TTS 429 待ち中（Googleは呼ばない）'); // v1.8
 
     const model = options.model || GeminiTTSProvider.modelId();
     const sendText = text.substring(0, GeminiTTSProvider.MAX_TEXT);
@@ -87,6 +90,11 @@ class GeminiTTSProvider extends TTSProvider {
       const a = await this._streamAudio(res, ac, { text: sendText, voice, model, style, t0 });
       if (a) return a;
       return this.synthesize(text, voice, { ...options, noStream: true }); // 0バイト/失敗 → WAV で送り直し
+    }
+    if (res.status === 429) { // v1.8: 送り直さない。しばらく Gemini TTS を休む
+      const sec = this._noteRateLimit(res);
+      if (typeof VoiceFast !== 'undefined' && VoiceFast.tlog) VoiceFast.tlog(`⚠️ TTS 429 → ${sec}秒 Gemini TTS を休む（OpenAIの声へ）`);
+      throw new Error('Gemini TTS エラー: 429');
     }
     if (wantStream && !res.ok) { // v1.7: 400/429/502/504など何でも → stream なし(WAV)で1回だけ（noStream なのでそれ以上は繰り返さない）
       if (typeof VoiceFast !== 'undefined' && VoiceFast.tlog) VoiceFast.tlog(`⚠️ TTS stream ${res.status} → WAVで送り直し`);
@@ -109,6 +117,17 @@ class GeminiTTSProvider extends TTSProvider {
     const st = res.headers && res.headers.get ? res.headers.get('Server-Timing') : '';
     audio._ttsUpstreamMs = GeminiTTSProvider.upstreamMs(st); audio._ttsTtfbMs = GeminiTTSProvider.upstreamMs(st, 'upstream-ttfb');
     return audio; // 速さは呼び出し側が playbackRate で変える（Geminiは速度パラメータなし）
+  }
+
+  /** v1.8: 429 の待ち時間中か */
+  inCooldown(now = Date.now()) { return !!this._cooldownUntil && now < this._cooldownUntil; }
+  /** v1.8: Retry-After（秒）を読んで待ち終わりを記録。読めなければ20秒。返り値は秒 */
+  _noteRateLimit(res) {
+    const h = res.headers && res.headers.get ? res.headers.get('Retry-After') : null;
+    const n = Number(h);
+    const sec = (h != null && h !== '' && Number.isFinite(n) && n > 0) ? Math.min(n, 600) : GeminiTTSProvider.COOLDOWN_DEFAULT_SEC;
+    this._cooldownUntil = Date.now() + sec * 1000;
+    return sec;
   }
 
   /** stream の設定（既定ON。'off' で今まで通り）。AudioContext が無い/running でない時は使わない */
@@ -150,6 +169,7 @@ class GeminiTTSProvider extends TTSProvider {
 
 GeminiTTSProvider.QUALITY_KEY = 'cocomitalk-gemini-tts-quality';
 GeminiTTSProvider.STREAM_KEY = 'cocomitalk-gemini-tts-stream'; // v1.6: 'off' で受け取りながら再生を止める
+GeminiTTSProvider.COOLDOWN_DEFAULT_SEC = 20; // v1.8: Retry-After が無い時の休み（秒）
 GeminiTTSProvider.MAX_STYLE = 200; // 中継の上限と同じ
 GeminiTTSProvider.MAX_TEXT = 1500; // 中継側にも同じ上限（提案パッチ）。voice-outputが150〜200字ごとに分割するので余裕あり
 GeminiTTSProvider.PREBUILT_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe',

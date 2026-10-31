@@ -2,6 +2,7 @@
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v3.43 2026-04-06 - お散歩モード改善（会話ラリー一時停止+表示/送信分離）
 // v3.60 2026-07-17 - お散歩ゲートPoC A反映（voice-sender v1.1 / vision-ui v1.5 / chat-core v2.2）
+// v3.98 2026-10-31 - クロ宿題(j'): Gemini TTS 429 は送り直さず Retry-After(既定20秒)の間 OpenAI の声へ（gemini-tts-provider v1.8）
 // v3.61 2026-07-17 - バッファ待ち窓修正反映（voice-sender v1.2 / vision-ui v1.5.1） / v3.95 (本体変更なし) ⏱にGoogleのヘッダ到着(upstream-ttfb)・送り直し回数を出す版（api-common v0.13 / api-claude v2.2 / gemini-tts-provider v1.5） / v3.96 2026-10-31 - Gemini TTSを受け取りながら鳴らす(stream, pcm-stream-player.js新規 / gemini-tts-provider v1.6 / voice-output ⏱表示のみ) / v3.97 2026-10-31 - クロ指摘: stream失敗は状態を問わずWAVで1回送り直し・AudioContextがrunningの時だけstream（gemini-tts-provider v1.7）
 // v3.63 2026-10-28 - 思考の強さ/STTモデル/Gemini TTS追加（model-effort/effort-settings-ui/stt-model/gemini-tts-provider）
 // v3.64 2026-10-28 - 5人のGemini TTSの声を割り当て（characters.js / tts-provider.js）
@@ -36,7 +37,7 @@
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
-const CACHE_NAME = 'cocomitalk-v3.97';
+const CACHE_NAME = 'cocomitalk-v3.98';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
