@@ -5,18 +5,19 @@
 // v1.3 2026-03-24 - 分割ボタン対応（fileType引数でCLAUDE.md/設計書/指示書を個別生成可能に）
 // v1.4 2026-03-24 - エラー詳細表示強化（デバッグ情報をチャットに表示、改行をスペースに変換）
 // v3.77 2026-10-29 - 姉妹の色を彩度控えめに
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
 /** 会議ドキュメントアクションモジュール */
 const MeetingDocActions = (() => {
 
   // 姉妹表示情報（MeetingUIと共通）
-  // 2026-10-30 - 登録簿から作る（葵・きみも同じ表示に）。登録簿が無い時だけ従来の3人
+  // 2026-10-30 - 登録簿から作る（葵・きみも同じ表示に）。登録簿が無い時だけ固定の5人
   const SISTER_DISPLAY = (typeof CharacterRegistry !== 'undefined') ? CharacterRegistry.displayMap() : {
     koko: { name: 'ここちゃん', emoji: '🌸', color: '#E8779F' },
     gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#7469D4' },
     claude: { name: 'クロちゃん', emoji: '🔮', color: '#DB8250' },
+    aoi: { name: '葵ちゃん', emoji: '🦋', color: '#3BA7D9' }, kimi: { name: 'きみちゃん', emoji: '🌟', color: '#E0A21B' }, // 2026-11-01 5人に
   };
 
   /** システムメッセージ表示ヘルパー（MeetingUI.addSystemMessage委譲） */

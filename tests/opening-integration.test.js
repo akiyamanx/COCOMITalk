@@ -116,14 +116,14 @@ test('ファイルが存在し、500行以内・冒頭5行に「このファイ�
     assert.ok(/v[0-9]+\.[0-9]+/.test(s), `${f} にバージョン表記`);
     assert.ok(/作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-29/.test(head), `${f} 作成者表記`);
   }
-  for (const f of ['app.js', 'sw.js', 'index.html']) assert.ok(/最終更新: 葵\(Aoi\), 2026-10-(29|30|31)/.test(read(f)), f);
+  for (const f of ['app.js', 'sw.js', 'index.html']) assert.ok(/最終更新: 葵\(Aoi\), 2026-(10-(29|30|31)|11-01)/.test(read(f)), f);
 });
 
-test('sw.js: CACHE_FILES に4ファイルが入り、キャッシュ名は cocomitalk-v4.4（v3.75は残っていない）', () => {
+test('sw.js: CACHE_FILES に4ファイルが入り、キャッシュ名は cocomitalk-v4.5（v3.75は残っていない）', () => {
   const sw = read('sw.js');
   const files = sw.slice(sw.indexOf('const CACHE_FILES'), sw.indexOf('const CACHE_FONTS'));
   for (const f of ALL) assert.ok(files.includes(`'./${f}'`), f);
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.4';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.5';"));
   assert.ok(!sw.includes("const CACHE_NAME = 'cocomitalk-v3.75'"));
 });
 

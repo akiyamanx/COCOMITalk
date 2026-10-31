@@ -177,7 +177,7 @@ test('配線: index/sw に whisper-preread.js・voice-prep.js（provider/recover
   const i = n => html.indexOf(`<script src="${n}"></script>`);
   assert.ok(i('whisper-recovery.js') < i('whisper-preread.js') && i('whisper-preread.js') < i('voice-prep.js') && i('voice-prep.js') > 0);
   const sw = src('sw.js');
-  assert.ok(sw.includes("'./whisper-preread.js'") && sw.includes("'./voice-prep.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.4';"));
+  assert.ok(sw.includes("'./whisper-preread.js'") && sw.includes("'./voice-prep.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.5';"));
 });
 
 // ---- v4.3 雑音ハルシネーション除け ----

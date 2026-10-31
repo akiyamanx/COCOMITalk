@@ -11,7 +11,7 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-  <!-- 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30 （太字補正: md-fix.js追加／最新の会話へボタン: scroll-latest.js追加／目が動く小さな顔: mascot-eyes.js / mascot-eyes.css追加／起動オープニング: opening*.js / opening.css追加／モデル3段階化: model-tiers.js等のscript追加／お散歩費用上限: walk-spend*.js追加／画面レイアウト: layout-*.css・layout-ui.js追加・設定sectionにid／レイアウトv2: layout2-*追加・model-indicatorの直書き文字を中立に） -->
+  <!-- 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01 （会議Phase A: meeting-procedure.js / meeting-result.js / meeting-share.js追加・📤結果を共有ボタン／太字補正: md-fix.js追加／最新の会話へボタン: scroll-latest.js追加／目が動く小さな顔: mascot-eyes.js / mascot-eyes.css追加／起動オープニング: opening*.js / opening.css追加／モデル3段階化: model-tiers.js等のscript追加／お散歩費用上限: walk-spend*.js追加／画面レイアウト: layout-*.css・layout-ui.js追加・設定sectionにid／レイアウトv2: layout2-*追加・model-indicatorの直書き文字を中立に） -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#4A76A8">
@@ -208,6 +208,7 @@
         <p id="meeting-action-guide" class="meeting-action-guide">✅ ラウンド完了！次はどうする？</p>
         <div class="meeting-action-row">
           <button id="btn-meeting-continue" class="meeting-action-btn meeting-btn-continue">🔄 追加指示して続ける</button>
+          <button id="btn-meeting-share" class="meeting-action-btn meeting-btn-continue" title="書記のまとめ（結果のMarkdownだけ）を共有">📤 結果を共有</button>
           <button id="btn-meeting-end" class="meeting-action-btn meeting-btn-end">✕ 会議終了</button>
         </div>
       </div>
@@ -397,6 +398,7 @@
   <script src="prompts/claude-system.js"></script>
   <script src="prompts/aoi-system.js"></script>
   <script src="prompts/kimi-system.js"></script>
+  <script src="prompts/meeting-procedure.js"></script>
   <!-- v2.x 2026-10-28 追加 - モデル3段階・キャラ登録簿・設定移行（mode-switcher/api-*より前に読む） -->
   <script src="model-tiers.js"></script>
   <script src="model-effort.js"></script>
@@ -423,6 +425,8 @@
   <script src="meeting-memory.js"></script>
   <script src="chat-memory.js"></script>
   <script src="meeting-relay.js"></script>
+  <script src="meeting-result.js"></script>
+  <script src="meeting-share.js"></script>
   <script src="meeting-doc-actions.js"></script>
   <script src="meeting-ui.js"></script>
   <script src="meeting-archive-ui.js"></script>

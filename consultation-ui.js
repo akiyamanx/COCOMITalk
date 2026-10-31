@@ -7,6 +7,8 @@
 // v1.1 2026-03-28 - バグ修正: 議題テキスト短縮＋会議自動開始＋回答ダイアログ条件修正
 // v1.2 2026-03-28 - バグ修正: 会議開始後に通知バーが再表示される問題＋resolve後のバー非表示
 // v1.3 2026-03-28 - バグ修正: 回答選択後にcloseMeetingScreen()を呼んで画面を閉じる
+// v1.4 2026-11-01 - 相談回答を書記のまとめ（cocomi.meeting.v1: 結果MD＋JSON＋議事ログ）に。3人だけの名前表を廃止（登録簿へ）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
 /** 相談トピック連携UIモジュール */
@@ -224,16 +226,11 @@ const ConsultationUI = (() => {
     if (_dialogEl) _dialogEl.classList.add('hidden');
     if (!_currentConsultation) return;
 
+    // v1.4 2026-11-01 - 生ログ連結をやめ、書記のまとめ（cocomi.meeting.v1）の結果MD＋JSONブロック＋議事ログにする（名前は登録簿から）
     let resolution = '';
-    if (typeof MeetingRelay !== 'undefined') {
-      const history = MeetingRelay.getHistory();
-      if (history && history.length > 0) {
-        resolution = history.map(msg => {
-          const name = (typeof CharacterRegistry !== 'undefined') ? CharacterRegistry.info(msg.sister).name
-            : ({ koko: 'ここちゃん', gpt: 'お姉ちゃん', claude: 'クロちゃん' }[msg.sister] || msg.sister);
-          return `【${name}】\n${msg.content}`;
-        }).join('\n\n---\n\n');
-      }
+    if (typeof MeetingRelay !== 'undefined' && typeof MeetingShare !== 'undefined' && typeof MeetingResult !== 'undefined') {
+      const out = await MeetingShare.getResult({ topic: _currentConsultation.topic, consultationId: _currentConsultation.id });
+      if (out) resolution = MeetingResult.toResolution({ ...out.result, consultation_id: _currentConsultation.id }, MeetingRelay.getHistory());
     }
 
     _downloadResolution(resolution);
@@ -278,7 +275,7 @@ const ConsultationUI = (() => {
     if (c._akiyaComment) {
       md += `## アキヤの補足\n\n${c._akiyaComment}\n\n`;
     }
-    md += `## 三姉妹の回答\n\n${resolution || '（会議が実行されませんでした）'}\n`;
+    md += `## 会議の結果\n\n${resolution || '（会議が実行されませんでした）'}\n`;
 
     const blob = new Blob([md], { type: 'text/markdown; charset=utf-8' });
     const url = URL.createObjectURL(blob);

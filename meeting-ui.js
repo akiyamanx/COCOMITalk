@@ -7,17 +7,18 @@
 // v1.9 2026-04-05 - ワイワイモード: meeting-full時のスタイルボタングレーアウト制御追加
 // v3.77 2026-10-29 - 姉妹の色を彩度控えめに
 // v3.86 2026-10-30 - 太字補正: _renderMarkdownをMdFix.render（md-fix.js）経由に
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
 /** 会議UIモジュール */
 const MeetingUI = (() => {
 
-  // 2026-10-30 - 登録簿から作る（葵・きみも同じ表示に）。登録簿が無い時だけ従来の3人
+  // 2026-10-30 - 登録簿から作る（葵・きみも同じ表示に）。登録簿が無い時だけ固定の5人
   const SISTER_DISPLAY = (typeof CharacterRegistry !== 'undefined') ? CharacterRegistry.displayMap() : {
     koko: { name: 'ここちゃん', emoji: '🌸', color: '#E8779F' },
     gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#7469D4' },
     claude: { name: 'クロちゃん', emoji: '🔮', color: '#DB8250' },
+    aoi: { name: '葵ちゃん', emoji: '🦋', color: '#3BA7D9' }, kimi: { name: 'きみちゃん', emoji: '🌟', color: '#E0A21B' }, // 2026-11-01 5人に
   };
 
   let meetingScreen = null;
