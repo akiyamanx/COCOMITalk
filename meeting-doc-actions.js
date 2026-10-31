@@ -5,6 +5,7 @@
 // v1.3 2026-03-24 - 分割ボタン対応（fileType引数でCLAUDE.md/設計書/指示書を個別生成可能に）
 // v1.4 2026-03-24 - エラー詳細表示強化（デバッグ情報をチャットに表示、改行をスペースに変換）
 // v3.77 2026-10-29 - 姉妹の色を彩度控えめに
+// v1.5 2026-11-01 - 議事録の日付をJSTに（UTC日付＋JST時刻のずれ修正）・二重保存防止（処理中はボタン無効、同じ会議の2回目は「もう保存したよ」・10秒以内にもう一度で保存し直し）・クロのチェック失敗理由を表示
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
@@ -40,6 +41,36 @@ const MeetingDocActions = (() => {
     URL.revokeObjectURL(url);
   }
 
+  /** v1.5 - 日本時間(JST)の 'YYYY-MM-DD' と 'HH:MM'（端末のタイムゾーンに左右されない） */
+  function jstParts(ms = Date.now()) {
+    const iso = new Date(ms + 9 * 3600 * 1000).toISOString();
+    return { date: iso.slice(0, 10), time: iso.slice(11, 16) };
+  }
+
+  // v1.5 - 二重保存防止。kind(minutes / doc:all 等) → { key, warnedAt }
+  const RESAVE_WINDOW_MS = 10000;
+  const _saved = {};
+  const _busy = {};
+  /** 会議ID＋発言数で「同じ内容」を判定 */
+  function _contentKey(history) {
+    const id = (typeof MeetingRelay !== 'undefined' && MeetingRelay.getCurrentMeetingId) ? MeetingRelay.getCurrentMeetingId() : '';
+    return `${id || 'none'}#${history.length}`;
+  }
+  /** 保存してよいか。同じ内容の2回目は「もう保存したよ」、そのあと10秒以内にもう一度押したら保存し直す */
+  function _allowSave(kind, key, now = Date.now()) {
+    const s = _saved[kind];
+    if (!s || s.key !== key) return true;
+    if (s.warnedAt && now - s.warnedAt <= RESAVE_WINDOW_MS) { s.warnedAt = 0; return true; }
+    s.warnedAt = now;
+    _sysMsg('✅ もう保存したよ（同じ会議・同じ内容）。保存し直したい時は10秒以内にもう一回押してね');
+    return false;
+  }
+  function _markSaved(kind, key) { _saved[kind] = { key, warnedAt: 0 }; }
+  function _setBtn(id, disabled) {
+    const b = (typeof document !== 'undefined') ? document.getElementById(id) : null;
+    if (b) b.disabled = disabled;
+  }
+
   /** 議事録をMarkdownでダウンロード */
   function downloadMinutes(currentRouting) {
     if (typeof MeetingRelay === 'undefined') return;
@@ -48,10 +79,19 @@ const MeetingDocActions = (() => {
       _sysMsg('まだ発言がないよ。会議を始めてからダウンロードしてね');
       return;
     }
+    if (_busy.minutes) return;
+    const key = _contentKey(history);
+    if (!_allowSave('minutes', key)) return;
+    _busy.minutes = true;
+    _setBtn('btn-meeting-minutes', true);
+    try { _writeMinutes(history, currentRouting); _markSaved('minutes', key); } finally {
+      _busy.minutes = false;
+      _setBtn('btn-meeting-minutes', false);
+    }
+  }
 
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
-    const timeStr = now.toTimeString().slice(0, 5);
+  function _writeMinutes(history, currentRouting) {
+    const { date: dateStr, time: timeStr } = jstParts();
     let md = `# COCOMI Family 会議議事録\n`;
     md += `- 日時: ${dateStr} ${timeStr}\n`;
     if (currentRouting) {
@@ -90,6 +130,14 @@ const MeetingDocActions = (() => {
       return;
     }
 
+    if (_busy.doc || (DocGenerator.isGenerating && DocGenerator.isGenerating())) {
+      _sysMsg('⏳ いま指示書を作っているよ。終わるまで待ってね');
+      return;
+    }
+    const kind = `doc:${fileType}`;
+    const key = _contentKey(history);
+    if (!_allowSave(kind, key)) return;
+
     // 会議履歴をDocGeneratorが受け取れる形式に変換
     const chatMessages = history.map(msg => {
       const sister = SISTER_DISPLAY[msg.sister] || { name: msg.sister };
@@ -104,9 +152,12 @@ const MeetingDocActions = (() => {
     const label = LABEL_MAP[fileType] || '指示書';
     _sysMsg(`📋 ${label}を生成中... お姉ちゃんが作成→クロちゃんがチェック`);
 
+    _busy.doc = true;
+    _setBtn('btn-meeting-doc', true);
     try {
       const result = await DocGenerator.generate(chatMessages, fileType);
       if (result.success && result.files.length > 0) {
+        _markSaved(kind, key);
         // v1.2 - 多ファイル時の案内（上位モデルだと7-9ファイルになることがある）
         if (result.files.length > 3) {
           _sysMsg(`📋 ${result.files.length}ファイル生成完了！順番にダウンロードするよ（Chromeの「複数ダウンロード許可」が出たら許可してね）`);
@@ -127,12 +178,17 @@ const MeetingDocActions = (() => {
         // v1.3 - クロちゃんチェックがスキップされた場合の丁寧な案内
         if (result.reviewSkipped) {
           _sysMsg('⚠️ お姉ちゃん版です。クロちゃん復旧後に再チェックしてね');
+          // v1.5 - どのファイルが・なぜ（HTTP番号/種類）失敗したかを表示（秘密は含めない）
+          for (const f of (result.reviewFailures || [])) _sysMsg(`🔍 クロのチェック失敗: ${f.file} → ${f.reason}`);
         }
       }
     } catch (error) {
       // v1.4修正 - エラー詳細をチャットに丁寧に表示（改行をスペースに変換して1行で見やすく）
       const cleanMsg = (error.message || String(error)).replace(/\n/g, ' ');
       _sysMsg(`❌ ${label}生成エラー: ${cleanMsg}`);
+    } finally {
+      _busy.doc = false;
+      _setBtn('btn-meeting-doc', false);
     }
   }
 
@@ -145,5 +201,7 @@ const MeetingDocActions = (() => {
     downloadMinutes,
     generateDoc,
     getSisterDisplay,
+    jstParts,
+    _allowSave, _markSaved, // テスト用
   };
 })();

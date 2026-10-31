@@ -5,7 +5,8 @@
 /* v1.1 2026-10-28 - グループの帯の札をタップ可能に（44px・選択中=二重の輪＋✓。話している子の光とは別） */
 /* v1.2 2026-10-28 - 帯に準備中の札(淡く・点線・「準備中」札)を追加。札の列を横スクロールにして🔄つづきは列の外(右端に固定) */
 /* v1.3 2026-10-29 - 配色を落ち着いた青に（キャラ名札だけ選んだ子の色=--sister-*。影・文字を青みのニュートラルへ。色のみ） */
-/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
+/* v1.4 2026-11-01 - 会議の入力欄の送信ボタン(▶)が lx2 の「文字が無い時は送信を隠す」規則で常に隠れていた→会議画面では常に表示 */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01 */
 
 /* ===== 上の細い帯: ☰ | 今のキャラ▾ | ⋯ ===== */
 html.lx2 .app-header { height: 52px; min-height: 52px; padding: var(--lx-sat) 6px 0; gap: 4px; box-sizing: content-box; }
@@ -168,3 +169,5 @@ html.lx2 .lx2-chip-soon .lx2-pill { margin-left: 0; font-size: 11px; padding: 1p
 }
 /* 相談の「会議開始」ボタンが43pxだったので44pxに */
 html.lx2 .consultation-start-btn { min-height: 44px; }
+/* v1.4 会議の送信ボタン（📎・🎤の隣）は常に見せる（Enterだけでなく指でも送れるように・44px） */
+html.lx2 .meeting-input-area .input-wrapper > #btn-meeting-start { display: flex !important; align-items: center; justify-content: center; min-width: 44px; min-height: 44px; }

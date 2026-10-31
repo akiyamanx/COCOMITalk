@@ -1,4 +1,6 @@
 // COCOMITalk - ファイル入出力ハンドラー
+// 2026-11-01 - 日付・時刻をJST（日本時間）にそろえる（UTC日付＋JST時刻のずれ修正）
+// 最終更新: 葵(Aoi), 2026-11-01
 // このファイルはファイル添付（📎）とダウンロード（💾）を管理する
 // v1.0 Phase 1 - テキスト＋画像の読み込み＋テキストダウンロード
 // v1.1 2026-04-06 - 添付画像タップで拡大プレビュー表示（モーダルオーバーレイ）
@@ -244,7 +246,7 @@ const FileHandler = (() => {
    * @param {string} title - ファイルタイトル
    */
   function downloadChat(messages, title = 'COCOMITalk会話ログ') {
-    const date = new Date().toISOString().split('T')[0];
+    const date = new Date(Date.now() + 9 * 3600 * 1000).toISOString().split('T')[0]; // 2026-11-01 JST
     let md = `# ${title}\n**日付:** ${date}\n\n---\n\n`;
 
     messages.forEach(msg => {
@@ -270,7 +272,7 @@ const FileHandler = (() => {
 
   // v1.0追加 - 複数ファイルをZIPにまとめてダウンロード（JSZipをCDNで使用）
   async function downloadAsZip(files, zipName = 'COCOMITalk_指示書') {
-    const date = new Date().toISOString().split('T')[0];
+    const date = new Date(Date.now() + 9 * 3600 * 1000).toISOString().split('T')[0]; // 2026-11-01 JST
     const fullZipName = `${zipName}_${date}.zip`;
 
     // JSZipが読み込まれているか確認（CDNから動的に読み込み）

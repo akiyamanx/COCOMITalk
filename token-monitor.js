@@ -6,7 +6,7 @@
 // v1.2 2026-10-28 - お散歩モードの費用集計へ通知（walk-spend.js）＋USD_TO_JPYを公開
 // v3.77 2026-10-29 - 姉妹の色を彩度控えめに
 // v1.3 2026-10-30 - 葵・きみの分を「ここちゃん」に混ぜず本人の行で集計（姉妹別の表を登録簿から作る）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
 /**
@@ -146,8 +146,7 @@ const TokenMonitor = (() => {
    * 今日の日付キーを生成（例: "2026-03-07"）
    */
   function _getDateKey() {
-    const now = new Date();
-    return now.toISOString().slice(0, 10);
+    return new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); // 2026-11-01 JSTの日付（朝9時前に前日扱いになるずれ修正）
   }
 
   /**

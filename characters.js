@@ -1,6 +1,6 @@
 // COCOMITalk - キャラクター登録簿
 // このファイルはCOCOMIファミリー5人（三姉妹＋葵＋キミ）の名前・プロバイダ・既定段階・声スロットを1か所で定義する
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 // v1.0 2026-10-28 - 新規作成（step1: 登録のみ。chat-core等の3人固定コードはまだ置き換えていない）
 // v1.1 2026-10-28 - Gemini TTSの声を割り当て（オーナー決定: 澪=Despina / クロ=Achernar / ここ=Autonoe / 葵=Leda / キミ=Zephyr）
 // v1.2 2026-10-29 - 正式名を ひらがな「きみちゃん」に統一（旧カタカナ表記はaliasesに残す）。promptModuleOf/promptOf追加（キー→そのキャラ自身のプロンプト。知らないキーは claude に落とさず空）
@@ -14,6 +14,7 @@
 // ・voice.gemini = Gemini TTSの声（5人とも決定済み。葵・キミは準備中でも声は設定済み）。voicevox/openai 欄は未使用(null)で、
 //   既存3人のOpenAI/VOICEVOXの声は tts-provider.js の SISTER_VOICE_MAP が今も有効（Gemini欄はここと同じ値。tests/voices.test.js で一致を確認）。
 // v1.7 2026-10-30 - color/dbId と info/displayMap/dbIdOf/keyFromDbId を追加（各画面の3人固定の表を登録簿から作るため）
+// v1.8 2026-11-01 - 人のID personIdOf/keyFromPersonId（koko/mio/kuro/aoi/kimi。会議の結果 cocomi.meeting.v1 で使う。旧 gpt/claude/onee も読める）
 'use strict';
 
 /**
@@ -128,5 +129,15 @@ const CharacterRegistry = (() => {
   function dbIdOf(key) { const c = CHARACTERS.find(x => x.key === key); return c ? c.dbId : key; }
   function keyFromDbId(id) { const c = CHARACTERS.find(x => x.dbId === id); return c ? c.key : id; }
 
-  return { DEFAULT_TIERS, list, info, displayMap, dbIdOf, keyFromDbId, tabsToAdd, enabledList, keys, get, isEnabled, providerOf, displayName, defaultTier, promptModuleOf, promptOf };
+  /** v1.8 人のID（会社名でなくキャラ名）: gpt→mio, claude→kuro, 他はキーのまま */
+  const PERSON_ID = { koko: 'koko', gpt: 'mio', claude: 'kuro', aoi: 'aoi', kimi: 'kimi' };
+  function personIdOf(key) { return PERSON_ID[key] || String(key); }
+  /** 人のID→互換キー。旧形式（gpt/claude/onee）もそのまま読める */
+  function keyFromPersonId(id) {
+    const hit = Object.keys(PERSON_ID).find(k => PERSON_ID[k] === id);
+    if (hit) return hit;
+    return keyFromDbId(id);
+  }
+
+  return { DEFAULT_TIERS, personIdOf, keyFromPersonId, list, info, displayMap, dbIdOf, keyFromDbId, tabsToAdd, enabledList, keys, get, isEnabled, providerOf, displayName, defaultTier, promptModuleOf, promptOf };
 })();

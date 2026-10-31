@@ -133,7 +133,7 @@ test('不具合(b): 🔍の橙の輪をv1でも消し、他の道具ボタンと
 test('v2の新規ファイルのヘッダと行数上限(500)', () => {
   for (const f of ['layout2-core.js', 'layout2-ui.js', 'layout2-main.css', 'layout2-panels.css', 'tests/layout2.test.js']) {
     const s = read(f);
-    assert.ok(/作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-10-(28|29)/.test(s), f);
+    assert.ok(/作成: 葵\(Aoi\) \/ 最終更新: 葵\(Aoi\), 2026-1(0-(28|29)|1-01)/.test(s), f);
     assert.ok(s.split('\n').length <= 500, f);
   }
 });

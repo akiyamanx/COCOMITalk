@@ -1,6 +1,7 @@
 // COCOMITalk - 会議の結果（固定の形 cocomi.meeting.v1）: 書記の呼び出し・JSONの検証・Markdown作成
 // このファイルは会議の終わりに「書記」（安いモデル1回＋再試行1回）でまとめを作り、検証して、相談回答・共有用のMarkdown（末尾にJSONのコードブロック）にする
 // v1.0 2026-11-01 - 新規（会議システム Phase A・クロ§5-①②）。サーバー・relayは変えない（既存の /consultation/resolve の resolution に入れるだけ）
+// v1.1 2026-11-01 - participants も人のID（koko/mio/kuro/aoi/kimi）に統一（recipients と同じ）。旧データの gpt/claude/onee も読める
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
@@ -13,9 +14,17 @@ const MeetingResult = (() => {
   const SCRIBE_RETRIES = 1;
   const FAIL_NOTE = '要約失敗（書記のまとめが作れなかったので、議事ログのみ）';
 
-  /** 名前は登録簿から（無い時は key のまま） */
+  const _REG = () => (typeof CharacterRegistry !== 'undefined' ? CharacterRegistry : null);
+  /** 人のID（koko/mio/kuro/aoi/kimi）へ。旧キー gpt/claude/onee も変換 */
+  function personId(k) {
+    const R = _REG();
+    if (!R) return ({ gpt: 'mio', claude: 'kuro', onee: 'mio' })[k] || String(k);
+    return R.personIdOf(R.keyFromPersonId(k));
+  }
+  /** 名前は登録簿から（人のID・旧キーどちらでも。無い時は key のまま） */
   function nameOf(key) {
-    if (typeof CharacterRegistry !== 'undefined') return CharacterRegistry.info(key).name;
+    const R = _REG();
+    if (R) return R.info(R.keyFromPersonId(key)).name;
     return String(key);
   }
 
@@ -60,7 +69,7 @@ const MeetingResult = (() => {
       schema: SCHEMA,
       consultation_id: meta.consultationId ?? null,
       topic: String(meta.topic || ''),
-      participants: [...meta.participants],
+      participants: [...new Set((meta.participants || []).map(personId))],
       recipients: [...RECIPIENTS],
       created_at: meta.createdAt || new Date().toISOString(),
       conclusion: typeof r.conclusion === 'string' ? r.conclusion : '',
@@ -96,7 +105,7 @@ const MeetingResult = (() => {
   /** 参加者（発言した順・重複なし） */
   function participantsOf(history) {
     const out = [];
-    for (const m of (history || [])) if (m && m.sister && m.sister !== 'user' && !out.includes(m.sister)) out.push(m.sister);
+    for (const m of (history || [])) { const id = m && m.sister && m.sister !== 'user' ? personId(m.sister) : null; if (id && !out.includes(id)) out.push(id); }
     return out;
   }
 
@@ -128,7 +137,14 @@ const MeetingResult = (() => {
   function extractJson(md) {
     const m = String(md || '').match(/```json\s*(\{[\s\S]*?\})\s*```/);  // 最初のJSONブロック（結果MDの末尾＝議事ログより前）
     if (!m) return null;
-    try { return JSON.parse(m[1]); } catch (_) { return null; }
+    try { return upgradeIds(JSON.parse(m[1])); } catch (_) { return null; }
+  }
+
+  /** 旧データ（participants が gpt/claude）を人のIDに読み替える（後方互換） */
+  function upgradeIds(r) {
+    if (!r || typeof r !== 'object') return r;
+    const map = a => (Array.isArray(a) ? [...new Set(a.map(x => (typeof x === 'string' ? personId(x) : x)))] : a);
+    return { ...r, participants: map(r.participants), recipients: map(r.recipients) };
   }
 
   /** 書記への指示 */
@@ -175,6 +191,6 @@ const MeetingResult = (() => {
     return `${toMarkdown(r)}\n## 議事ログ\n\n${transcriptMd(history) || '（なし）'}\n`;
   }
 
-  return { SCHEMA, RECIPIENTS, OWNERS, SCRIBE_TIER, SCRIBE_RETRIES, FAIL_NOTE, nameOf, validate, parseScribeReply, normalize,
+  return { SCHEMA, RECIPIENTS, personId, upgradeIds, OWNERS, SCRIBE_TIER, SCRIBE_RETRIES, FAIL_NOTE, nameOf, validate, parseScribeReply, normalize,
     fallback, transcriptMd, participantsOf, toMarkdown, extractJson, scribePrompt, runScribe, toResolution };
 })();

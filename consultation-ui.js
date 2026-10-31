@@ -303,8 +303,7 @@ const ConsultationUI = (() => {
   function _downloadResolution(resolution) {
     if (!_currentConsultation) return;
     const c = _currentConsultation;
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
+    const dateStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); // 2026-11-01 JST
 
     let md = `# 📨 相談トピック回答\n\n`;
     md += `- 相談ID: ${c.id}\n`;

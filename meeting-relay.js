@@ -5,7 +5,8 @@
 
 // 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
 // v2.4 2026-10-29 - step2有効化の準備: SISTERS に aoi(ApiXai) / kimi(ApiKimi) を追加（登録簿が enabled の時だけ api を返す。今は無効=呼ばれない。手順は chat-core.js 冒頭）
-// v2.5 2026-11-01 - 会議の共通手順ブロックを会議モード時だけ5人全員に連結（Phase A・クロ§5-③）
+// v2.6 2026-11-01 - 短すぎる返答（約40文字未満）は1回だけ聞き直す
+  // v2.5 2026-11-01 - 会議の共通手順ブロックを会議モード時だけ5人全員に連結（Phase A・クロ§5-③）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
@@ -186,6 +187,10 @@ const MeetingRelay = (() => {
         // リトライ全滅した場合
         if (reply === null) {
           throw lastError || new Error('不明なエラー');
+        }
+        // v2.6 2026-11-01 - 短すぎる返答（「確認してから答えるね」だけ等）は1回だけ聞き直す
+        if (typeof MeetingProcedure !== 'undefined' && MeetingProcedure.isTooShort(reply) && !/API未接続/.test(reply)) {
+          try { const r2 = await _callSisterAPI(sisterKey, topic + MeetingProcedure.RETRY_NOTE, isLead, roundNum); if (r2 && r2.trim().length > reply.trim().length) reply = r2; } catch (e) { console.warn(`[MeetingRelay] ${sister.name} 聞き直し失敗（最初の返答を使う）:`, e.message); }
         }
 
         // タイピング消去＋メッセージ表示

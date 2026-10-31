@@ -14,7 +14,8 @@
 // v3.0.2 2026-03-24 - プリフライトチェック追加（生成前にAPI疎通確認、両方OKでないと開始しない）
 // v3.0.3 2026-03-24 - エラー時デバッグ表示が消えるバグ修正（ステータス保持＋タイムアウト検出＋エラー詳細強化）
 // v3.1.0 2026-10-28 - モデルをModelTiersから決定（GPT-6のreasoning_effort付与・Claudeのtemperature送信を段階表で判定）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// v3.2.0 2026-11-01 - クロのチェック失敗の理由（HTTP番号/種類・どのファイル）を reviewFailures で返す・空応答も失敗扱い（秘密は出さない）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 
 'use strict';
 
@@ -155,6 +156,7 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
     _isGenerating = true;
     const allFiles = [];
     let reviewSkipped = false; // v3.0.1 - クロちゃんチェックがスキップされたか
+    const reviewFailures = []; // v3.2.0 - { file, reason }
 
     try {
       // v3.0.2 - プリフライトチェック（本番生成前にAPI疎通確認、コスト無駄遣い防止）
@@ -199,10 +201,13 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
             reviewPages = await _callWithContinuation(
               'claude', KURO_SYSTEM, reviewUserContent, fileDef.label
             );
+            if (reviewPages.length === 0) throw new Error('応答が空（途中で切れた・エラーイベントの可能性）');
           } catch (reviewError) {
-            console.warn(`[DocGenerator] ${fileDef.name}: クロちゃんチェック失敗、お姉ちゃん版で出力:`, reviewError.message);
-            _updateStatus(`⚠️ クロちゃんチェック失敗、お姉ちゃん版で出力するよ`);
+            const reason = describeError(reviewError);
+            console.warn(`[DocGenerator] ${fileDef.name}: クロちゃんチェック失敗、お姉ちゃん版で出力: ${reason}`);
+            _updateStatus(`⚠️ クロちゃんチェック失敗（${fileDef.name}: ${reason}）、お姉ちゃん版で出力するよ`);
             reviewSkipped = true;
+            reviewFailures.push({ file: fileDef.outName || fileDef.name, reason });
           }
           // クロちゃんが失敗したらお姉ちゃん版をそのまま使う
           const finalPages = (reviewPages.length > 0) ? reviewPages : draftPages;
@@ -235,7 +240,7 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
       }
 
       _updateStatus('');
-      return { files: allFiles, success: true, reviewSkipped };
+      return { files: allFiles, success: true, reviewSkipped, reviewFailures };
 
     } catch (error) {
       console.error('[DocGenerator] 生成エラー:', error);
@@ -466,8 +471,28 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
     return _isGenerating;
   }
 
+  /**
+   * v3.2.0 - エラーを「種類（HTTP番号）: 短い説明」にする。鍵・トークンらしき文字は伏せる
+   */
+  function describeError(err) {
+    const raw = String((err && err.message) || err || '不明');
+    const msg = raw.replace(/(sk-[\w-]{4})[\w-]+/g, '$1…').replace(/(Bearer\s+)\S+/gi, '$1…').replace(/\s+/g, ' ');
+    const code = (msg.match(/HTTP\s?(\d{3})/) || msg.match(/\b(40[0-9]|429|5\d\d)\b/) || [])[1];
+    let kind = 'その他のエラー';
+    if (err && err.name === 'AbortError') kind = '中断（AbortError）';
+    else if (code === '402' || /credit|billing|残高|クレジット/i.test(msg)) kind = 'クレジット不足(402等)';
+    else if (code === '429' || /rate.?limit/i.test(msg)) kind = '回数・トークン上限(429)';
+    else if (code === '529' || /overloaded/i.test(msg)) kind = '混雑(529 overloaded)';
+    else if (/timeout|タイムアウト|Failed to fetch|NetworkError|通信/i.test(msg)) kind = 'タイムアウト/通信切れ';
+    else if (/応答が空/.test(msg)) kind = '空の応答';
+    else if (code && code[0] === '4') kind = `リクエストエラー(${code})`;
+    else if (code && code[0] === '5') kind = `サーバーエラー(${code})`;
+    return `${kind}${code && !kind.includes(code) ? ` HTTP ${code}` : ''} / ${msg.slice(0, 140)}`;
+  }
+
   return {
     generate,
     isGenerating,
+    describeError,
   };
 })();
