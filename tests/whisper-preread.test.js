@@ -68,32 +68,38 @@ test('③ 準備: 録音停止で文字なし部分を開始・仮の文字で�
   assert.match(src('chat-core.js'), /VoicePrep\.take\(currentSister, userText\)[^\n]*PromptBuilder\.build\(\{ mode: 'chat', sister: currentSister, userText, prefetched \}\)/);
 });
 
-test('④ 確定は飛んでいる仮を待つ（新しく送らない）。続きは連番順に連結・後から来た古い応答で上書きしない', async () => {
+test('④ 確定は飛んでいる仮を待つ（新しく送らない）。新しい仮の結果が勝ち・後から来た古い応答で上書きしない', async () => {
   const P = W(); let r1;
-  const t = deps({ transcribe: (b, e, p, seq) => { t.calls.push(seq); return seq === 1 ? new Promise(r => { r1 = r; }) : Promise.resolve({ text: 'つづき。' }); } });
+  const t = deps({ transcribe: (b, e, p, seq) => { t.calls.push(seq); return seq === 1 ? new Promise(r => { r1 = r; }) : Promise.resolve({ text: 'はじめ。つづき。' }); } });
   const pre = P.create(t.d);
   pre.onVoice(); pre.provisional(ch(4), 'audio/webm', 'webm');
   pre.onVoice(); pre.provisional(ch(8), 'audio/webm', 'webm');
   await flush();
-  assert.deepEqual(t.shown, ['🎤 聞き取り中: つづき。']);
+  assert.deepEqual(t.shown, ['🎤 聞き取り中: はじめ。つづき。']);
   let done = null; const c = pre.confirm().then(v => { done = v; });
   await flush(); assert.equal(done, null, 'まだ待っている');
   r1({ text: 'はじめ。' }); await c;
-  assert.equal(JSON.stringify(done), JSON.stringify({ text: 'はじめ。つづき。', sends: 2 }));
-  assert.equal(t.shown.at(-1), '🎤 聞き取り中: はじめ。つづき。', '古い応答が来ても連番順');
+  assert.equal(JSON.stringify(done), JSON.stringify({ text: 'はじめ。つづき。', sends: 2 }), '最新の仮（全部の音）で確定');
+  assert.equal(t.shown.at(-1), '🎤 聞き取り中: はじめ。つづき。', '古い仮1は表示を上書きしない');
   assert.equal(t.calls.length, 2, '確定で新しい送信はしない');
 });
 
-test('⑤ 続きは先頭(webmの頭)＋新しい分だけ・promptは直前の文字の末尾200字。保険ONなら確定で全体を送り直す', async () => {
-  const long = 'あ'.repeat(250);
-  const t = deps({ transcribe: (blob, e, prompt, seq) => { t.calls.push({ blob, prompt, seq }); return Promise.resolve({ text: seq === 1 ? long : 'い' }); } });
+test('⑤(v4.3) 仮2・仮3も最初から全部（正しいwebm・続きの切り出しなし）・結果は置き換え。最後の仮の後に声があれば全体1回。保険ONも全体1回', async () => {
+  const t = deps({ transcribe: (blob, e, prompt, seq) => { t.calls.push({ blob, prompt, seq }); return Promise.resolve({ text: `全部${seq}` }); } });
   const pre = W().create(t.d);
-  const c = ch(6).map((x, i) => ({ size: 1000 + i }));
+  const c = ch(9).map((x, i) => ({ size: 1000 + i }));
   pre.onVoice(); pre.provisional(c.slice(0, 4), 'audio/webm', 'webm'); await flush();
+  pre.onVoice(); pre.provisional(c.slice(0, 6), 'audio/webm', 'webm'); await flush();
   pre.onVoice(); pre.provisional(c, 'audio/webm', 'webm'); await flush();
-  assert.equal(t.calls[1].blob.parts.map(p => p.size).join(','), '1000,1004,1005');
-  assert.equal(t.calls[1].prompt.length, 200);
-  assert.equal(t.calls[0].prompt, '');
+  assert.equal(t.calls[1].blob.parts.map(p => p.size).join(','), '1000,1001,1002,1003,1004,1005');
+  assert.equal(t.calls[2].blob.parts.length, 9);
+  assert.ok(t.calls.every(x => x.prompt === ''), '直前の文字をpromptに足さない');
+  assert.equal(t.shown.at(-1), '🎤 聞き取り中: 全部3', '置き換え（つながない）');
+  assert.equal(JSON.stringify(await pre.confirm()), JSON.stringify({ text: '全部3', sends: 3 }));
+  assert.ok(!src('whisper-preread.js').includes('[chunks[0]].concat'), '続きの切り出しは廃止');
+  const t3 = deps(); const pre3 = W().create(t3.d);
+  pre3.onVoice(); pre3.provisional(ch(4), 'audio/webm', 'webm'); pre3.onVoice();
+  assert.equal(await pre3.confirm(), null, '最後の仮の後に声→全体1回');
   const m = new Map([['cocomitalk-stt-confirm-resend', '1']]);
   const P2 = W({ ls: { getItem: k => m.get(k) || null, setItem: (k, v) => m.set(k, v) } });
   assert.equal(P2.resendOn(), true);
@@ -121,8 +127,8 @@ function env(transcribe) {
     SpeechProvider: class { constructor(n) { this.name = n; } },
   };
   window.AudioContext = function () { return { state: 'running', resume: async () => {}, close: async () => {}, createMediaStreamSource: () => ({ connect() {}, disconnect() {} }), createAnalyser: () => ({ frequencyBinCount: 4, getByteFrequencyData() {} }) }; };
-  const e = load(['whisper-vad-guard.js', 'whisper-provider.js', 'whisper-recovery.js', 'whisper-preread.js'], ['WhisperProvider'], sandbox);
-  return { P: e.WhisperProvider, recs, sent, logs, tick: ms => { now += ms; }, setSpeaking: v => { speaking = v; } };
+  const e = load(['stt-noise-filter.js', 'whisper-vad-guard.js', 'whisper-provider.js', 'whisper-recovery.js', 'whisper-preread.js'], ['WhisperProvider'], sandbox);
+  return { P: e.WhisperProvider, recs, sent, logs, setText: () => {}, tick: ms => { now += ms; }, setSpeaking: v => { speaking = v; } };
 }
 async function talk(E, p) { const r = E.recs.at(-1); for (let i = 0; i < 6; i++) r.emit(1000); p._hasVoiceStarted = true; p._pre.onVoice(); E.tick(2000); }
 
@@ -171,5 +177,36 @@ test('配線: index/sw に whisper-preread.js・voice-prep.js（provider/recover
   const i = n => html.indexOf(`<script src="${n}"></script>`);
   assert.ok(i('whisper-recovery.js') < i('whisper-preread.js') && i('whisper-preread.js') < i('voice-prep.js') && i('voice-prep.js') > 0);
   const sw = src('sw.js');
-  assert.ok(sw.includes("'./whisper-preread.js'") && sw.includes("'./voice-prep.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.2';"));
+  assert.ok(sw.includes("'./whisper-preread.js'") && sw.includes("'./voice-prep.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.3';"));
+});
+
+// ---- v4.3 雑音ハルシネーション除け ----
+const F = () => load(['stt-noise-filter.js'], ['SttNoiseFilter']).SttNoiseFilter;
+test('雑音除け: YouTube風の定型句だけ・おやすみ＋定型句は捨てる。話の後ろの定型句は外す', () => {
+  const f = F();
+  for (const x of ['ご視聴ありがとうございました。', 'おやすみなさい。 ご視聴ありがとうございました。', 'チャンネル登録お願いします', '高評価とチャンネル登録よろしくお願いします！',
+    'Thank you for watching!', 'Thanks for watching.', '字幕：山田太郎', 'Subtitles by the Amara.org community', '♪', '(BGM)', '。。。'])
+    assert.equal(f.clean(x, 30).drop, true, x);
+  const r = f.clean('今日は楽しかったね。ご視聴ありがとうございました。', 30);
+  assert.equal(r.drop, false); assert.equal(r.text, '今日は楽しかったね。');
+});
+test('雑音除け(控えめ): 単独の「おやすみなさい」はほぼ無音の時だけ捨てる・音量不明なら残す・普通の話はそのまま', () => {
+  const f = F();
+  assert.equal(f.clean('おやすみなさい。', 40).drop, false, '声がしっかりあれば本物');
+  assert.equal(f.clean('おやすみなさい。', null).drop, false, '音量が分からなければ残す');
+  assert.equal(f.clean('おやすみなさい。', 2).drop, true, 'ほぼ無音なら捨てる');
+  for (const x of ['よろしくお願いします', '手伝ってくれてありがとうございました', 'ココちゃんのボイスボックスの声はやっぱりかわいいね。', '次回の旅行どこにする？'])
+    { const r = f.clean(x, 30); assert.equal(r.drop, false, x); assert.equal(r.text, x); }
+});
+test('雑音除け(配線): 確定で捨てたら onFinal しない・⏱ログ。仮の表示にも出さない', async () => {
+  const E = env(() => ({ text: 'おやすみなさい。 ご視聴ありがとうございました。' }));
+  const p = new E.P(); const finals = []; const interims = [];
+  p.onFinal = t => finals.push(t); p.onInterim = t => interims.push(t);
+  await p.start(); await talk(E, p);
+  p._provisionalSend(); await flush();
+  assert.ok(!interims.some(t => t.includes('ご視聴')), '仮の表示に出さない');
+  p._onSegmentEnd(); await p._sttQueue;
+  assert.deepEqual(finals, []);
+  assert.ok(E.logs.some(l => /⏱ STT 雑音除外\(確定\).*捨てた/.test(l)));
+  assert.ok(src('index.html').indexOf('stt-noise-filter.js') < src('index.html').indexOf('"whisper-provider.js"') && src('sw.js').includes("'./stt-noise-filter.js'"));
 });

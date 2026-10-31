@@ -106,7 +106,7 @@ test('読み込み順とキャッシュ: guard → provider → indicator、sw.j
   const i = f => idx.indexOf(`src="${f}"`);
   assert.ok(i('whisper-vad-guard.js') > 0 && i('whisper-vad-guard.js') < i('whisper-provider.js') && i('whisper-provider.js') < i('whisper-recovery.js') && i('whisper-recovery.js') < i('mic-indicator.js'));
   const sw = read('sw.js');
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.2';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.3';"));
   assert.ok(sw.includes("'./whisper-recovery.js'"));
   const files = [...sw.match(/const CACHE_FILES = \[([\s\S]*?)\];/)[1].matchAll(/'\.\/([^']*)'/g)].map(m => m[1]).filter(Boolean);
   assert.ok(files.includes('whisper-vad-guard.js') && files.includes('mic-indicator.js'));
