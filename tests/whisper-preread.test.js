@@ -177,7 +177,7 @@ test('配線: index/sw に whisper-preread.js・voice-prep.js（provider/recover
   const i = n => html.indexOf(`<script src="${n}"></script>`);
   assert.ok(i('whisper-recovery.js') < i('whisper-preread.js') && i('whisper-preread.js') < i('voice-prep.js') && i('voice-prep.js') > 0);
   const sw = src('sw.js');
-  assert.ok(sw.includes("'./whisper-preread.js'") && sw.includes("'./voice-prep.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.3';"));
+  assert.ok(sw.includes("'./whisper-preread.js'") && sw.includes("'./voice-prep.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.4';"));
 });
 
 // ---- v4.3 雑音ハルシネーション除け ----
@@ -209,4 +209,29 @@ test('雑音除け(配線): 確定で捨てたら onFinal しない・⏱ログ�
   assert.deepEqual(finals, []);
   assert.ok(E.logs.some(l => /⏱ STT 雑音除外\(確定\).*捨てた/.test(l)));
   assert.ok(src('index.html').indexOf('stt-noise-filter.js') < src('index.html').indexOf('"whisper-provider.js"') && src('sw.js').includes("'./stt-noise-filter.js'"));
+});
+
+// ---- v4.4 長い発話の費用ガード（クロ§2-③） ----
+test('長文ガード: 録音30秒超なら以後の仮は送らない・表示は「聞き取り中…（長文）」・確定は全体1回・⏱ログ', async () => {
+  const P = W(); const t = deps(); const pre = P.create(t.d);
+  assert.equal(P.LONG_MS, 30000);
+  pre.onVoice(); assert.equal(pre.provisional(ch(4), 'audio/webm', 'webm', 12000), true); await flush();
+  pre.onVoice(); assert.equal(pre.provisional(ch(8), 'audio/webm', 'webm', 30001), false);
+  pre.onVoice(); assert.equal(pre.provisional(ch(9), 'audio/webm', 'webm', 31000), false);
+  await flush();
+  assert.equal(t.calls.length, 1, '30秒を超えた後は送らない');
+  assert.equal(t.shown.at(-1), '🎤 聞き取り中…（長文）');
+  assert.ok(t.logs.some(l => /⏱ STT 先読み: 録音30\.0秒が30秒超 → 長文ガード/.test(l)));
+  assert.equal(t.logs.filter(l => l.includes('長文ガード')).length, 1, 'ログは1回');
+  assert.equal(await pre.confirm(), null, '確定時に全体1回');
+});
+test('長文ガード(配線): 30秒超の録音で _provisionalSend しても送らず、区切りで全体1回', async () => {
+  const E = env(() => ({ text: '長い話。' }));
+  const p = new E.P(); const finals = []; p.onFinal = t => finals.push(t);
+  await p.start(); await talk(E, p); E.tick(30000);
+  p._provisionalSend(); await flush();
+  assert.equal(E.sent.length, 0);
+  p._onSegmentEnd(); await p._sttQueue;
+  assert.equal(E.sent.length, 1); assert.deepEqual(finals, ['長い話。']);
+  assert.ok(E.logs.some(l => /Whisper回数: 1回（全体1）/.test(l)));
 });
