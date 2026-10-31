@@ -1,4 +1,4 @@
-// whisper-provider.js v1.14
+// whisper-provider.js v1.15
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
@@ -7,6 +7,7 @@
 //   VADが見えていなかった区切り・25秒の最大区切りも大きければ送る / 連続重複文を1つに / マイク表示へ状態と音量を通知(mic-indicator.js)
 // v1.14 2026-10-31 - 頭切れ対策: 区切りを送ったら文字起こしを待たずに次の録音を始める(待ち中の声も拾う・文字起こしは順番待ち) /
 //   はしごは whisper-recovery.js へ分離(静かなら録音に触れない) / 発話開始 3→2回 / 録音はマイクを開けた後(1.5秒待ちの後)の分だけ
+// v1.15 2026-10-31 - ⏱文字起こし待ちの内訳ログ(stt-timing.js): 録音停止→blob / blob→fetch / fetch→応答ヘッダ / 応答→文字、サイズ・形式・長さ・rate/ch（計測のみ・挙動不変）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 // v1.10 2026-07-17 - 無音セグメント連続送信ループ修正（継続録音のhasVoiceStarted維持を廃止）＋
 //   無発話50秒で予防グラフ張替（maxVol>0で生存判定なのに感度低下する「半死」対策）
@@ -227,6 +228,7 @@ class WhisperProvider extends SpeechProvider {
     if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
     if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
     if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
+    this._segStopAt = typeof SttTiming !== 'undefined' ? SttTiming.now() : null; // v1.15 ⏱
     this._detachRecorder(); // v1.9変更 - ハンドラ切断してから停止（stop後の遅延flushが次のchunksを汚染していた）
     if (sendRemaining && this._chunks.length > 0 && this._hasVoiceStarted) {
       const duration = Date.now() - (this._recordStartTime || Date.now());
@@ -324,7 +326,7 @@ class WhisperProvider extends SpeechProvider {
   // v1.7修正 - _onSegmentEnd後に_afterWhisperResponseが確実に呼ばれるようにする
   _onSegmentEnd() {
     if (this._processing) return;
-    this._processing = true;
+    this._processing = true; this._segStopAt = typeof SttTiming !== 'undefined' ? SttTiming.now() : null; // v1.15 ⏱
     if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
     if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
     if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
@@ -356,9 +358,18 @@ class WhisperProvider extends SpeechProvider {
   async _sendToWhisper() {
     if (this._chunks.length === 0) { this._debugLog('チャンクが空 → スキップ'); this._afterWhisperResponse(); return; }
     const chunks = this._chunks; this._chunks = [];
+    const seg = this._segTiming(); // v1.15 - ⏱ 次の録音が_byteLogを消す前に控える
     // v1.14 - 文字起こしを待たずに次の録音を始める（旧: 返事が来るまで1〜2秒録っていない＝続けて話した頭が消えていた）
     if (this._canOpenNow()) { this._debugLog('▶ 次の録音をすぐ開始（文字起こしと並行）'); this._startRecording(false); }
-    return this._transcribeChunks(chunks);
+    return this._transcribeChunks(chunks, seg);
+  }
+
+  /** v1.15 - ⏱計測用のこの区切りの情報（停止時刻・録音開始・最初/最後のチャンク時刻・マイク） */
+  _segTiming() {
+    if (typeof SttTiming === 'undefined') return null;
+    const bl = this._byteLog || [];
+    return { stopAt: this._segStopAt, recStartAt: this._recordStartTime, firstChunkAt: bl.length ? bl[0].t : null, lastChunkAt: bl.length ? bl[bl.length - 1].t : null,
+      stream: this._stream, ctxRate: this._audioCtx ? this._audioCtx.sampleRate : null };
   }
 
   /** v1.14 - 今マイクを開けてよいか（読み上げ中/pause中/停止中は絶対に開けない） */
@@ -367,24 +378,27 @@ class WhisperProvider extends SpeechProvider {
   }
 
   /** v1.14 - 文字起こしは順番待ち（結果の順番を話した順に保つ） */
-  _transcribeChunks(chunks) {
+  _transcribeChunks(chunks, seg) {
     this._inflight++;
-    const job = this._sttQueue.then(() => this._transcribeNow(chunks)).catch(() => {}).finally(() => { this._inflight--; });
+    const job = this._sttQueue.then(() => this._transcribeNow(chunks, seg)).catch(() => {}).finally(() => { this._inflight--; });
     this._sttQueue = job;
     return job;
   }
 
-  async _transcribeNow(chunks) {
+  async _transcribeNow(chunks, seg) {
+    const tm = seg && typeof SttTiming !== 'undefined' ? SttTiming.start((m) => this._debugLog(m), seg) : null; // v1.15 ⏱
     const mimeType = this._getSupportedMimeType();
     const ext = mimeType.includes('webm') ? 'webm' : 'mp4';
     const blob = new Blob(chunks, { type: mimeType });
+    if (tm) tm.blobReady(blob, ext);
     this._debugLog(`API送信: ${(blob.size / 1024).toFixed(1)}KB (${ext})`);
     if (blob.size < 3000) { this._debugLog(`データ小さすぎ（${blob.size}B）→ スキップ`); this._afterWhisperResponse(); return; }
     const sentSessionId = this._currentSessionId;
     this._mic('transcribing', 0);
     try {
       // v1.11変更 - 文字起こしモデルは設定値（stt-model.js。既定gpt-transcribe、失敗時whisper-1へ自動で戻る）
-      const result = await SttModel.transcribe(blob, ext, 'COCOMITalkでの日常会話。');
+      const result = await SttModel.transcribe(blob, ext, 'COCOMITalkでの日常会話。', tm || undefined);
+      if (tm) tm.done(result && result.text ? result.text.trim().length : 0);
       if (sentSessionId !== this._currentSessionId) {
         this._debugLog(`旧session応答を破棄 (sent=${sentSessionId}, current=${this._currentSessionId})`);
         this._afterWhisperResponse(); return;

@@ -1,9 +1,10 @@
 // COCOMITalk - 音声認識(STT)の文字起こしモデル設定と呼び出し
 // このファイルは whisper-provider.js が使う「どのモデルで文字起こしするか」を設定値にし、新モデルが通らない時は旧モデルへ自動で戻す
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 // v1.0 2026-10-28 - 新規作成（既定 gpt-transcribe、whisper-1 は 2027-02-26 の停止日まで選べる／自動フォールバック。無音区切り秒数の設定つき）
 // v1.1 2026-10-30 - 無音区切りに1.2秒/1.5秒を追加し既定を1.5秒に。旧既定(3秒)のまま保存されていた人は1回だけ1.5秒へ移す（4/5秒を選んだ人はそのまま）
 // v1.2 2026-10-30 - 無音区切りに2秒/2.5秒を追加（既定1.5秒・保存済みの値は変えない）
+// v1.3 2026-10-31 - transcribe(…, timing) で⏱計測フック(stt-timing.js)を中継呼び出しへ渡す（計測のみ・挙動不変）
 //
 // ★未確認★ gpt-transcribe を /whisper 経由で実際に呼んだことはない（公式docs 2026-10-28 のみ）。
 //   公式docs: gpt-transcribe は language ではなく languages[] を使う（両方は送らない）。アプリは従来どおり language=ja を送り、
@@ -73,22 +74,24 @@ const SttModel = (() => {
    * 1発話ぶんの音声を /whisper に送って {text} を得る。language は従来どおり ja。
    * 新モデルで失敗したら（旧モデルが生きていれば）whisper-1 で1回だけやり直す。
    */
-  async function transcribe(blob, ext, prompt) {
+  async function transcribe(blob, ext, prompt, timing) {
     const fd = new FormData();
     fd.append('file', blob, `audio.${ext}`);
     fd.append('language', 'ja');
     fd.append('prompt', prompt || 'COCOMITalkでの日常会話。');
     const model = effectiveModel();
     fd.append('model', model);
+    const opts = { isFormData: true };
+    if (timing && typeof timing.hook === 'function') opts.onTiming = (ph, info) => timing.hook(ph, Object.assign({ model: fd.get('model') }, info));
     try {
-      return await ApiCommon.callAPI('whisper', fd, { isFormData: true });
+      return await ApiCommon.callAPI('whisper', fd, opts);
     } catch (err) {
       if (err && err.name === 'AbortError') throw err;
       if (model === LEGACY_MODEL || !legacyAlive()) throw err;
       _failedAt = Date.now();
       console.warn(`[SttModel] ${model} 失敗 → ${LEGACY_MODEL} で再試行:`, err && err.message);
       fd.set('model', LEGACY_MODEL);
-      return await ApiCommon.callAPI('whisper', fd, { isFormData: true });
+      return await ApiCommon.callAPI('whisper', fd, opts);
     }
   }
 

@@ -9,6 +9,8 @@
 // v0.11 2026-10-30 - callAPIStream に onDelta（届いた文字をすぐ渡す）とツール呼び出し検知（_toolCall）を追加。streamText() 追加（音声会話の読み上げ用・失敗時は null で今まで通りに戻す）
 // v0.12 2026-10-30 - hooks.keepTools: Claude の tool_use を止めずに最後まで受け取り、content(text/tool_use)を組み立てて返す（やり直し送信を1回減らす）。streamData() 追加
 // v0.13 2026-10-30 - tool_use は content_block_stop まで届いたものだけ実行可（input_json_delta が揃う前に組み立てない）
+// v0.14 2026-10-31 - callAPI に options.onTiming(phase) 追加（fetchStart/headers/parsed。STT⏱計測用・無指定なら挙動不変）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 
 'use strict';
 
@@ -128,14 +130,17 @@ const ApiCommon = (() => {
 
     // v0.7追加 - リクエスト開始時刻を記録（タイムアウト判定用）
     const startTime = Date.now();
+    const _tm = (ph, info) => { try { if (options.onTiming) options.onTiming(ph, info || {}); } catch (_e) { /* 計測失敗はAPIに影響させない */ } }; // v0.14
 
     try {
+      _tm('fetchStart');
       const response = await fetch(`${WORKER_URL}/${endpoint}`, {
         method: 'POST',
         headers,
         body: fetchBody,
         signal: controller.signal,
       });
+      _tm('headers', { status: response.status });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -164,7 +169,8 @@ const ApiCommon = (() => {
         throw new Error(`API中継エラー（${endpoint}）: ${errorMsg}（${elapsed}秒）`);
       }
 
-      return response.json();
+      if (!options.onTiming) return response.json();
+      const data = await response.json(); _tm('parsed'); return data; // v0.14 - 計測時だけ待ってから印をつける
     } catch (err) {
       // v0.7追加 - ネットワークエラー時のタイムアウト判定
       if (err.name === 'TypeError' || err.message === 'Failed to fetch') {

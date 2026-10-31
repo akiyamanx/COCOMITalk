@@ -158,7 +158,7 @@ test('配線: index.htmlとsw.jsに登録。common-envが先、tone-style→prom
   assert.ok(pos('tone-style.js') < pos('prompts/common-env.js') && pos('prompts/common-env.js') < pos('prompts/koko-system.js'));
   assert.ok(pos('prompts/claude-system.js') < pos('prompts/aoi-system.js') && pos('prompts/aoi-system.js') < pos('prompts/kimi-system.js'));
   assert.ok(pos('prompts/kimi-system.js') < pos('characters.js') && pos('prompts/kimi-system.js') < pos('mode-switcher.js'));
-  assert.ok(sw.includes("'cocomitalk-v4.0'"));
+  assert.ok(sw.includes("'cocomitalk-v4.1'"));
   // 返信の順番(meeting-router/chat-group)には葵/きみを足していない（準備中のまま）。呼び出しの表(SISTER_API/SISTERS)は step2 で
   // 追加済み＝tests/aoi-kimi-wiring.test.js が「無効の間は api が null」を確認している
   for (const f of ['chat-group.js', 'meeting-router.js']) assert.ok(!/AoiSystemPrompt|KimiSystemPrompt/.test(read(f)), f);
