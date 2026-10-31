@@ -2,7 +2,8 @@
 /* v1.0 2026-03-28 - 新規作成 */
 /* v1.1 2026-03-28 - 長文相談時のスクロール対応（パネルが画面外にはみ出る問題を修正） */
 /* v3.77 2026-10-29 - 配色を落ち着いた青に（色のみ・レイアウト不変） */
-/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
+/* v1.2 2026-11-01 - 相談の一覧（全件・選択中・取り消しボタン）（COCOMITalk v4.7） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01 */
 
 /* --- 通知バー（pendingがある時だけ表示） --- */
 .consultation-bar {
@@ -247,3 +248,13 @@
 .consultation-context.hidden {
   display: none;
 }
+
+/* --- v1.2 相談の一覧 --- */
+.consultation-list-label { font-size: 12px; opacity: 0.75; margin-bottom: 4px; }
+.consultation-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; max-height: 40vh; overflow-y: auto; }
+.consultation-list-item { display: flex; align-items: stretch; gap: 6px; border: 1px solid rgba(120, 150, 200, 0.35); border-radius: 8px; }
+.consultation-list-item.selected { border-color: #4a7bd0; background: rgba(74, 123, 208, 0.12); }
+.consultation-list-info { flex: 1; display: flex; flex-direction: column; align-items: flex-start; text-align: left; padding: 8px; background: none; border: none; color: inherit; font: inherit; cursor: pointer; min-height: 44px; }
+.consultation-list-title { font-weight: 600; font-size: 14px; word-break: break-word; }
+.consultation-list-meta { font-size: 11px; opacity: 0.7; margin-top: 2px; }
+.consultation-list-cancel { flex: 0 0 auto; min-width: 64px; min-height: 44px; border: none; border-left: 1px solid rgba(120, 150, 200, 0.35); background: rgba(200, 80, 80, 0.12); color: #c04848; border-radius: 0 8px 8px 0; font-size: 13px; cursor: pointer; }
