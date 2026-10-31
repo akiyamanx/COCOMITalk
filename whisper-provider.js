@@ -1,4 +1,4 @@
-// whisper-provider.js v1.15
+// whisper-provider.js v1.16
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
@@ -8,6 +8,8 @@
 // v1.14 2026-10-31 - 頭切れ対策: 区切りを送ったら文字起こしを待たずに次の録音を始める(待ち中の声も拾う・文字起こしは順番待ち) /
 //   はしごは whisper-recovery.js へ分離(静かなら録音に触れない) / 発話開始 3→2回 / 録音はマイクを開けた後(1.5秒待ちの後)の分だけ
 // v1.15 2026-10-31 - ⏱文字起こし待ちの内訳ログ(stt-timing.js): 録音停止→blob / blob→fetch / fetch→応答ヘッダ / 応答→文字、サイズ・形式・長さ・rate/ch（計測のみ・挙動不変）
+// v1.16 2026-10-31 - 先読み（案B, whisper-preread.js）: 無音1秒で「仮」を送り薄く表示、区切り(設定秒数)で仮をつないで確定（送り直さない）。
+//   区切り秒数・マイク開閉・1.5秒待ち・読み上げ中OFFは不変。記憶などの準備を文字起こしと並行に開始(voice-prep.js)
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 // v1.10 2026-07-17 - 無音セグメント連続送信ループ修正（継続録音のhasVoiceStarted維持を廃止）＋
 //   無発話50秒で予防グラフ張替（maxVol>0で生存判定なのに感度低下する「半死」対策）
@@ -196,10 +198,10 @@ class WhisperProvider extends SpeechProvider {
 
   _startRecording(isContinuation = false) {
     this._detachRecorder(); // v1.9変更 - ハンドラ切断してから停止（旧チャンクの次世代混入＝webm破損防止）
-    if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
+    if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; } this._clearPreTimer(); // v1.16
     if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
     if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
-    this._chunks = [];
+    this._chunks = []; this._pre = this._newPreread(); // v1.16 - 録音（区切り）ごとに先読み係を作り直す
     this._processing = false;
     if (!isContinuation) { this._hasVoiceStarted = false; this._voiceCount = 0; }
     this._zeroVolumeCount = 0; // v1.7追加 - 録音開始時にゼロカウンターリセット
@@ -225,7 +227,7 @@ class WhisperProvider extends SpeechProvider {
   }
 
   _stopRecording(sendRemaining = true) {
-    if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
+    if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; } this._clearPreTimer(); // v1.16
     if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
     if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
     this._segStopAt = typeof SttTiming !== 'undefined' ? SttTiming.now() : null; // v1.15 ⏱
@@ -296,7 +298,8 @@ class WhisperProvider extends SpeechProvider {
             this._debugLog(`発話開始検出（${this._voiceCount}回連続, avg=${avgVolume.toFixed(0)}）`);
           }
         }
-        if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
+        if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; } this._clearPreTimer(); // v1.16
+        if (this._hasVoiceStarted && this._pre) this._pre.onVoice();
         if (this._hasVoiceStarted && this.onInterim) this.onInterim('🎤 ...');
       } else {
         this._voiceCount = 0; // v1.13 - 死亡/生存の判定は上の this._vad.tick() に一本化
@@ -306,6 +309,8 @@ class WhisperProvider extends SpeechProvider {
             this._debugLog(`無音${this._SILENCE_DURATION}ms検出 → セグメント送信`); if (typeof VoiceFast !== 'undefined') VoiceFast.mark('segment', { silenceMs: this._SILENCE_DURATION });
             this._onSegmentEnd();
           }, this._SILENCE_DURATION);
+          // v1.16 - 先読み: 区切りより早い1秒で「仮」を送る（区切りのタイミングは上の_SILENCE_DURATIONのまま＝条件①）
+          if (typeof WhisperPreread !== 'undefined' && WhisperPreread.PROVISIONAL_MS < this._SILENCE_DURATION) this._preTimer = setTimeout(() => { this._preTimer = null; this._provisionalSend(); }, WhisperPreread.PROVISIONAL_MS);
         }
       }
     }, this._VOLUME_CHECK_MS);
@@ -327,7 +332,7 @@ class WhisperProvider extends SpeechProvider {
   _onSegmentEnd() {
     if (this._processing) return;
     this._processing = true; this._segStopAt = typeof SttTiming !== 'undefined' ? SttTiming.now() : null; // v1.15 ⏱
-    if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
+    if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; } this._clearPreTimer(); // v1.16
     if (this._maxTimer) { clearTimeout(this._maxTimer); this._maxTimer = null; }
     if (this._volumeCheckInterval) { clearInterval(this._volumeCheckInterval); this._volumeCheckInterval = null; }
 
@@ -359,9 +364,11 @@ class WhisperProvider extends SpeechProvider {
     if (this._chunks.length === 0) { this._debugLog('チャンクが空 → スキップ'); this._afterWhisperResponse(); return; }
     const chunks = this._chunks; this._chunks = [];
     const seg = this._segTiming(); // v1.15 - ⏱ 次の録音が_byteLogを消す前に控える
+    const pre = this._pre; this._pre = null; // v1.16 - この区切りの先読み係（次の録音は新しい係）
+    if (typeof VoicePrep !== 'undefined') VoicePrep.begin(pre || chunks); // v1.16 - 録音停止と同時に準備（文字に依存しない部分）を開始
     // v1.14 - 文字起こしを待たずに次の録音を始める（旧: 返事が来るまで1〜2秒録っていない＝続けて話した頭が消えていた）
     if (this._canOpenNow()) { this._debugLog('▶ 次の録音をすぐ開始（文字起こしと並行）'); this._startRecording(false); }
-    return this._transcribeChunks(chunks, seg);
+    return this._transcribeChunks(chunks, seg, pre);
   }
 
   /** v1.15 - ⏱計測用のこの区切りの情報（停止時刻・録音開始・最初/最後のチャンク時刻・マイク） */
@@ -378,14 +385,15 @@ class WhisperProvider extends SpeechProvider {
   }
 
   /** v1.14 - 文字起こしは順番待ち（結果の順番を話した順に保つ） */
-  _transcribeChunks(chunks, seg) {
+  _transcribeChunks(chunks, seg, pre) {
     this._inflight++;
-    const job = this._sttQueue.then(() => this._transcribeNow(chunks, seg)).catch(() => {}).finally(() => { this._inflight--; });
+    const job = this._sttQueue.then(() => this._transcribeNow(chunks, seg, pre)).catch(() => {}).finally(() => { this._inflight--; });
     this._sttQueue = job;
     return job;
   }
 
-  async _transcribeNow(chunks, seg) {
+  async _transcribeNow(chunks, seg, pre) {
+    if (pre && await this._confirmPreread(pre, seg)) return; // v1.16 - 先読みで確定できれば送り直さない
     const tm = seg && typeof SttTiming !== 'undefined' ? SttTiming.start((m) => this._debugLog(m), seg) : null; // v1.15 ⏱
     const mimeType = this._getSupportedMimeType();
     const ext = mimeType.includes('webm') ? 'webm' : 'mp4';
@@ -399,19 +407,29 @@ class WhisperProvider extends SpeechProvider {
       // v1.11変更 - 文字起こしモデルは設定値（stt-model.js。既定gpt-transcribe、失敗時whisper-1へ自動で戻る）
       const result = await SttModel.transcribe(blob, ext, 'COCOMITalkでの日常会話。', tm || undefined);
       if (tm) tm.done(result && result.text ? result.text.trim().length : 0);
+      this._debugLog(`⏱ STT この発話のWhisper回数: ${(pre ? pre.count : 0) + 1}回（${pre && pre.count ? `仮${pre.count}＋全体1` : '全体1'}）`); // v1.16 ⑦
       if (sentSessionId !== this._currentSessionId) {
         this._debugLog(`旧session応答を破棄 (sent=${sentSessionId}, current=${this._currentSessionId})`);
         this._afterWhisperResponse(); return;
       }
-      if (result.text && result.text.trim()) {
-        const raw = result.text.trim(); const text = WhisperVadGuard.dedupeRepeats(raw); // v1.13 - X。X。X。→X。
-        if (text !== raw) this._debugLog(`🔁 連続重複をまとめた: "${raw}" → "${text}"`);
-        if (this._isHallucination(text)) { this._debugLog(`ハルシネーション除外: "${text}"`); }
-        else { this._debugLog(`認識結果: "${text}" [session=${sentSessionId}]`); if (typeof VoiceFast !== 'undefined') VoiceFast.mark('stt'); if (this.onFinal) this.onFinal(text); }
-      } else { this._debugLog('認識結果: 空（無音と判定）'); }
+      this._deliverText(result.text, sentSessionId);
     } catch (err) { this._debugLog(`API送信エラー: ${err.message}`); }
     this._afterWhisperResponse();
   }
+
+  /** 確定文を渡す（全体送信・先読み確定の共通。v1.16で切り出し・中身は従来どおり） */
+  _deliverText(rawText, sentSessionId) {
+    if (rawText && rawText.trim()) {
+      const raw = rawText.trim(); const text = WhisperVadGuard.dedupeRepeats(raw); // v1.13 - X。X。X。→X。
+      if (text !== raw) this._debugLog(`🔁 連続重複をまとめた: "${raw}" → "${text}"`);
+      if (this._isHallucination(text)) { this._debugLog(`ハルシネーション除外: "${text}"`); }
+      else { this._debugLog(`認識結果: "${text}" [session=${sentSessionId}]`); if (typeof VoiceFast !== 'undefined') VoiceFast.mark('stt'); if (this.onFinal) this.onFinal(text); }
+    } else { this._debugLog('認識結果: 空（無音と判定）'); }
+  }
+
+  /** v1.16 - 先読みの既定（whisper-preread.js が読み込まれていれば上書きされる） */
+  _newPreread() { return null; }
+  _clearPreTimer() { if (this._preTimer) { clearTimeout(this._preTimer); this._preTimer = null; } }
 
   _afterWhisperResponse() {
     // v1.14 - 次の録音がもう動いていれば作り直さない（録っている声を捨てない）

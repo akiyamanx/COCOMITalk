@@ -33,7 +33,7 @@ test('SttTiming: ログ関数が壊れていても投げない', () => {
 test('配線: index/sw に stt-timing.js、sw は v4.1、既存の安全設定は変えていない', () => {
   assert.ok(src('index.html').includes('<script src="stt-timing.js"></script>'));
   const sw = src('sw.js');
-  assert.ok(sw.includes("'./stt-timing.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.1';"));
+  assert.ok(sw.includes("'./stt-timing.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.2';"));
   const ac = src('api-common.js');
   assert.ok(ac.includes("if (!options.onTiming) return response.json();"), '計測なしなら従来どおり');
   const wp = src('whisper-provider.js');

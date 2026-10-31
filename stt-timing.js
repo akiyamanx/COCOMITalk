@@ -3,6 +3,7 @@
 // （書き出せる既存の DebugLogger に入る。計測だけで挙動は一切変えない・失敗しても録音/送信を止めない）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 // v1.0 2026-10-31 - 新規作成（4〜5秒の文字起こし待ちの内訳を見る用）
+// v1.1 2026-10-31 - seg.label（例: 仮1）を ⏱ STT[仮1] として行頭に付ける（先読みの仮送信用・labelなしは従来の形のまま）
 'use strict';
 
 const SttTiming = (() => {
@@ -25,7 +26,8 @@ const SttTiming = (() => {
    */
   function start(log, seg = {}) {
     const m = { stop: seg.stopAt != null ? seg.stopAt : now() };
-    const safe = (s) => { try { log(s); } catch (e) { /* ログ失敗は無視 */ } };
+    const L = seg.label ? `[${seg.label}]` : '';
+    const safe = (s) => { try { log(L ? s.replace('⏱ STT', `⏱ STT${L}`) : s); } catch (e) { /* ログ失敗は無視 */ } };
     return {
       blobReady(blob, ext) {
         m.blob = now();

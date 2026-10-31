@@ -291,7 +291,7 @@ test('自動読み上げが鳴っている最中のタップでも止まる', as
 });
 
 test('CI: sw.js は v3.92、voice-output/chat-ui は500行以内、最終更新は葵 2026-10-29', () => {
-  assert.ok(src('sw.js').includes("'cocomitalk-v4.1'"));
+  assert.ok(src('sw.js').includes("'cocomitalk-v4.2'"));
   for (const f of ['voice-output.js', 'chat-ui.js', 'styles.css']) assert.ok(src(f).split('\n').length <= 500, f);
   for (const f of ['voice-output.js', 'chat-ui.js', 'tests/bubble-speak-guard.test.js']) {
     const head = src(f).split('\n').slice(0, 20).join('\n');

@@ -286,6 +286,12 @@
               <option value="4000">4秒（文の途中で切れにくい）</option>
               <option value="5000">5秒（さらに切れにくい・反応は遅め）</option>
             </select>
+            <!-- v4.2追加 - 先読みの保険（whisper-preread.js。既定OFF＝費用を増やさない） -->
+            <label style="font-size:0.85em; color:#888; display:block; margin-top:8px;">先読みのつなぎ目が不自然な時の保険</label>
+            <select id="sel-stt-confirm-resend" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
+              <option value="0">OFF（標準・仮をつないで確定。送り直さない）</option>
+              <option value="1">ON（確定時に全体を1回送り直す・費用が増える）</option>
+            </select>
           </div>
           <div class="setting-item" style="margin-top:12px;">
             <label style="font-size:0.85em; color:#888;">TTS声エンジン</label>
@@ -458,6 +464,8 @@
   <script src="whisper-vad-guard.js"></script>
   <script src="whisper-provider.js"></script>
   <script src="whisper-recovery.js"></script>
+  <script src="whisper-preread.js"></script>
+  <script src="voice-prep.js"></script>
   <script src="mic-indicator.js"></script>
   <script src="voice-output.js"></script>
   <script src="voice-stream.js"></script>

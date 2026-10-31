@@ -15,7 +15,8 @@
 // v1.8 2026-04-05 - エスケープハッチ統合: ユーザー発話からトリガー検出→一時的にじっくりモードで回答（Sprint 2+3統合）
 // v1.9 2026-10-29 - 現在の日本時間(JST)の1行を全キャラ・全モードの注入文の先頭に追加（nowLine。時計は options.now で差し替え可）
 // v1.10 2026-10-30 - 注入テキストの取得（記憶/話題/ベクトル/会話メモリー）を並列化（音声会話の「送信→AI」短縮。順番・中身は同じ）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// v1.11 2026-10-31 - prefetch()/prefetchVector() と build の options.prefetched（音声会話で文字起こしと並行に取り始めた分を使う。中身・順番は同じ）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 'use strict';
 
 const PromptBuilder = (() => {
@@ -106,10 +107,11 @@ const PromptBuilder = (() => {
 
     // v1.10: 記憶・話題・ベクトル検索・会話メモリーは同時に取りに行く（順番に待っていた分を短縮。つなぐ順は今まで通り）
     const none = Promise.resolve('');
-    const pMem = options.preBuiltMemory ? Promise.resolve(options.preBuiltMemory) : (!skipMemory ? _getMemoryText(memoryLimit) : none);
-    const pHot = !skipHotTopic ? _getHotTopicText(mode, sister) : none;
-    const pVec = (!options.skipVector && options.userText) ? _getVectorSearchText(options.userText, undefined, mode, sister) : none;
-    const pChat = (!options.skipChatMemory && mode === 'chat') ? _getChatMemoryText(options.chatMemoryLimit || 3) : none;
+    const pf = (mode === 'chat' && options.prefetched) || {}; // v1.11 - 先に取り始めた分（chatモードの既定設定で取ったものだけ）
+    const pMem = options.preBuiltMemory ? Promise.resolve(options.preBuiltMemory) : (!skipMemory ? (pf.pMem || _getMemoryText(memoryLimit)) : none);
+    const pHot = !skipHotTopic ? (pf.pHot || _getHotTopicText(mode, sister)) : none;
+    const pVec = (!options.skipVector && options.userText) ? (pf.pVec || _getVectorSearchText(options.userText, undefined, mode, sister)) : none;
+    const pChat = (!options.skipChatMemory && mode === 'chat') ? (pf.pChat || _getChatMemoryText(options.chatMemoryLimit || 3)) : none;
     const [tMem, tHot, tVec, tChat] = await Promise.all([pMem, pHot, pVec, pChat]);
     extra += tMem + tHot;
     if (!skipSearch) extra += _getSearchText(clearSearch);
@@ -344,6 +346,14 @@ const PromptBuilder = (() => {
     return `\n\n今は${p.year}年${p.month}月${p.day}日(${p.weekday}) ${hh}:${p.minute}（日本時間）。今日の日付や時刻はこれを使って答える。\n`;
   }
 
+  /** v1.11 - 文字に依存しない部分を先に取り始める（chatモードの既定値。取得関数は失敗しても '' を返す） */
+  function prefetch(o = {}) {
+    const d = MODE_DEFAULTS.chat;
+    return { pMem: _getMemoryText(d.memoryLimit), pHot: _getHotTopicText('chat', o.sister || null), pChat: _getChatMemoryText(3) };
+  }
+  /** v1.11 - 記憶検索（文字に依存）を先に取り始める */
+  function prefetchVector(text, sister) { return _getVectorSearchText(text, undefined, 'chat', sister || null); }
+
   function clearHotTopicCache() {
     _hotTopicRawCache = null;
     _hotTopicCacheTime = 0;
@@ -356,6 +366,8 @@ const PromptBuilder = (() => {
     clearSearch,
     preloadMemory,
     preloadVectorSearch,
+    prefetch,
+    prefetchVector,
     clearHotTopicCache,
   };
 })();

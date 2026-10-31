@@ -6,6 +6,7 @@
 // v1.3 追加 - recovering/blocked状態表示（三姉妹会議決定: UI状態同期）
 // v3.77 2026-10-29 - マイクの状態色を青系に（紫・ピンクをやめた）
 // v1.4 2026-10-31 - 状態をマイク表示(mic-indicator.js)へも渡す（聞いてるよ/文字にしてるよ…のラベルと音量の輪）
+// v1.5 2026-10-31 - 先読みの「仮」の文字（🎤 聞き取り中: …）は薄く表示（確定・ほかの表示は今まで通り）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 
 /**
@@ -301,6 +302,7 @@ class VoiceUI {
     if (!el) return;
     el.style.display = 'block';
     el.textContent = text || '🎤 聞いてるよ...';
+    el.style.opacity = (text && text.startsWith('🎤 聞き取り中:')) ? '0.55' : ''; // v1.5 仮は薄く
   }
 
   /**

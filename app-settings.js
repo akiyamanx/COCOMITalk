@@ -9,7 +9,8 @@
 // v1.5 2026-10-28 - お姉ちゃん標準/高頭脳のツール切替（オフ/アプリ検索/OpenAI内蔵検索）を追加
 // v1.6 2026-10-28 - 思考の強さ（EffortSettingsUI）・STT文字起こしモデル選択・TTSにGemini追加
 // v1.7 2026-10-28 - 読み上げの既定をGeminiに。旧設定(未設定/openai)は一度だけgeminiへ移す（voicevoxは残す）。OpenAI/VOICEVOXは控えとして選べる
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// v1.8 2026-10-31 - 先読みの保険「確定時に全体を1回送り直す」(sel-stt-confirm-resend・既定OFF)の読み書き
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 'use strict';
 
 /** 設定モジュール（app.jsのinit()から呼ばれる） */
@@ -174,6 +175,7 @@ const AppSettings = (() => {
     const set = (id, v) => { const el = document.getElementById(id); if (el) el.value = v; };
     if (typeof SttModel !== 'undefined') { set('sel-stt-model', SttModel.get()); set('sel-stt-silence', String(SttModel.getSilenceMs())); }
     if (typeof GeminiTTSProvider !== 'undefined') set('sel-gemini-tts-quality', GeminiTTSProvider.getQuality());
+    if (typeof WhisperPreread !== 'undefined') set('sel-stt-confirm-resend', WhisperPreread.resendOn() ? '1' : '0'); // v1.8
   }
   function _saveVoiceExtras() {
     const val = id => { const el = document.getElementById(id); return el ? el.value : null; };
@@ -186,6 +188,7 @@ const AppSettings = (() => {
       }
     }
     if (typeof GeminiTTSProvider !== 'undefined' && val('sel-gemini-tts-quality')) GeminiTTSProvider.setQuality(val('sel-gemini-tts-quality'));
+    if (typeof WhisperPreread !== 'undefined' && val('sel-stt-confirm-resend') !== null) WhisperPreread.setResend(val('sel-stt-confirm-resend') === '1'); // v1.8
   }
 
   /** TTSプロバイダーを実際に切り替える */
