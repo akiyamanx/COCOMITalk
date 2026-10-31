@@ -2,6 +2,7 @@
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v3.43 2026-04-06 - お散歩モード改善（会話ラリー一時停止+表示/送信分離）
 // v3.60 2026-07-17 - お散歩ゲートPoC A反映（voice-sender v1.1 / vision-ui v1.5 / chat-core v2.2）
+// v4.6 2026-11-01 - Gemini TTS を1本ずつ送る（2つ目は1つ目の応答ヘッダ後）・429は800ms後に1回だけGeminiで送り直し・OpenAIの代わりの声はspeed0.9倍・どのエンジン/声かを⏱に（gemini-tts-provider v1.9 / voice-output v3.1）
 // v4.5 2026-11-01 - 会議 Phase A: 共通の進め方（prompts/meeting-procedure.js）・書記まとめ cocomi.meeting.v1（meeting-result.js）・📤結果を共有（meeting-share.js）・名前表を登録簿へ
 // v4.4 2026-10-31 - 長い発話の費用ガード: 録音30秒超なら仮は送らず確定時に全体1回・表示は「聞き取り中…（長文）」（whisper-preread v1.2）
 // v4.3 2026-10-31 - 実機で続きの切り出しがHTTP 400(Invalid file format)→仮2・仮3も最初から全体を送り結果を置き換え・雑音ハルシネーション除け（stt-noise-filter.js新規・whisper-preread v1.1・whisper-provider v1.17）
@@ -44,7 +45,7 @@
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
-const CACHE_NAME = 'cocomitalk-v4.5';
+const CACHE_NAME = 'cocomitalk-v4.6';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',

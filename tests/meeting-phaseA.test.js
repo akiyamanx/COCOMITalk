@@ -144,7 +144,7 @@ test('⑤ 共有: 結果のMarkdownだけ（議事ログは入れない）。nav
 
 test('配線: index.html・sw.js(v4.5・CACHE_FILESは全部存在)・📤ボタン。新ファイルは500行以内・表記あり', () => {
   const html = read('index.html'), sw = read('sw.js');
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.5';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.6';"));
   const files = [...sw.matchAll(/'\.\/([^']+)'/g)].map(m => m[1]).filter(Boolean);
   for (const f of files) assert.ok(fs.existsSync(path.join(__dirname, '..', f)), `${f} が存在`);
   for (const f of ['prompts/meeting-procedure.js', 'meeting-result.js', 'meeting-share.js']) {

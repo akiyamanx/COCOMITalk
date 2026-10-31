@@ -1,4 +1,4 @@
-// voice-output.js v3.0
+// voice-output.js v3.1
 // このファイルはTTS音声の再生管理を担当する（AudioPlaybackManager）
 // 再生キュー、割り込み停止、姉妹アイコン発光制御を行う
 // openai-tts-provider.js / voicevox-tts-provider.js と連携してAI応答を声で再生する
@@ -17,8 +17,9 @@
 // v2.7 2026-10-29 - 音が鳴っている間の吹き出しタップで停止できるように（鳴り始め700msの連打は無視。準備中は引き続き無視）
 // v2.8 2026-10-30 - 速く: 最初の1文だけ先に声にして鳴らし、その間に次の文を先読み（つなぎ目の無音なし）。返事全体を1つの「話し中」として扱う（文の間でマイクを開けない）。話した文をこだま除け(VoiceFast)に記録
 // v2.9 2026-10-30 - 1つ目のかたまりを20〜30字に短く・絵文字を読まない・2つ同時に先読み・TTSの送信/受信/再生を⏱で記録（VoiceFast v1.1）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 // v3.0 2026-10-30 - ⏱に中継のGoogle側の時間(upstream ms)を表示（v3.95: upstream-ttfb も / v3.96: stream の最初の音ms も）。受け取りながら読み上げは voice-stream.js（mixin）
+// v3.1 2026-11-01 - v4.6: Gemini→OpenAIの声に戻す時は OpenAI の speed を0.9倍（ゆっくり落ち着いて）。再生倍率(playbackRate)の設定はそのまま。どのエンジン/声で作ったかを⏱に出す
 
 class AudioPlaybackManager {
   constructor() {
@@ -65,8 +66,11 @@ class AudioPlaybackManager {
   /** 読み上げ音声を作る。Gemini選択時だけ、声が未割り当て/失敗ならOpenAIの声 → それも失敗ならVOICEVOXの声へ戻す（OpenAI TTSは2027-01-06停止まで） */
   async _synth(text, voice, sisterId, speed, style) {
     if ((typeof VoiceFast !== 'undefined')) VoiceFast.rememberSpoken(text); // こだま除け: 自分が話す言葉を覚えておく
+    const head = `「${String(text).slice(0, 8)}…」`;
     try {
-      return await this._ttsProvider.synthesize(text, voice, { speed, style });
+      const a = await this._ttsProvider.synthesize(text, voice, { speed, style });
+      this._tlog(`🗣 TTSエンジン=${this._ttsProvider === this._geminiProvider ? 'gemini' : this._ttsProvider === this._voicevoxProvider ? 'voicevox' : 'openai'} 声=${voice} ${head}`);
+      return a;
     } catch (e) {
       if (this._ttsProvider !== this._geminiProvider) throw e;
       const map = SISTER_VOICE_MAP[sisterId] || {};
@@ -74,16 +78,23 @@ class AudioPlaybackManager {
       if (this._openaiProvider.isAvailable()) {
         this._log(`Gemini TTS → OpenAIへ戻す: ${e.message}`);
         try {
-          return await this._openaiProvider.synthesize(text, map.openai?.voice || 'alloy', { speed });
+          const ov = map.openai?.voice || 'alloy', fs = AudioPlaybackManager.fallbackSpeed(speed);
+          const a = await this._openaiProvider.synthesize(text, ov, { speed: fs });
+          this._tlog(`🗣 TTSエンジン=openai(代わり) 声=${ov} speed=${fs} ${head}（Gemini: ${e.message}）`);
+          return a;
         } catch (e2) { err = e2; }
       }
       if (this._voicevoxProvider && map.voicevox?.voice) {
         this._log(`OpenAI TTS → VOICEVOXへ戻す: ${err.message}`);
+        this._tlog(`🗣 TTSエンジン=voicevox(代わり) 声=${map.voicevox.voice} ${head}`);
         return await this._voicevoxProvider.synthesize(text, map.voicevox.voice, { speed });
       }
       throw err;
     }
   }
+
+  /** v3.1: OpenAI の代わりの声は API の speed を0.9倍（設定1.0→0.9。0.25〜4.0の範囲） */
+  static fallbackSpeed(speed) { return Math.min(4, Math.max(0.25, Math.round((Number(speed) || 1) * AudioPlaybackManager.FALLBACK_SPEED_RATE * 100) / 100)); }
 
   /** この文のトーンから話し方(style)を決める。tone-style.js が無い/失敗でも読み上げは止めない */
   _styleFor(text) {
@@ -459,3 +470,4 @@ class AudioPlaybackManager {
 }
 
 window.AudioPlaybackManager = AudioPlaybackManager;
+AudioPlaybackManager.FALLBACK_SPEED_RATE = 0.9; // v3.1: Gemini→OpenAI の代わりの声をゆっくりに

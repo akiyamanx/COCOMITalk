@@ -1,5 +1,5 @@
 // COCOMITalk - Gemini TTS を受け取りながら鳴らす(v3.96〜v3.98)のテスト（pcm-stream-player.js / gemini-tts-provider.js v1.6〜v1.8）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -72,6 +72,7 @@ function provider(resps, { flag = null, ctx = fakeCtx() } = {}) {
     ApiCommon: { getWorkerURL: () => 'https://w', getAuthToken: () => 't', hasAuthToken: () => true },
     fetch: async (u, o) => { calls.push({ u, o, body: JSON.parse(o.body) }); return resps.shift(); },
   });
+  e.GeminiTTSProvider.RETRY_429_MS = 5; // v4.6: テストでは短く
   const g = new e.GeminiTTSProvider(); g._recordUsage = () => {};
   return { g, calls };
 }
@@ -159,7 +160,7 @@ test("v3.98(j'): Retry-After 秒の間は fetch せずすぐ例外、過ぎた�
 });
 test("v3.98(j'): Retry-After が無い/読めない時は20秒、WAV(noStream)の429でも同じ", async () => {
   for (const ra of [null, 'abc']) {
-    const { g } = provider([r429(ra)]);
+    const { g } = provider([r429(ra), r429(ra)]); // v4.6: Retry-After 無しは1回だけ送り直す
     const t = Date.now();
     await assert.rejects(g.synthesize('やあ', 'Kore', { noStream: true }), /429/);
     assert.ok(Math.abs(g._cooldownUntil - (t + 20000)) < 1000, String(ra));

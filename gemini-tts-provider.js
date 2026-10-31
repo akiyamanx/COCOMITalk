@@ -1,7 +1,7 @@
-// gemini-tts-provider.js v1.8
+// gemini-tts-provider.js v1.9
 // このファイルはGemini TTS（gemini-3.8-flash-lite-tts / gemini-3.8-flash-tts）を中継Worker経由で呼ぶ読み上げプロバイダー
 // TTSProviderインターフェースに準拠（openai-tts-provider.js と同じ使い方）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 // v1.3 2026-10-30 - ⏱用に audio._ttsModel / _ttsBytes を付ける（音声の中身・送り方は変更なし）
 // v1.4 2026-10-30 - 中継の Server-Timing(upstream;dur=ms) を読んで audio._ttsUpstreamMs に（⏱で「Google側の時間」と「通信など」を分ける）
 // v1.5 2026-10-30 - 中継が upstream-ttfb（Googleのヘッダ到着）と upstream（本文読了）の2つを返すので両方読む（audio._ttsTtfbMs）
@@ -11,6 +11,9 @@
 //   (i): AudioContext が running の時だけ stream（止まっていたら WAV の <audio> で鳴らし、ended が来ないままマイクが戻らない事故を防ぐ）
 // v1.8 2026-10-31 - クロ宿題(j'): 429 は WAV で送り直さない。Retry-After 秒（無ければ20秒）の間は Google を呼ばずにすぐ例外
 //   → voice-output の既存フォールバック（OpenAI の声）が使われる。待ち時間はこのプロバイダーの _cooldownUntil に持つ
+// v1.9 2026-11-01 - v4.6: 2つ同時に送ると片方が429→OpenAIの声(早口・声が混ざる)になる対策。
+//   ①送信は1本ずつ: 前の送信の応答ヘッダが届いてから次を送る（1つ目の速さは同じ。2つ目は1つ目の受信中に先読み）。最大 GATE_MAX_MS 待ったら送る
+//   ②429 は Retry-After が無い/2秒以下なら RETRY_429_MS(800ms) 後に1回だけ Gemini で送り直し。それも429なら今まで通り休む
 // v1.0 2026-10-28 - 新規作成。声が空なら例外を投げ、voice-output側がOpenAIへ戻す
 // v1.1 2026-10-28 - 5人の声が決定（割り当ては tts-provider.js の SISTER_VOICE_MAP.gemini / characters.js）。本ファイルのコード変更なし（コメントのみ）
 // v1.2 2026-10-28 - 場面ごとの話し方: options.style(英語の自由文・200字以内)を中継の style 欄で送る（tone-style.js が作る）。空なら送らない
@@ -80,16 +83,27 @@ class GeminiTTSProvider extends TTSProvider {
     const wantStream = !options.noStream && GeminiTTSProvider.streamEnabled();
     const ac = (wantStream && typeof AbortController !== 'undefined') ? new AbortController() : null;
     const t0 = Date.now();
-    let res = await fetch(`${ApiCommon.getWorkerURL()}/gemini-tts`, {
+    const post = () => fetch(`${ApiCommon.getWorkerURL()}/gemini-tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'X-COCOMI-AUTH': ApiCommon.getAuthToken() },
       body: JSON.stringify(wantStream ? { ...payload, stream: true } : payload),
       ...(ac ? { signal: ac.signal } : {}),
     });
+    let res = await this._oneAtATime(async () => { // v1.9: 1本ずつ送る（応答ヘッダが届いたら次の人が送れる）
+      if (this.inCooldown()) throw new Error('Gemini TTS 429 待ち中（Googleは呼ばない）');
+      let r = await post();
+      if (r.status === 429 && !options._retried429 && GeminiTTSProvider.retryable429(r)) { // v1.9: 少し待って1回だけ
+        GeminiTTSProvider._tlog(`⚠️ TTS 429 → ${GeminiTTSProvider.RETRY_429_MS}ms 待って Gemini で1回だけ送り直し（声=${voice}）`);
+        await new Promise(ok => GeminiTTSProvider._later(ok, GeminiTTSProvider.RETRY_429_MS));
+        r = await post();
+        if (r.ok) GeminiTTSProvider._tlog(`✅ TTS 429 の送り直し成功（Gemini 声=${voice}）`);
+      }
+      return r;
+    });
     if (wantStream && res.ok && GeminiTTSProvider.isPcm(res)) {
       const a = await this._streamAudio(res, ac, { text: sendText, voice, model, style, t0 });
       if (a) return a;
-      return this.synthesize(text, voice, { ...options, noStream: true }); // 0バイト/失敗 → WAV で送り直し
+      return this.synthesize(text, voice, { ...options, noStream: true, _retried429: true }); // 0バイト/失敗 → WAV で送り直し
     }
     if (res.status === 429) { // v1.8: 送り直さない。しばらく Gemini TTS を休む
       const sec = this._noteRateLimit(res);
@@ -98,7 +112,7 @@ class GeminiTTSProvider extends TTSProvider {
     }
     if (wantStream && !res.ok) { // v1.7: 400/429/502/504など何でも → stream なし(WAV)で1回だけ（noStream なのでそれ以上は繰り返さない）
       if (typeof VoiceFast !== 'undefined' && VoiceFast.tlog) VoiceFast.tlog(`⚠️ TTS stream ${res.status} → WAVで送り直し`);
-      return this.synthesize(text, voice, { ...options, noStream: true });
+      return this.synthesize(text, voice, { ...options, noStream: true, _retried429: true });
     }
     if (!res.ok) {
       let msg = `Gemini TTS エラー: ${res.status}`;
@@ -118,6 +132,24 @@ class GeminiTTSProvider extends TTSProvider {
     audio._ttsUpstreamMs = GeminiTTSProvider.upstreamMs(st); audio._ttsTtfbMs = GeminiTTSProvider.upstreamMs(st, 'upstream-ttfb');
     return audio; // 速さは呼び出し側が playbackRate で変える（Geminiは速度パラメータなし）
   }
+
+  /** v1.9: 送信を1本ずつにする。fn(送信〜応答ヘッダ)が終わるか GATE_MAX_MS 経つまで次は待つ */
+  async _oneAtATime(fn) {
+    const prev = this._gate || null; const w0 = Date.now();
+    let release; const mine = new Promise(ok => { release = ok; });
+    this._gate = (prev || Promise.resolve()).then(() => mine);
+    if (prev) { let timer; await Promise.race([prev, new Promise(ok => { timer = GeminiTTSProvider._later(ok, GeminiTTSProvider.GATE_MAX_MS); })]); if (timer && typeof clearTimeout === 'function') clearTimeout(timer); }
+    if (prev && Date.now() - w0 >= 5) GeminiTTSProvider._tlog(`⏳ Gemini TTS 前の応答を ${Date.now() - w0}ms 待ってから送信（1本ずつ）`);
+    try { return await fn(); } finally { release(); }
+  }
+  /** v1.9: 429 を送り直してよいか（Retry-After が無い/2秒以下の時だけ） */
+  static retryable429(res) {
+    const h = res.headers && res.headers.get ? res.headers.get('Retry-After') : null;
+    const n = Number(h);
+    return h == null || h === '' || !Number.isFinite(n) || n <= 2;
+  }
+  static _later(fn, ms) { if (typeof setTimeout === 'function') return setTimeout(fn, ms); fn(); return null; }
+  static _tlog(t) { try { if (typeof VoiceFast !== 'undefined' && VoiceFast.tlog) VoiceFast.tlog(t); } catch (e) { /* ignore */ } }
 
   /** v1.8: 429 の待ち時間中か */
   inCooldown(now = Date.now()) { return !!this._cooldownUntil && now < this._cooldownUntil; }
@@ -169,6 +201,8 @@ class GeminiTTSProvider extends TTSProvider {
 
 GeminiTTSProvider.QUALITY_KEY = 'cocomitalk-gemini-tts-quality';
 GeminiTTSProvider.STREAM_KEY = 'cocomitalk-gemini-tts-stream'; // v1.6: 'off' で受け取りながら再生を止める
+GeminiTTSProvider.RETRY_429_MS = 800; // v1.9: 429 の送り直しまでの間
+GeminiTTSProvider.GATE_MAX_MS = 8000; // v1.9: 前の送信の応答をこれ以上は待たない
 GeminiTTSProvider.COOLDOWN_DEFAULT_SEC = 20; // v1.8: Retry-After が無い時の休み（秒）
 GeminiTTSProvider.MAX_STYLE = 200; // 中継の上限と同じ
 GeminiTTSProvider.MAX_TEXT = 1500; // 中継側にも同じ上限（提案パッチ）。voice-outputが150〜200字ごとに分割するので余裕あり
