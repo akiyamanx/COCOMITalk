@@ -1,17 +1,16 @@
-// whisper-provider.js v1.12
+// whisper-provider.js v1.13
 // このファイルはOpenAI Whisper APIによるSTT実装
 // SpeechProviderインターフェースに準拠（web-speech-provider.jsの代替）
 // ハイブリッド方式: 無音検出で区切り＋最大25秒で強制送信
 // v1.11 2026-10-28 - STTモデルを設定値化（SttModel）、無音区切り秒数を設定値化（既定3000msで挙動不変） / v1.12 2026-10-30 時間ログ(VoiceFast.mark)
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
+// v1.13 2026-10-31 - 耳の死亡を1.5秒で検知(whisper-vad-guard.js)・復活は2秒続いてから＝はしごが上がれる / 張替はlive trackから作り直し・trackが死んでいたらフル再取得 /
+//   VADが見えていなかった区切り・25秒の最大区切りも大きければ送る / 連続重複文を1つに / マイク表示へ状態と音量を通知(mic-indicator.js)
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 // v1.10 2026-07-17 - 無音セグメント連続送信ループ修正（継続録音のhasVoiceStarted維持を廃止）＋
 //   無発話50秒で予防グラフ張替（maxVol>0で生存判定なのに感度低下する「半死」対策）
 // v1.9 2026-07-17 - 段階復帰はしご（resume待機張替/ctx作直し/フル再取得）＋番犬再武装＋
 //   recorder世代ガード・ハンドラ切断（webm破損根治）＋resume timeout化＋track観測
-// v1.8 2026-07-16 - resumeガード期間中のpause/stop追い越し防止
-// v1.7 2026-04-05 - resume後AudioContext suspend対策
-// v1.4〜v1.6: 履歴省略（ハルシネーションフィルタ/最大録音25秒延長）
-// v1.0〜v1.3: 履歴省略（Whisper STT/sessionIDガード/resumeガード期間/DebugLogger）
+// v1.0〜v1.8: 履歴省略（Whisper STT/sessionIDガード/ハルシネーションフィルタ/最大25秒/suspend対策/pause追い越し防止）
 
 /**
  * Whisper APIプロバイダー
@@ -53,6 +52,7 @@ class WhisperProvider extends SpeechProvider {
     this._sourceNode = null;       // MediaStreamSource（張替時にdisconnectするため保持）
     this._lastSuspendResumeAt = 0; // suspended即応resumeのスロットル
     this._noVoiceSegments = 0;     // v1.10追加 - 無発話セグメント連続数（予防はしご用）
+    this._vad = WhisperVadGuard.createTracker(); this._forcedEnd = false; // v1.13
 
     this._debugVisible = false;
     this._debugEl = null;
@@ -198,6 +198,7 @@ class WhisperProvider extends SpeechProvider {
     this._processing = false;
     if (!isContinuation) { this._hasVoiceStarted = false; this._voiceCount = 0; }
     this._zeroVolumeCount = 0; // v1.7追加 - 録音開始時にゼロカウンターリセット
+    this._vad.reset(); this._forcedEnd = false; this._mic('listening', 0); // v1.13
     const mimeType = this._getSupportedMimeType();
     this._debugLog(`MIMEタイプ: ${mimeType}`);
     const gen = ++this._recorderGen; // v1.9追加 - recorder世代番号
@@ -211,7 +212,7 @@ class WhisperProvider extends SpeechProvider {
     this._recordStartTime = Date.now();
     this._startVolumeMonitor();
     this._maxTimer = setTimeout(() => {
-      this._debugLog(`最大${this._MAX_RECORD_TIME}ms → 強制送信`);
+      this._debugLog(`最大${this._MAX_RECORD_TIME}ms → 強制送信`); this._forcedEnd = true;
       this._onSegmentEnd();
     }, this._MAX_RECORD_TIME);
   }
@@ -271,12 +272,15 @@ class WhisperProvider extends SpeechProvider {
         avgVolume = sum / dataArray.length;
       }
 
+      // v1.13 - 耳の生死はトラッカーで判定（死亡1.5秒で即はしご / 復活は2秒続いてから＝1段目止まりの解消）
+      const life = this._vad.tick(maxVolume, ctxDead);
+      if (life === 'dead') { this._mic('asleep', 0); this._climbRecoveryLadder(ctxDead ? `ctx=${this._audioCtx ? this._audioCtx.state : 'null'}` : 'maxVol=0'); return; }
+      if (life === 'alive' && this._recoveryAttempts > 0) {
+        this._debugLog(`✅ 音響グラフ生存確認(2秒) → はしごリセット（${this._recoveryAttempts}段目で復活）`);
+        this._recoveryAttempts = 0;
+      }
+      this._mic(this._hasVoiceStarted ? 'voice' : 'listening', WhisperVadGuard.level(avgVolume, this._SILENCE_THRESHOLD));
       if (!ctxDead && avgVolume > this._SILENCE_THRESHOLD) {
-        this._zeroVolumeCount = 0;
-        if (this._recoveryAttempts > 0) {
-          this._debugLog(`✅ 実音声観測 → はしごリセット（${this._recoveryAttempts}段目で復活）`);
-          this._recoveryAttempts = 0;
-        }
         if (!this._hasVoiceStarted) {
           this._voiceCount++;
           if (this._voiceCount >= this._VOICE_START_COUNT) {
@@ -287,23 +291,7 @@ class WhisperProvider extends SpeechProvider {
         if (this._silenceTimer) { clearTimeout(this._silenceTimer); this._silenceTimer = null; }
         if (this._hasVoiceStarted && this.onInterim) this.onInterim('🎤 ...');
       } else {
-        this._voiceCount = 0;
-
-        if (ctxDead || maxVolume === 0) {
-          // v1.9変更 - 死亡疑いカウント（>=判定＋同期リセット＝再武装できる番犬）
-          this._zeroVolumeCount++;
-          if (this._zeroVolumeCount >= this._ZERO_VOLUME_THRESHOLD) {
-            this._zeroVolumeCount = 0;
-            this._climbRecoveryLadder(ctxDead ? `ctx=${this._audioCtx ? this._audioCtx.state : 'null'}` : 'maxVol=0');
-          }
-        } else {
-          // maxVolume > 0 だけどavgが閾値以下 = 本当に静かなだけ（正常）
-          this._zeroVolumeCount = 0;
-          if (this._recoveryAttempts > 0) {
-            this._debugLog(`✅ 音響グラフ生存確認 → はしごリセット（${this._recoveryAttempts}段目で復活）`);
-            this._recoveryAttempts = 0;
-          }
-        }
+        this._voiceCount = 0; // v1.13 - 死亡/生存の判定は上の this._vad.tick() に一本化
 
         if (this._hasVoiceStarted && !this._silenceTimer && !this._processing) {
           this._silenceTimer = setTimeout(() => {
@@ -318,7 +306,7 @@ class WhisperProvider extends SpeechProvider {
   // v1.9追加 - 段階復帰はしご本体（1段=resume待機+張替 / 2段=ctx作直し / 3段=streamフル再取得）
   _climbRecoveryLadder(reason) {
     this._recoveryAttempts++;
-    const stage = Math.min(this._recoveryAttempts, 3);
+    const stage = this._recoveryAttempts <= 3 ? this._recoveryAttempts : 1; // v1.13 - 3段目の後は軽い1段目に戻る（静かな部屋で再取得を連発しない）
     this._debugLog(`🪜 復帰はしご${stage}段目 発火（${reason}, 通算${this._recoveryAttempts}回）`);
     this._recovering = true;
     const safety = setTimeout(() => { this._recovering = false; }, 8000); // 宙吊り保険
@@ -335,6 +323,9 @@ class WhisperProvider extends SpeechProvider {
   // v1.9追加 - はしご1段目: resume完了をtimeout付きで待ってからAnalyser張替
   async _recoverStage1() {
     if (!this._audioCtx || this._audioCtx.state === 'closed') return;
+    // v1.13 - trackが終わっていたら張替では直らない → フル再取得へ
+    const tr = this._stream && this._stream.getAudioTracks()[0];
+    if (!tr || tr.readyState !== 'live') { this._debugLog('1段目: trackがlive以外 → 3段目へ'); return this._fullRestart(); }
     try {
       await Promise.race([
         this._audioCtx.resume(),
@@ -351,7 +342,10 @@ class WhisperProvider extends SpeechProvider {
   _rewireAnalyser() {
     try {
       if (this._sourceNode) { try { this._sourceNode.disconnect(); } catch (e) { /* ignore */ } }
-      this._sourceNode = this._audioCtx.createMediaStreamSource(this._stream);
+      // v1.13 - live trackから新しいMediaStreamを包み直して作る（同じstreamの再利用で無音のままになる端末対策）
+      const live = this._stream.getAudioTracks().filter(t => t.readyState === 'live');
+      const src = (live.length && typeof MediaStream !== 'undefined') ? new MediaStream(live) : this._stream;
+      this._sourceNode = this._audioCtx.createMediaStreamSource(src);
       const analyser = this._audioCtx.createAnalyser();
       analyser.fftSize = 512;
       this._sourceNode.connect(analyser);
@@ -416,12 +410,14 @@ class WhisperProvider extends SpeechProvider {
 
     // v1.7修正 - _hasVoiceStartedに関わらず_afterWhisperResponseを呼ぶ
     // （無音のまま_maxTimerが到達した場合も録音を再起動するため）
-    if (this._chunks.length > 0 && this._hasVoiceStarted) {
-      const duration = Date.now() - (this._recordStartTime || Date.now());
-      if (duration >= this._MIN_RECORD_TIME) {
-        this._noVoiceSegments = 0; this._sendToWhisper(); // v1.10 - 発話ありセグメントでカウンタリセット
-        return; // _sendToWhisper内で_afterWhisperResponseが呼ばれる
-      }
+    // v1.13 - VADが発話を見ていなくても、耳が死んでいた/25秒の最大で切った区切りは大きければ送る
+    const bytes = this._chunks.reduce((n, c) => n + (c.size || 0), 0);
+    const blind = this._vad.wasBlind();
+    if (this._chunks.length > 0 && WhisperVadGuard.shouldSend({ hadVoice: this._hasVoiceStarted, blind, forced: this._forcedEnd,
+      bytes, durationMs: Date.now() - (this._recordStartTime || Date.now()), minMs: this._MIN_RECORD_TIME })) {
+      if (!this._hasVoiceStarted) this._debugLog(`🛟 VADは発話なしだが送る（blind=${blind}, forced=${this._forcedEnd}, ${(bytes / 1024).toFixed(1)}KB）`);
+      this._noVoiceSegments = 0; this._sendToWhisper(); // v1.10 - 発話ありセグメントでカウンタリセット
+      return; // _sendToWhisper内で_afterWhisperResponseが呼ばれる
     }
     // v1.7追加 - 発話なし/短すぎの場合も録音を再起動
     this._debugLog('セグメント終了（発話なし/短すぎ）→ 録音再起動');
@@ -443,6 +439,7 @@ class WhisperProvider extends SpeechProvider {
     this._debugLog(`API送信: ${(blob.size / 1024).toFixed(1)}KB (${ext})`);
     if (blob.size < 3000) { this._debugLog(`データ小さすぎ（${blob.size}B）→ スキップ`); this._afterWhisperResponse(); return; }
     const sentSessionId = this._currentSessionId;
+    this._mic('transcribing', 0);
     try {
       // v1.11変更 - 文字起こしモデルは設定値（stt-model.js。既定gpt-transcribe、失敗時whisper-1へ自動で戻る）
       const result = await SttModel.transcribe(blob, ext, 'COCOMITalkでの日常会話。');
@@ -451,7 +448,8 @@ class WhisperProvider extends SpeechProvider {
         this._afterWhisperResponse(); return;
       }
       if (result.text && result.text.trim()) {
-        const text = result.text.trim();
+        const raw = result.text.trim(); const text = WhisperVadGuard.dedupeRepeats(raw); // v1.13 - X。X。X。→X。
+        if (text !== raw) this._debugLog(`🔁 連続重複をまとめた: "${raw}" → "${text}"`);
         if (this._isHallucination(text)) { this._debugLog(`ハルシネーション除外: "${text}"`); }
         else { this._debugLog(`認識結果: "${text}" [session=${sentSessionId}]`); if (typeof VoiceFast !== 'undefined') VoiceFast.mark('stt'); if (this.onFinal) this.onFinal(text); }
       } else { this._debugLog('認識結果: 空（無音と判定）'); }
@@ -467,6 +465,9 @@ class WhisperProvider extends SpeechProvider {
     if (this._listening && this._stream) { this._startRecording(false); }
     else { if (this.onEnd) this.onEnd(); }
   }
+
+  // v1.13 - マイク表示へ状態と音量を渡す（mic-indicator.js が無ければ何もしない）
+  _mic(state, lvl) { try { if (typeof window !== 'undefined' && window.MicIndicator) window.MicIndicator.update(state, lvl); } catch (e) { /* 表示失敗で録音を止めない */ } }
 
   setSessionId(id) { this._currentSessionId = id; this._debugLog(`sessionId更新: ${id}`); }
 

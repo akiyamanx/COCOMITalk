@@ -2,6 +2,7 @@
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v3.43 2026-04-06 - お散歩モード改善（会話ラリー一時停止+表示/送信分離）
 // v3.60 2026-07-17 - お散歩ゲートPoC A反映（voice-sender v1.1 / vision-ui v1.5 / chat-core v2.2）
+// v3.99 2026-10-31 - 間を置いて話すと拾えない対策: 耳の死亡を1.5秒で検知・はしごが上がれる・VADが見えない区切りも送る・連続重複を1つに・マイク表示に聞いてるよ/文字にしてるよ（whisper-vad-guard.js/mic-indicator.js新規・whisper-provider v1.13・voice-ui v1.4）
 // v3.98 2026-10-31 - クロ宿題(j'): Gemini TTS 429 は送り直さず Retry-After(既定20秒)の間 OpenAI の声へ（gemini-tts-provider v1.8）
 // v3.61 2026-07-17 - バッファ待ち窓修正反映（voice-sender v1.2 / vision-ui v1.5.1） / v3.95 (本体変更なし) ⏱にGoogleのヘッダ到着(upstream-ttfb)・送り直し回数を出す版（api-common v0.13 / api-claude v2.2 / gemini-tts-provider v1.5） / v3.96 2026-10-31 - Gemini TTSを受け取りながら鳴らす(stream, pcm-stream-player.js新規 / gemini-tts-provider v1.6 / voice-output ⏱表示のみ) / v3.97 2026-10-31 - クロ指摘: stream失敗は状態を問わずWAVで1回送り直し・AudioContextがrunningの時だけstream（gemini-tts-provider v1.7）
 // v3.63 2026-10-28 - 思考の強さ/STTモデル/Gemini TTS追加（model-effort/effort-settings-ui/stt-model/gemini-tts-provider）
@@ -36,8 +37,8 @@
 // v3.74 2026-10-29 - 吹き出しタップの二重再生ガード（voice-output v2.6 / voice-input v2.5.1 / chat-ui v1.3 / styles.css）
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
-const CACHE_NAME = 'cocomitalk-v3.98';
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
+const CACHE_NAME = 'cocomitalk-v3.99';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
@@ -57,7 +58,7 @@ const CACHE_FILES = [
   './meeting-voice.js', './doc-generator.js', './file-handler.js',
   './tone-style.js', './tts-provider.js', './openai-tts-provider.js', './pcm-stream-player.js', './gemini-tts-provider.js',
   './voicevox-tts-provider.js', './speech-provider.js',
-  './web-speech-provider.js', './debug-logger.js', './whisper-provider.js', './stt-model.js',
+  './web-speech-provider.js', './debug-logger.js', './whisper-vad-guard.js', './whisper-provider.js', './mic-indicator.js', './stt-model.js',
   './voice-output.js', './voice-ui.js', './audio-health.js',
   './voice-state.js', './voice-command.js', './voice-input.js', './voice-fast.js', './voice-stream.js',
   './voice-sender.js', './effort-settings-ui.js', './app-settings.js',

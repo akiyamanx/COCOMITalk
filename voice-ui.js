@@ -1,11 +1,12 @@
-// voice-ui.js v1.3
+// voice-ui.js v1.4
 // 音声会話のUI部品（DOM操作）を担当する
 // マイクボタン、interim表示、送信確認UI、送信カウントダウン、姉妹アイコン発光
 // v1.0〜v1.1.1: 履歴省略（セッションカプセル参照）
 // v1.2 追加 - 送信カウントダウンアニメ（方針F対応: 0.5秒光って自動送信、タップでキャンセル）
 // v1.3 追加 - recovering/blocked状態表示（三姉妹会議決定: UI状態同期）
 // v3.77 2026-10-29 - マイクの状態色を青系に（紫・ピンクをやめた）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
+// v1.4 2026-10-31 - 状態をマイク表示(mic-indicator.js)へも渡す（聞いてるよ/文字にしてるよ…のラベルと音量の輪）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 
 /**
  * VoiceUI
@@ -238,6 +239,7 @@ class VoiceUI {
   updateMicState(state) {
     const btn = this._elements.micBtn;
     if (!btn) return;
+    if (typeof window !== 'undefined' && window.MicIndicator) window.MicIndicator.setBase(state); // v1.4
 
     // v1.1: リング要素の表示/非表示
     const rings = this._elements.micWrap
