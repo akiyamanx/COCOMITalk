@@ -3,6 +3,7 @@
 // v3.43 2026-04-06 - お散歩モード改善（会話ラリー一時停止+表示/送信分離）
 // v3.60 2026-07-17 - お散歩ゲートPoC A反映（voice-sender v1.1 / vision-ui v1.5 / chat-core v2.2）
 // v4.8 2026-11-01 - 議事録などの日付をJSTに・議事録/指示書の二重保存防止・会議結果の人のIDを koko/mio/kuro/aoi/kimi に統一・会議の答え方ルール（全項目回答/未確認/記憶では）＋短すぎる返答の聞き直し・会議の送信ボタン表示・クロのチェック失敗理由を表示
+// v4.9 2026-11-01 - AIが考え中・おしゃべり中・書記/書類/議事録/共有の作業中に、左上の顔が動き(ぷるぷる/びよ〜ん/カタカタ)、左端に「〇〇考え中…」の札を出す（working-indicator.js / working-hooks.js / working-indicator.css）
 // v4.7 2026-11-01 - 会議室の相談を全件一覧（タップで表示・選択）＋取り消しボタン（既存 /consultation/resolve に「取り消し（済み）」）（consultation-list.js 新規 / consultation-ui v1.5）
 // v4.6 2026-11-01 - Gemini TTS を1本ずつ送る（2つ目は1つ目の応答ヘッダ後）・429は800ms後に1回だけGeminiで送り直し・OpenAIの代わりの声はspeed0.9倍・どのエンジン/声かを⏱に（gemini-tts-provider v1.9 / voice-output v3.1）
 // v4.5 2026-11-01 - 会議 Phase A: 共通の進め方（prompts/meeting-procedure.js）・書記まとめ cocomi.meeting.v1（meeting-result.js）・📤結果を共有（meeting-share.js）・名前表を登録簿へ
@@ -47,12 +48,12 @@
 // v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
 // v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
 // 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
-const CACHE_NAME = 'cocomitalk-v4.8';
+const CACHE_NAME = 'cocomitalk-v4.9';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
   './meeting-archive-styles.css', './consultation-styles.css', './vision-styles.css', './layout-main.css', './layout-panels.css', './layout-ui.js', './layout2-core.js', './layout2-ui.js', './layout2-main.css', './layout2-panels.css',
-  './app.js', './mascot-eyes.js', './mascot-eyes.css', './opening.js', './opening-scene.js', './opening-audio.js', './opening.css', './chat-ui.js',
+  './app.js', './mascot-eyes.js', './mascot-eyes.css', './working-indicator.js', './working-hooks.js', './working-indicator.css', './opening.js', './opening-scene.js', './opening-audio.js', './opening.css', './chat-ui.js',
   './chat-core.js', './chat-group.js', './chat-history.js',
   './model-tiers.js', './model-effort.js', './characters.js', './model-migration.js',
   './token-monitor.js', './walk-spend-core.js', './walk-spend.js', './walk-spend-ui.js', './api-common.js', './api-gemini.js',
