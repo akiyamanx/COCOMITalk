@@ -158,7 +158,7 @@ test('v3.94 api-common: Claude の tool_use をストリームのまま組み立
 test('v3.94 送信前の待ち: 0.5秒＋確認0.25秒（延長ルール・1.5秒のマイク復帰待ちはそのまま）、記憶などは並列取得', () => {
   const vi = src('voice-input.js');
   assert.match(vi, /_BUFFER_DELAY = 500;/); assert.match(vi, /_CONFIRM_DELAY = 250;/);
-  assert.match(vi, /_hasVoiceStarted \|\| this\._stt\._processing\) \{ this\._resetBufferTimer\(\)/);
+  assert.match(vi, /_hasVoiceStarted \|\| this\._stt\._processing( \|\| this\._stt\._inflight > 0)?\) \{ this\._resetBufferTimer\(\)/);
   assert.match(vi, /setTimeout\(r, 1500\)\); \/\/ ★ハウリング防止/);
   assert.match(src('prompt-builder.js'), /Promise\.all\(\[pMem, pHot, pVec, pChat\]\)/);
 });

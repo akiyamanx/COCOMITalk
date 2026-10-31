@@ -1,6 +1,6 @@
-// voice-input.js v2.6.1
+// voice-input.js v2.6.2
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
-// UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
+// UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js / v2.6.2 2026-10-31 葵(Aoi): 文字起こし順番待ち(_inflight)中も送信を待つ
 // v2.0〜v2.3.0: 履歴省略（バッファ方式/TTS待機フラグ/voice-state連携/吹き出し読み上げ）
 // v2.4.0 修正 - speakQueueマイク復帰バグ修正（onSisterChange/フェイルセーフ/ガード緩和）
 // v2.4.1 修正 - pause済みWhisperのhealthCheckスキップ（recorder=inactive誤判定回避）
@@ -251,7 +251,7 @@ class VoiceController {
     this._bufferTimer = setTimeout(() => {
       this._bufferTimer = null;
       if (!this._buffer) return;
-      if (this._stt._hasVoiceStarted || this._stt._processing) { this._resetBufferTimer(); return; } // v2.6.0: まだ話し中/文字起こし中→待つ
+      if (this._stt._hasVoiceStarted || this._stt._processing || this._stt._inflight > 0) { this._resetBufferTimer(); return; } // v2.6.0: まだ話し中/文字起こし中→待つ
       if (this._waitingForTTS || this._voiceState.isSpeaking()) {
         console.log('[Voice] TTS待ち/speaking中 → バッファタイマー発火を無視');
         return;

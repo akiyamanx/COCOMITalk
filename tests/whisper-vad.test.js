@@ -90,7 +90,8 @@ test('配線: whisper-provider は guard を使い、旧「1回で即はしご�
   assert.ok(s.includes('WhisperVadGuard.shouldSend('));
   assert.ok(s.includes('WhisperVadGuard.dedupeRepeats('));
   assert.ok(!s.includes('if (this._chunks.length > 0 && this._hasVoiceStarted) {\n      const duration'));
-  assert.ok(s.includes("tr.readyState !== 'live'") && s.includes('new MediaStream(live)'));
+  const r = read('whisper-recovery.js');
+  assert.ok(r.includes("tr.readyState !== 'live'") && r.includes('new MediaStream(live)'));
   assert.ok(s.split('\n').length <= 500);
 });
 
@@ -100,12 +101,13 @@ test('守るべきこと: 読み上げ後1.5秒待ち・こだま除けは残っ
   assert.ok(vi.includes('VoiceFast.isEcho(text)'));
 });
 
-test('読み込み順とキャッシュ: guard → provider → indicator、sw.js v3.99 に入り、全CACHE_FILESが実在', () => {
+test('読み込み順とキャッシュ: guard → provider → indicator、sw.js v4.0 に入り、全CACHE_FILESが実在', () => {
   const idx = read('index.html');
   const i = f => idx.indexOf(`src="${f}"`);
-  assert.ok(i('whisper-vad-guard.js') > 0 && i('whisper-vad-guard.js') < i('whisper-provider.js') && i('whisper-provider.js') < i('mic-indicator.js'));
+  assert.ok(i('whisper-vad-guard.js') > 0 && i('whisper-vad-guard.js') < i('whisper-provider.js') && i('whisper-provider.js') < i('whisper-recovery.js') && i('whisper-recovery.js') < i('mic-indicator.js'));
   const sw = read('sw.js');
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v3.99';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.0';"));
+  assert.ok(sw.includes("'./whisper-recovery.js'"));
   const files = [...sw.match(/const CACHE_FILES = \[([\s\S]*?)\];/)[1].matchAll(/'\.\/([^']*)'/g)].map(m => m[1]).filter(Boolean);
   assert.ok(files.includes('whisper-vad-guard.js') && files.includes('mic-indicator.js'));
   for (const f of files) assert.ok(fs.existsSync(path.join(ROOT, f)), f);
