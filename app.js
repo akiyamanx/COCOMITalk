@@ -5,15 +5,25 @@
 // v1.6 2026-03-10 - 設定関連をapp-settings.jsに分離（余裕確保）
 // v1.7 2026-04-05 - ワイワイモード: スタイル切替ボタン初期化追加
 // v2.0 2026-04-06 - ビジョンUI関連をvision-ui-controller.jsに分離（行数削減）
+// v2.1 2026-10-29 - 起動オープニング(opening.js)をスプラッシュの上に出す（失敗時は従来スプラッシュ）
+// v2.2 2026-10-29 - オープニング(スキップ含む)の後にロゴ画面(COCOMITalk)を1秒見せてからアプリ表示
+// v3.77 2026-10-29 - 選んだ子の色は --sister-* だけ切替。全体の基調(--active-*)は青のまま／theme-colorは青固定
+// v3.79 2026-10-29 - 目だけの小さな顔(mascot-eyes.js)を全画面のbody直下に出す（待機中の合図。オープニング中は隠す）
+// v3.89 2026-10-30 - 登録簿で有効な葵/きみのタブ(.tab)を足す（切替は全部この隠しタブのclick経由なので、無いと選べなかった）＋色
+// v3.90 2026-10-30 - (本体変更なし) 葵/きみを三姉妹と同じ扱いに揃えた版 / v3.91 2026-10-30 - (本体変更なし) 音声を速くした版（voice-fast.js新規 / voice-input v2.6.0 / voice-output v2.8 / stt-model v1.1 / chat-core v2.8） / v3.92 (本体変更なし) 読み上げの鳴り始めを速くした版 / v3.93 (本体変更なし) 返事を受け取りながら読み上げる版 / v3.94 (本体変更なし) 送信までの待ちを短くした版 / v3.95 ⏱にupstream-ttfb・送り直し回数 / v3.96 (本体変更なし) Gemini TTSを受け取りながら鳴らす版 / v3.97 (本体変更なし) TTS stream の送り直し・running判定 / v3.98 (本体変更なし) TTS 429 の休み / v3.99 (本体変更なし) 間を置いた声の拾い直し＋マイク表示 / v4.0 (本体変更なし) 話し始めの頭切れ対策
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 /** アプリケーションモジュール */
 const App = (() => {
   // 三姉妹のCSS変数マッピング
-  const _theme = (k) => ({ '--active-primary': `var(--${k}-primary)`, '--active-light': `var(--${k}-light)`, '--active-dark': `var(--${k}-dark)`, '--active-bg': `var(--${k}-bg)` });
-  const SISTER_THEMES = { koko: _theme('koko'), gpt: _theme('gpt'), claude: _theme('claude') };
+  // v2.3: 切り替えるのは“選んだ子の色”(--sister-*)だけ。画面全体の基調(--active-*)は落ち着いた青のまま
+  const _theme = (k) => ({ '--sister-primary': `var(--${k}-primary)`, '--sister-light': `var(--${k}-light)`, '--sister-dark': `var(--${k}-dark)`, '--sister-bg': `var(--${k}-bg)` });
+  const SISTER_THEMES = { koko: _theme('koko'), gpt: _theme('gpt'), claude: _theme('claude'), aoi: _theme('aoi'), kimi: _theme('kimi') };
   // アプリ起動
   async function init() {
     _handleSplash();
+    // v3.79 - 待機中の合図の顔を全画面に出す（飾り。失敗してもアプリは普通に動く）
+    try { if (typeof MascotEyes !== 'undefined') MascotEyes.mountFixed(document); } catch (e) { console.warn('[App] 顔の表示スキップ:', e.message); }
     // TokenMonitor初期化
     if (typeof TokenMonitor !== 'undefined') {
       try { await TokenMonitor.init(); await TokenMonitor.loadAndDisplay(); }
@@ -29,6 +39,8 @@ const App = (() => {
       } catch (e) { console.warn('[App] MeetingHistory初期化エラー:', e); }
     }
     ChatCore.init();
+    // 起動直後のモデル表示を実際の設定（段階のモデル名）にそろえる（HTMLの直書きの古い名前が残らないように）
+    if (typeof ModeSwitcher !== 'undefined') ModeSwitcher.onSisterSwitch(ChatCore.getCurrentSister());
     _setupTabs();
     _setupModeButton();
     _setupPeopleButton();
@@ -65,20 +77,47 @@ const App = (() => {
     console.log('[App] COCOMITalk v1.7 起動完了');
   }
   // スプラッシュ画面の制御
+  // v2.1追加 - 起動オープニング(opening.js)をスプラッシュの上に重ねて出す。終了/スキップで即アプリ表示。
+  //   オープニングが未対応・初期化失敗・描画失敗のときは従来どおり1.5秒スプラッシュ→アプリ表示にフォールバック
   function _handleSplash() {
     const splash = document.getElementById('splash-screen');
     const app = document.getElementById('app');
-    setTimeout(() => {
+    // ロゴ画面(COCOMITalkの名前)をholdMsだけ見せてからフェードアウトしてアプリ表示
+    const showThenEnter = (holdMs) => setTimeout(() => {
       splash.classList.add('fade-out');
       // フェードアウト完了後にアプリ表示
       setTimeout(() => {
         splash.classList.add('hidden');
         app.classList.remove('hidden');
       }, 400);
-    }, 1500);
+    }, holdMs);
+    const legacy = () => showThenEnter(1500);
+    let opening = null;
+    try {
+      if (window.CocomiOpening && window.CocomiOpening.isSupported()) {
+        opening = window.CocomiOpening.start({
+          onEnd: (reason) => {
+            if (reason === 'error') { legacy(); return; }
+            showThenEnter(1000); // オープニング(スキップ含む)の後、ロゴ画面を1秒見せてからアプリへ
+          },
+        });
+      }
+    } catch (e) { console.warn('[App] オープニング開始失敗:', e); opening = null; }
+    if (!opening) legacy();
   }
   // 三姉妹タブの設定
   function _setupTabs() {
+    // v3.89 - index.html は三姉妹のタブだけ。登録簿で有効な子(葵/きみ)のタブをここで足す
+    const nav = document.querySelector('.sister-tabs');
+    if (nav && typeof CharacterRegistry !== 'undefined') {
+      const have = [...nav.querySelectorAll('.tab')].map(t => t.dataset.sister);
+      CharacterRegistry.tabsToAdd(have).forEach(({ key, icon, name }) => {
+        const b = document.createElement('button'); b.className = 'tab'; b.dataset.sister = key;
+        const i = document.createElement('span'); i.className = 'tab-icon'; i.textContent = icon;
+        const n = document.createElement('span'); n.className = 'tab-name'; n.textContent = name;
+        b.append(i, n); nav.appendChild(b);
+      });
+    }
     const tabs = document.querySelectorAll('.tab');
 
     tabs.forEach(tab => {
@@ -232,12 +271,9 @@ const App = (() => {
       root.style.setProperty(prop, value);
     });
 
-    // テーマカラーのmetaタグも更新
-    const themeColors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
+    // テーマカラーのmetaタグは基調の青のまま（姉妹ごとには変えない）
     const metaTheme = document.querySelector('meta[name="theme-color"]');
-    if (metaTheme) {
-      metaTheme.setAttribute('content', themeColors[sisterKey] || '#FF6B9D');
-    }
+    if (metaTheme) metaTheme.setAttribute('content', '#4A76A8');
   }
 
   // v1.2追加 - 進行中の会議をIndexedDBから復元

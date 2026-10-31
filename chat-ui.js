@@ -2,6 +2,13 @@
 // v1.0 2026-03-10 - chat-core.jsから表示系ロジックを分離
 // v1.1 2026-03-27 - #77 吹き出しタップ読み上げ（AI返答bubbleをタップ→TTS再生）
 // v1.2 2026-03-27 - #77改善: 再タップで読み上げ停止トグル（再生中→停止/停止中→再生）
+// v1.6 2026-10-30 - 太字補正: MdFix.render（md-fix.js）で「）**に」等の生**を<strong>に
+// v1.5 2026-10-30 - ツールを実際に使った返事の吹き出しに小さな印（options.toolNames → 🔎検索したよ 等）
+// v1.4 2026-10-29 - 音が鳴っている間の吹き出しタップで停止（準備中・鳴り始め700msのタップは無視）
+// v1.3 2026-10-29 - 連打で声が重なる不具合の修正: 読み上げ中(準備中含む)のタップは無視。停止はマイクの🔊ボタン。読み上げ中の吹き出しに speaking 表示
+// v3.77 2026-10-29 - AIの吹き出しに data-sister を付与（CSSがその子の色を付ける）／名前札の色を彩度控えめに
+// v1.7 2026-10-30 - 名前札の色に葵/きみを追加
+// 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
 /** チャットUI表示モジュール */
@@ -20,7 +27,7 @@ const ChatUi = (() => {
 
   // 姉妹テーマカラー
   function getSisterColor(sisterKey) {
-    const colors = { koko: '#FF6B9D', gpt: '#6B5CE7', claude: '#E6783E' };
+    const colors = { koko: '#A5426C', gpt: '#4F449E', claude: '#A8531F', aoi: '#1F6E96', kimi: '#94650A' };
     return colors[sisterKey] || '#888';
   }
 
@@ -34,6 +41,7 @@ const ChatUi = (() => {
 
     const msgDiv = document.createElement('div');
     msgDiv.className = `message ${role}`;
+    if (role === 'ai' && sisterKey) msgDiv.setAttribute('data-sister', sisterKey);   // v3.77: CSSがその子の色（アバター地・吹き出しの左筋）を付ける目印
 
     // アバター
     const avatar = document.createElement('div');
@@ -56,9 +64,9 @@ const ChatUi = (() => {
     // テキスト本文（Markdownパース対応）
     const textNode = document.createElement('div');
     textNode.className = 'msg-text';
-    if (role === 'ai' && typeof marked !== 'undefined' && marked.parse) {
+    if (role === 'ai' && typeof MdFix !== 'undefined') {
       try {
-        textNode.innerHTML = marked.parse(text, { breaks: true, gfm: true });
+        textNode.innerHTML = MdFix.render(text); // v1.6 日本語隣接の**も太字に
       } catch (e) {
         textNode.textContent = text;
       }
@@ -66,23 +74,25 @@ const ChatUi = (() => {
       textNode.textContent = text;
     }
     bubble.appendChild(textNode);
+    // v1.5 2026-10-30 ツールを実際に使った返事に小さな印（検証用）
+    if (role === 'ai' && options.toolNames && options.toolNames.length && typeof PromiseFollowup !== 'undefined') {
+      const tag = document.createElement('div');
+      tag.className = 'msg-tool-tag';
+      tag.textContent = PromiseFollowup.toolLabel(options.toolNames);
+      tag.style.cssText = 'font-size:11px;opacity:.65;margin-top:4px;';
+      bubble.appendChild(tag);
+    }
 
-    // v1.2改良 - #77 吹き出しタップ読み上げ（AI返答のみ・再タップで停止トグル）
+    // v1.3改良 - #77 吹き出しタップ読み上げ（AI返答のみ）。準備中(合成待ち)のタップは無視、音が鳴っている間のタップは停止（speakBubble 側で判定）
     if (role === 'ai') {
       bubble.style.cursor = 'pointer';
+      const setBusy = (busy) => {
+        bubble.classList.toggle('speaking', busy);
+        if (busy) bubble.setAttribute('aria-busy', 'true'); else bubble.removeAttribute('aria-busy');
+      };
       bubble.addEventListener('click', () => {
         const vc = window.voiceController;
-        if (!vc) return;
-        // v1.2追加 - 再生中なら停止（トグル動作）
-        if (vc._playback && vc._playback.isPlaying()) {
-          vc._playback.stop();
-          console.log('[ChatUi] 再タップ → 読み上げ停止');
-          return;
-        }
-        // 停止中なら読み上げ開始
-        if (vc.speakBubble) {
-          vc.speakBubble(text, sisterKey);
-        }
+        if (vc && vc.speakBubble) vc.speakBubble(text, sisterKey, { onBusyChange: setBusy });
       });
     }
 

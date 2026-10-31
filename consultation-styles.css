@@ -1,6 +1,8 @@
 /* COCOMITalk - 相談トピック連携スタイル */
 /* v1.0 2026-03-28 - 新規作成 */
 /* v1.1 2026-03-28 - 長文相談時のスクロール対応（パネルが画面外にはみ出る問題を修正） */
+/* v3.77 2026-10-29 - 配色を落ち着いた青に（色のみ・レイアウト不変） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
 
 /* --- 通知バー（pendingがある時だけ表示） --- */
 .consultation-bar {
@@ -9,8 +11,8 @@
   gap: 8px;
   padding: 10px 14px;
   margin: 0 8px 4px;
-  background: linear-gradient(135deg, #2a1f4e 0%, #1a1235 100%);
-  border: 1px solid #6c5ce7;
+  background: linear-gradient(135deg, #1F2F44 0%, #15212F 100%);
+  border: 1px solid #4A76A8;
   border-radius: 12px;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -18,13 +20,13 @@
 }
 
 .consultation-bar:hover {
-  border-color: #a29bfe;
-  background: linear-gradient(135deg, #352a5e 0%, #221a42 100%);
+  border-color: #9DBFE3;
+  background: linear-gradient(135deg, #2A3D56 0%, #1B2A3C 100%);
 }
 
 @keyframes consultation-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(108, 92, 231, 0.3); }
-  50% { box-shadow: 0 0 12px 2px rgba(108, 92, 231, 0.2); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(74, 118, 168, 0.35); }
+  50% { box-shadow: 0 0 12px 2px rgba(74, 118, 168, 0.25); }
 }
 
 .consultation-bar-icon {
@@ -40,7 +42,7 @@
 
 .consultation-bar-arrow {
   font-size: 0.75em;
-  color: #a29bfe;
+  color: #9DBFE3;
   transition: transform 0.2s ease;
 }
 
@@ -48,8 +50,8 @@
 /* v1.1修正 - max-heightをビューポート基準にし、overflow-yでスクロール可能に */
 .consultation-panel {
   margin: 0 8px 8px;
-  background: #1a1235;
-  border: 1px solid #6c5ce7;
+  background: #15212F;
+  border: 1px solid #4A76A8;
   border-radius: 12px;
   overflow: hidden;
   max-height: 70vh;
@@ -68,7 +70,7 @@
   justify-content: space-between;
   align-items: center;
   padding: 10px 14px;
-  background: #2a1f4e;
+  background: #1F2F44;
   font-size: 0.85em;
   font-weight: 600;
   color: #e8e8f0;
@@ -95,7 +97,7 @@
 .consultation-topic {
   font-size: 0.95em;
   font-weight: 600;
-  color: #a29bfe;
+  color: #9DBFE3;
   margin-bottom: 8px;
 }
 
@@ -125,14 +127,14 @@
 .consultation-comment-label {
   display: block;
   font-size: 0.8em;
-  color: #a29bfe;
+  color: #9DBFE3;
   margin-bottom: 4px;
 }
 
 .consultation-comment-input {
   width: 100%;
   padding: 8px 10px;
-  background: #0d0a1a;
+  background: #0C1520;
   border: 1px solid #333;
   border-radius: 8px;
   color: #e8e8f0;
@@ -143,14 +145,14 @@
 }
 
 .consultation-comment-input:focus {
-  border-color: #6c5ce7;
+  border-color: #4A76A8;
   outline: none;
 }
 
 .consultation-start-btn {
   width: 100%;
   padding: 10px;
-  background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+  background: linear-gradient(135deg, #3D6591 0%, #4A76A8 100%);
   border: none;
   border-radius: 10px;
   color: white;
@@ -191,8 +193,8 @@
 
 .consultation-resolve-box {
   position: relative;
-  background: #1a1235;
-  border: 1px solid #6c5ce7;
+  background: #15212F;
+  border: 1px solid #4A76A8;
   border-radius: 16px;
   padding: 24px 20px;
   max-width: 320px;
@@ -230,7 +232,7 @@
 }
 
 .consultation-resolve-both {
-  background: linear-gradient(135deg, #6c5ce7 0%, #a29bfe 100%);
+  background: linear-gradient(135deg, #3D6591 0%, #4A76A8 100%);
   color: white;
 }
 

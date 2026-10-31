@@ -6,6 +6,11 @@
 // v0.8 2026-07-16 - 送信直前JSON記録デバッグログ追加（お姉ちゃんJSON破損バグ調査用・DebugLogger稼働時のみ）
 // v0.9 2026-07-17 - 孤立サロゲート検知＋消毒（絵文字の片割れによる400対策・検知時は必ずログ）
 // v0.10 2026-07-17 - 400番台エラー時のbody全文＋本家エラー詳細ダンプ（真犯人特定用・DebugLogger稼働時のみ）
+// v0.11 2026-10-30 - callAPIStream に onDelta（届いた文字をすぐ渡す）とツール呼び出し検知（_toolCall）を追加。streamText() 追加（音声会話の読み上げ用・失敗時は null で今まで通りに戻す）
+// v0.12 2026-10-30 - hooks.keepTools: Claude の tool_use を止めずに最後まで受け取り、content(text/tool_use)を組み立てて返す（やり直し送信を1回減らす）。streamData() 追加
+// v0.13 2026-10-30 - tool_use は content_block_stop まで届いたものだけ実行可（input_json_delta が揃う前に組み立てない）
+// v0.14 2026-10-31 - callAPI に options.onTiming(phase) 追加（fetchStart/headers/parsed。STT⏱計測用・無指定なら挙動不変）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 
 'use strict';
 
@@ -125,14 +130,17 @@ const ApiCommon = (() => {
 
     // v0.7追加 - リクエスト開始時刻を記録（タイムアウト判定用）
     const startTime = Date.now();
+    const _tm = (ph, info) => { try { if (options.onTiming) options.onTiming(ph, info || {}); } catch (_e) { /* 計測失敗はAPIに影響させない */ } }; // v0.14
 
     try {
+      _tm('fetchStart');
       const response = await fetch(`${WORKER_URL}/${endpoint}`, {
         method: 'POST',
         headers,
         body: fetchBody,
         signal: controller.signal,
       });
+      _tm('headers', { status: response.status });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -161,7 +169,8 @@ const ApiCommon = (() => {
         throw new Error(`API中継エラー（${endpoint}）: ${errorMsg}（${elapsed}秒）`);
       }
 
-      return response.json();
+      if (!options.onTiming) return response.json();
+      const data = await response.json(); _tm('parsed'); return data; // v0.14 - 計測時だけ待ってから印をつける
     } catch (err) {
       // v0.7追加 - ネットワークエラー時のタイムアウト判定
       if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
@@ -186,7 +195,7 @@ const ApiCommon = (() => {
    * @param {Object} body - APIリクエストボディ（stream:trueを含む）
    * @returns {Promise<Object>} OpenAI形式 or Claude形式のレスポンスオブジェクト
    */
-  async function callAPIStream(endpoint, body) {
+  async function callAPIStream(endpoint, body, hooks = {}) {
     const authToken = getAuthToken();
     if (!authToken) {
       throw new Error('COCOMI認証トークンが設定されていません');
@@ -221,8 +230,12 @@ const ApiCommon = (() => {
       let finishReason = null;
       let stopReason = null;
       let buffer = '';
+      let toolCall = false; // v0.11: ツールを呼ぼうとしたら止める（呼び出し側が普通の送り方でやり直す）
+      const keep = !!hooks.keepTools && endpoint === 'claude'; // v0.12: 止めずに tool_use の中身まで受け取る
+      const blocks = []; // v0.12: Claude の content ブロック（index順）
+      const emit = (d) => { fullText += d; if (hooks.onDelta) { try { hooks.onDelta(d); } catch (e) { /* 読み上げ側の失敗で受信を止めない */ } } };
 
-      while (true) {
+      while (!toolCall || keep) {
         const { done, value } = await reader.read();
         if (done) break;
 
@@ -241,14 +254,22 @@ const ApiCommon = (() => {
             if (endpoint === 'openai') {
               // OpenAI SSE: choices[0].delta.content
               const delta = parsed.choices?.[0]?.delta?.content;
-              if (delta) fullText += delta;
+              if (parsed.choices?.[0]?.delta?.tool_calls) toolCall = true;
+              if (delta) emit(delta);
               const fr = parsed.choices?.[0]?.finish_reason;
               if (fr) finishReason = fr;
             } else if (endpoint === 'claude') {
               // Claude SSE: delta.text (content_block_delta) or delta.stop_reason (message_delta)
               if (parsed.type === 'content_block_delta') {
                 const delta = parsed.delta?.text;
-                if (delta) fullText += delta;
+                if (delta) { emit(delta); const b = blocks[parsed.index]; if (b && b.type === 'text') b.text += delta; }
+                if (parsed.delta?.type === 'input_json_delta') { const b = blocks[parsed.index]; if (b) b._json += parsed.delta.partial_json || ''; }
+              } else if (parsed.type === 'content_block_start') {
+                const cb = parsed.content_block || {};
+                if (cb.type === 'tool_use') { toolCall = true; blocks[parsed.index] = { type: 'tool_use', id: cb.id, name: cb.name, _json: '' }; }
+                else if (cb.type === 'text') blocks[parsed.index] = { type: 'text', text: cb.text || '' };
+              } else if (parsed.type === 'content_block_stop') {
+                const b = blocks[parsed.index]; if (b) b._stop = true; // v0.13: このブロックの断片は全部届いた
               } else if (parsed.type === 'message_delta') {
                 stopReason = parsed.delta?.stop_reason || null;
               }
@@ -259,17 +280,21 @@ const ApiCommon = (() => {
         }
       }
 
+      if (toolCall) { try { await reader.cancel(); } catch (e) { /* ignore */ } }
       // 各API形式に合わせたレスポンスオブジェクトを組み立てて返す
-      if (endpoint === 'openai') {
-        return {
-          choices: [{ message: { content: fullText }, finish_reason: finishReason || 'stop' }],
-        };
-      } else {
-        return {
-          content: [{ type: 'text', text: fullText }],
-          stop_reason: stopReason || 'end_turn',
-        };
+      const out = endpoint === 'openai'
+        ? { choices: [{ message: { content: fullText }, finish_reason: finishReason || 'stop' }] }
+        : { content: [{ type: 'text', text: fullText }], stop_reason: stopReason || 'end_turn' };
+      if (toolCall) out._toolCall = true;
+      if (toolCall && keep) { // v0.12: tool_use の input を組み立てる（読めなければ _toolCall のまま＝やり直し）
+        try {
+          out.content = blocks.filter(b => b && (b.type !== 'text' || b.text)).map(b => b.type === 'tool_use'
+            ? { type: 'tool_use', id: b.id, name: b.name, input: b._json ? JSON.parse(b._json) : {} } : { type: 'text', text: b.text });
+          const tus = blocks.filter(b => b && b.type === 'tool_use');
+          out._toolsReady = tus.length > 0 && tus.every(b => b._stop && b.id && b.name); // v0.13: 全部 stop 済みの時だけ
+        } catch (e) { out._toolsReady = false; }
       }
+      return out;
     } catch (err) {
       if (err.name === 'TypeError' || err.message === 'Failed to fetch') {
         const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
@@ -278,6 +303,36 @@ const ApiCommon = (() => {
       throw err;
     } finally {
       _activeControllers = _activeControllers.filter(c => c !== controller);
+    }
+  }
+
+  /**
+   * v0.11追加 - 文字を受け取りながら返事を作る（音声会話用）。返事の文字列を返す。
+   * ツールを呼ぼうとした・空・通信エラーの時は null（呼び出し側が今まで通りの送り方でやり直す）。中断(AbortError)はそのまま投げる
+   */
+  async function streamText(endpoint, body, onDelta) {
+    try {
+      const r = await callAPIStream(endpoint, { ...body, stream: true }, { onDelta });
+      if (r._toolCall) return null;
+      const t = endpoint === 'openai' ? r.choices[0].message.content : r.content[0].text;
+      return t && t.trim() ? t : null;
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw e;
+      console.warn('[ApiCommon] streamText 失敗→通常送信へ:', e && e.message);
+      return null;
+    }
+  }
+
+  /**
+   * v0.12追加 - streamText と同じだが、Claude のツール呼び出しも組み立てて返す（{content, stop_reason, _toolCall, _toolsReady}）。失敗は null
+   */
+  async function streamData(endpoint, body, onDelta) {
+    try {
+      return await callAPIStream(endpoint, { ...body, stream: true }, { onDelta, keepTools: true });
+    } catch (e) {
+      if (e && e.name === 'AbortError') throw e;
+      console.warn('[ApiCommon] streamData 失敗→通常送信へ:', e && e.message);
+      return null;
     }
   }
 
@@ -307,6 +362,8 @@ const ApiCommon = (() => {
     hasAuthToken,
     callAPI,
     callAPIStream,
+    streamText,
+    streamData,
     getWorkerURL,
     abortAll,
     hasActiveRequests,

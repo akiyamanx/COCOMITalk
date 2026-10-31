@@ -5,6 +5,7 @@
 // v1.1 修正 - ひらがな/カタカナ揺れ対応強化＋部分一致緩和＋コマンド成功ログ改善
 // v1.2 2026-03-12 - Step 6 Phase 1: 「覚えて」記憶保存コマンド追加
 // v1.3 2026-03-16 - 「キャンセル」「取り消し」送信キャンセルコマンド追加
+// v1.4 2026-10-30 - 葵ちゃん・きみちゃんにも声で切り替えられるように（登録簿で有効な時だけ）
 
 'use strict';
 
@@ -164,6 +165,14 @@ class VoiceCommand {
       { patterns: ['お姉ちゃん', 'おねえちゃん', 'おねーちゃん', 'オネエチャン'], key: 'gpt', name: 'お姉ちゃん' },
       { patterns: ['クロちゃん', 'くろちゃん', 'くろちやん', 'クロチャン', 'くろちゃーん'], key: 'claude', name: 'クロちゃん' },
     ];
+    // v1.4: 登録簿で有効なほかの子（葵・きみ）は 名前＋別名＋読みの揺れ で（長い順に試す＝「葵ちゃん」を「葵」より先に）
+    const kana = { aoi: ['あおいちゃん', 'アオイちゃん', 'アオイチャン'], kimi: ['キミチャン', '君ちゃん'] };
+    if (typeof CharacterRegistry !== 'undefined') {
+      CharacterRegistry.enabledList().filter(c => !sisters.some(x => x.key === c.key)).forEach(c => {
+        const patterns = [c.name, ...(kana[c.key] || []), ...c.aliases].sort((a, b) => b.length - a.length);
+        sisters.push({ patterns, key: c.key, name: c.name });
+      });
+    }
 
     // v1.1: 切替を示す語尾パターン
     const switchSuffixes = /^(にして|に切り替え|に替えて|に変えて|にかえて|にきりかえ|にきりかえて|お願い|おねがい|にかわって|に代わって|にチェンジ|にちぇんじ)/;

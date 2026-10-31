@@ -4,16 +4,19 @@
 // v1.2 2026-03-24 - DL間隔を1500msに拡大＋多ファイル時の案内（上位モデルで7-9ファイル生成時のブロック対策）
 // v1.3 2026-03-24 - 分割ボタン対応（fileType引数でCLAUDE.md/設計書/指示書を個別生成可能に）
 // v1.4 2026-03-24 - エラー詳細表示強化（デバッグ情報をチャットに表示、改行をスペースに変換）
+// v3.77 2026-10-29 - 姉妹の色を彩度控えめに
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 /** 会議ドキュメントアクションモジュール */
 const MeetingDocActions = (() => {
 
   // 姉妹表示情報（MeetingUIと共通）
-  const SISTER_DISPLAY = {
-    koko: { name: 'ここちゃん', emoji: '🌸', color: '#FF6B9D' },
-    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#6B5CE7' },
-    claude: { name: 'クロちゃん', emoji: '🔮', color: '#E6783E' },
+  // 2026-10-30 - 登録簿から作る（葵・きみも同じ表示に）。登録簿が無い時だけ従来の3人
+  const SISTER_DISPLAY = (typeof CharacterRegistry !== 'undefined') ? CharacterRegistry.displayMap() : {
+    koko: { name: 'ここちゃん', emoji: '🌸', color: '#E8779F' },
+    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#7469D4' },
+    claude: { name: 'クロちゃん', emoji: '🔮', color: '#DB8250' },
   };
 
   /** システムメッセージ表示ヘルパー（MeetingUI.addSystemMessage委譲） */

@@ -229,7 +229,8 @@ const ConsultationUI = (() => {
       const history = MeetingRelay.getHistory();
       if (history && history.length > 0) {
         resolution = history.map(msg => {
-          const name = { koko: 'ここちゃん', gpt: 'お姉ちゃん', claude: 'クロちゃん' }[msg.sister] || msg.sister;
+          const name = (typeof CharacterRegistry !== 'undefined') ? CharacterRegistry.info(msg.sister).name
+            : ({ koko: 'ここちゃん', gpt: 'お姉ちゃん', claude: 'クロちゃん' }[msg.sister] || msg.sister);
           return `【${name}】\n${msg.content}`;
         }).join('\n\n---\n\n');
       }

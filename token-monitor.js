@@ -2,6 +2,11 @@
 // このファイルはAPIのトークン使用量をIndexedDBに記録し、料金を計算する
 // v0.4 Session D - 使用量の見える化
 // v0.7 Step 2完了 - 三姉妹全API対応（モデルID統一＋姉妹カラー表示）
+// v1.1 2026-10-28 - 新モデル(ModelTiers)の料金を段階表から引く（旧モデルIDの料金表は履歴表示のため残す）
+// v1.2 2026-10-28 - お散歩モードの費用集計へ通知（walk-spend.js）＋USD_TO_JPYを公開
+// v3.77 2026-10-29 - 姉妹の色を彩度控えめに
+// v1.3 2026-10-30 - 葵・きみの分を「ここちゃん」に混ぜず本人の行で集計（姉妹別の表を登録簿から作る）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 'use strict';
 
 /**
@@ -39,6 +44,14 @@ const TokenMonitor = (() => {
   };
 
   // v0.7追加 - モデルIDから短い表示名へのマッピング
+  /**
+   * v1.1追加 - 料金の引き当て: 既存の表（過去ログの旧モデルID用）→ 無ければ ModelTiers の段階表（新モデル・期間つき価格）
+   * ★暫定★ どちらにも無いIDは従来どおり calcCostUSD で gpt-4o-mini 料金扱い（安全側に倒す変更は step4 で別途）
+   */
+  function _pricingOf(model) {
+    return MODEL_PRICING[model] || ((typeof ModelTiers !== 'undefined') ? ModelTiers.getPricing(model) : null);
+  }
+
   const MODEL_DISPLAY_NAMES = {
     'gemini-2.0-flash-lite': 'Flash Lite',
     'gemini-2.0-flash': 'Flash 2.0',
@@ -55,9 +68,11 @@ const TokenMonitor = (() => {
 
   // v0.7追加 - 姉妹カラー（詳細レポート用）
   const SISTER_COLORS = {
-    koko: '#FF6B9D',
-    gpt: '#6B5CE7',
-    claude: '#E6783E',
+    koko: '#E8779F',
+    gpt: '#7469D4',
+    claude: '#DB8250',
+    aoi: '#3BA7D9',
+    kimi: '#E0A21B',
   };
 
   // USD→JPYレート（大まかな概算用）
@@ -142,6 +157,8 @@ const TokenMonitor = (() => {
    * @param {number} outputTokens - 出力トークン数
    */
   async function record(modelName, inputTokens, outputTokens) {
+    // v1.2追加 - お散歩モード中の分を費用集計へ（DB未初期化でも数える。失敗しても記録処理は続ける）
+    try { if (typeof WalkSpend !== 'undefined') WalkSpend.record(modelName, inputTokens, outputTokens); } catch (e) { /* 無視 */ }
     if (!db) {
       console.warn('[TokenMonitor] DB未初期化、記録スキップ');
       return;
@@ -246,7 +263,7 @@ const TokenMonitor = (() => {
   function calcCostUSD(monthData) {
     let totalUSD = 0;
     for (const [model, usage] of Object.entries(monthData.byModel)) {
-      const pricing = MODEL_PRICING[model];
+      const pricing = _pricingOf(model);
       if (pricing) {
         // 料金は100万トークンあたりなので /1000000
         totalUSD += (usage.input / 1000000) * pricing.input;
@@ -345,11 +362,12 @@ const TokenMonitor = (() => {
     html += `</div>`;
 
     // v0.7変更 - 姉妹別集計（三姉妹カラー表示）
-    const sisterTotals = { koko: { input: 0, output: 0, calls: 0, cost: 0 }, gpt: { input: 0, output: 0, calls: 0, cost: 0 }, claude: { input: 0, output: 0, calls: 0, cost: 0 } };
+    const sisterTotals = {};
+    Object.keys(SISTER_COLORS).forEach(k => { sisterTotals[k] = { input: 0, output: 0, calls: 0, cost: 0 }; });
     const models = Object.entries(data.byModel);
     for (const [model, usage] of models) {
-      const pricing = MODEL_PRICING[model];
-      const sister = pricing?.sister || 'koko';
+      const pricing = _pricingOf(model);
+      const sister = sisterTotals[pricing?.sister] ? pricing.sister : 'koko';
       sisterTotals[sister].input += usage.input;
       sisterTotals[sister].output += usage.output;
       sisterTotals[sister].calls += usage.calls;
@@ -359,7 +377,7 @@ const TokenMonitor = (() => {
     }
 
     // 姉妹別サマリー
-    const sisterNames = { koko: '🌸 ここちゃん', gpt: '🌙 お姉ちゃん', claude: '🔮 クロちゃん' };
+    const sisterNames = { koko: '🌸 ここちゃん', gpt: '🌙 お姉ちゃん', claude: '🔮 クロちゃん', aoi: '🦋 葵ちゃん', kimi: '🌟 きみちゃん' };
     const activeSisters = Object.entries(sisterTotals).filter(([, s]) => s.calls > 0);
     if (activeSisters.length > 0) {
       html += `<div class="token-models">`;
@@ -380,8 +398,8 @@ const TokenMonitor = (() => {
       html += `<div class="token-models">`;
       html += `<p class="token-section-title">モデル別（詳細）</p>`;
       for (const [model, usage] of models) {
-        const displayName = MODEL_DISPLAY_NAMES[model] || model;
-        const pricing = MODEL_PRICING[model];
+        const displayName = MODEL_DISPLAY_NAMES[model] || _pricingOf(model)?.label || model;
+        const pricing = _pricingOf(model);
         const color = pricing ? (SISTER_COLORS[pricing.sister] || '#999') : '#999';
         html += `<div class="token-model-row">`;
         html += `<span class="model-name" style="color:${color}">${displayName}</span>`;
@@ -443,5 +461,6 @@ const TokenMonitor = (() => {
     calcCostUSD,
     clearAll,
     MODEL_PRICING,
+    USD_TO_JPY,
   };
 })();

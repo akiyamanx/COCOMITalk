@@ -2,35 +2,75 @@
 // このファイルはPWAのオフライン対応とキャッシュを管理する
 // v3.43 2026-04-06 - お散歩モード改善（会話ラリー一時停止+表示/送信分離）
 // v3.60 2026-07-17 - お散歩ゲートPoC A反映（voice-sender v1.1 / vision-ui v1.5 / chat-core v2.2）
-// v3.61 2026-07-17 - バッファ待ち窓修正反映（voice-sender v1.2 / vision-ui v1.5.1）
-const CACHE_NAME = 'cocomitalk-v3.61';
+// v4.3 2026-10-31 - 実機で続きの切り出しがHTTP 400(Invalid file format)→仮2・仮3も最初から全体を送り結果を置き換え・雑音ハルシネーション除け（stt-noise-filter.js新規・whisper-preread v1.1・whisper-provider v1.17）
+// v4.2 2026-10-31 - 先読み（案B）＋記憶などの準備の並行化: 無音1秒で仮の文字起こし(薄く表示)・区切り秒数で仮をつないで確定(送り直さない)・最大3回・失敗時は全体1回・AIへは確定文のみ（whisper-preread.js/voice-prep.js新規・whisper-provider v1.16・stt-timing v1.1・prompt-builder v1.11・chat-core v3.0・voice-ui v1.5・app-settings v1.8）
+// v4.1 2026-10-31 - 文字起こし待ち(4〜5秒)の内訳⏱ログ: 録音停止→blob / blob→fetch / fetch→応答ヘッダ / 応答→文字（stt-timing.js新規・whisper-provider v1.15・stt-model v1.3・api-common v0.14。挙動不変）
+// v4.0 2026-10-31 - 頭切れ対策: 静かな部屋を「マイク死亡」と誤判定しない・録音を止めない・区切り後すぐ次の録音・発話開始2回（whisper-recovery.js新規・whisper-provider v1.14・whisper-vad-guard v1.1・voice-input v2.6.2）
+// v3.99 2026-10-31 - 間を置いて話すと拾えない対策: 耳の死亡を1.5秒で検知・はしごが上がれる・VADが見えない区切りも送る・連続重複を1つに・マイク表示に聞いてるよ/文字にしてるよ（whisper-vad-guard.js/mic-indicator.js新規・whisper-provider v1.13・voice-ui v1.4）
+// v3.98 2026-10-31 - クロ宿題(j'): Gemini TTS 429 は送り直さず Retry-After(既定20秒)の間 OpenAI の声へ（gemini-tts-provider v1.8）
+// v3.61 2026-07-17 - バッファ待ち窓修正反映（voice-sender v1.2 / vision-ui v1.5.1） / v3.95 (本体変更なし) ⏱にGoogleのヘッダ到着(upstream-ttfb)・送り直し回数を出す版（api-common v0.13 / api-claude v2.2 / gemini-tts-provider v1.5） / v3.96 2026-10-31 - Gemini TTSを受け取りながら鳴らす(stream, pcm-stream-player.js新規 / gemini-tts-provider v1.6 / voice-output ⏱表示のみ) / v3.97 2026-10-31 - クロ指摘: stream失敗は状態を問わずWAVで1回送り直し・AudioContextがrunningの時だけstream（gemini-tts-provider v1.7）
+// v3.63 2026-10-28 - 思考の強さ/STTモデル/Gemini TTS追加（model-effort/effort-settings-ui/stt-model/gemini-tts-provider）
+// v3.64 2026-10-28 - 5人のGemini TTSの声を割り当て（characters.js / tts-provider.js）
+// v3.65 2026-10-28 - 読み上げの既定をGeminiに＋場面ごとの口調切替（tone-style.js追加）
+// v3.66 2026-10-28 - お散歩の費用上限（walk-spend-core/walk-spend/walk-spend-ui追加）
+// v3.67 2026-10-28 - 画面レイアウト改善（layout-main.css / layout-panels.css / layout-ui.js追加）
+// v3.68 2026-10-28 - 画面レイアウトv2（layout2-core.js / layout2-ui.js / layout2-main.css / layout2-panels.css追加）
+// v3.69 2026-10-28 - グループの帯の札タップ=話しかけ先（chat-group / layout2-core / layout2-ui / layout2-main.css）
+// v3.71 2026-10-28 - グループの帯に準備中の葵・キミも淡く並べる＋🔄つづきを右端に固定（layout2-core / layout2-ui / layout2-main.css）
+// v3.72 2026-10-29 - 葵・きみの最小プロンプト追加（prompts/common-env.js / aoi-system.js / kimi-system.js）＋三姉妹に家族の1〜2行＋「きみちゃん」ひらがな統一
+// v3.80 2026-10-29 - 目の顔をあたたかいクリーム色＋ほっぺに変更し、避けて動くときのピョン(つぶれて伸びて着地)を追加（mascot-eyes.js/css v1.2）
+// v3.81 2026-10-29 - 指示文に今の日本時間の1行を追加（prompt-builder v1.9）、ここちゃんの「あとで調べる」約束だけをやめる（koko-system v1.9）
+// v3.82 2026-10-30 - 約束だけで止まった返事の自動フォローアップ（promise-followup.js追加・chat-core v2.4）、Gemini thoughtSignature保持（api-gemini v1.5）、共通プロンプトに1行（common-env v1.2）
+// v3.83 2026-10-30 - 「最新の会話へ」ボタン（scroll-latest.js追加）、ツールを使った吹き出しに小さな印、フォローアップ指示の強化
+// v3.84 2026-10-30 - 知識に無いこと・最近/今の出来事は推測せず検索する指示（common-env v1.4 / promise-followup v1.2）
+// v3.85 2026-10-30 - 検索したら分かった中身（名前・数字・日付）を短く入れて答える（tool-registry v1.1 / common-env v1.5）
+// v3.86 2026-10-30 - 吹き出しの太字補正（md-fix.js追加: 日本語・全角記号に隣接した**も太字、余った**は消す）
+// v3.87 2026-10-30 - グループでも約束で止まった子に1回だけ自動フォローアップ＋吹き出しのツール印（chat-group v1.8 / chat-core v2.5）
+// v3.89 2026-10-30 - 葵/きみのタブを足して1対1で切替できるように（app.js / characters v1.6 / chat-core v2.7 / chat-ui / design-tokens）
+// v3.90 2026-10-30 - 葵/きみを三姉妹と全部同じに（ツール・グループ追いかけ・料金集計・記憶/会議の表示・声コマンド・起動画面の点）
+// v3.91 2026-10-30 - 音声を速く（送信前の待ち3.5→1.0秒・無音区切り既定1.5秒・最初の1文を先に読み上げ＋先読み・音声中はlite＋短い返事・⏱計測）。ハウリング防止: 再生中はマイク停止のまま/再開1.5秒待ちは据え置き/こだま除け（voice-fast.js 新規）
+// v3.92 2026-10-30 - 読み上げの鳴り始めを速く（1つ目を20〜30字に・絵文字を読まない・2つ同時に先読み・TTSの送信/受信/再生の⏱）（voice-fast v1.1 / voice-output v2.9 / gemini-tts-provider v1.3）
+// v3.94 2026-10-30 - 話し終わり→送信の待ちを1.5→0.75秒（voice-input v2.6.1）、記憶などの準備を並列化（prompt-builder v1.10）、クロのツールをストリームのまま実行（api-common v0.12 / api-claude v2.1）
+// v3.93 2026-10-30 - 音声会話で返事を受け取りながら最初の1文から読み上げ（voice-stream.js新規 / api-common v0.11 / api-openai v2.1 / api-claude v2.0 / chat-core v2.9）、無音区切り2秒/2.5秒（stt-model v1.2）、TTSのGoogle側時間⏱（gemini-tts-provider v1.4 / voice-output v3.0）
+// v3.88 2026-10-30 - 葵/きみを有効化（characters v1.5 / chat-core v2.6。1対1で試験・声はGemini TTS）
+// v3.79 2026-10-29 - 目の顔から口を外し、全画面のbody直下fixed表示に変更（mascot-eyes.js/css v1.1、app.jsで取り付け。名前ボタンは元の位置へ）
+// v3.78 2026-10-29 - 上の帯に目が動く小さな顔を追加（mascot-eyes.js / mascot-eyes.css、layout2-ui.jsで取り付け）
+// v3.77 2026-10-29 - 配色を落ち着いた青に（styles/design-tokens/layout/各CSSと一部JSの色のみ。姉妹の色は識別用に彩度控えめ）
+// v3.76 2026-10-29 - 起動オープニング追加（opening.js / opening-scene.js / opening-audio.js / opening.css）
+// v3.75 2026-10-29 - 音が鳴っている間の吹き出しタップで停止できるように（voice-output v2.7 / chat-ui v1.4）
+// v3.74 2026-10-29 - 吹き出しタップの二重再生ガード（voice-output v2.6 / voice-input v2.5.1 / chat-ui v1.3 / styles.css）
+// v3.73 2026-10-29 - 三姉妹の機能リストを共通定数に統一＋葵(xAI)/きみ(Kimi)のAPIモジュール追加（準備のみ・無効）（api-compat-core / api-xai / api-kimi）
+// v3.62 2026-10-28 - モデル3段階化（model-tiers/characters/model-migration/api-openai-responses追加）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
+const CACHE_NAME = 'cocomitalk-v4.3';
 
 const CACHE_FILES = [
   './', './index.html', './design-tokens.css', './styles.css', './meeting-styles.css',
-  './meeting-archive-styles.css', './consultation-styles.css', './vision-styles.css',
-  './app.js', './chat-ui.js',
+  './meeting-archive-styles.css', './consultation-styles.css', './vision-styles.css', './layout-main.css', './layout-panels.css', './layout-ui.js', './layout2-core.js', './layout2-ui.js', './layout2-main.css', './layout2-panels.css',
+  './app.js', './mascot-eyes.js', './mascot-eyes.css', './opening.js', './opening-scene.js', './opening-audio.js', './opening.css', './chat-ui.js',
   './chat-core.js', './chat-group.js', './chat-history.js',
-  './token-monitor.js', './api-common.js', './api-gemini.js',
-  './api-openai.js', './api-claude.js', './mode-switcher.js',
+  './model-tiers.js', './model-effort.js', './characters.js', './model-migration.js',
+  './token-monitor.js', './walk-spend-core.js', './walk-spend.js', './walk-spend-ui.js', './api-common.js', './api-gemini.js',
+  './api-openai.js', './api-openai-responses.js', './api-claude.js', './api-compat-core.js', './api-xai.js', './api-kimi.js', './mode-switcher.js',
   './meeting-router.js', './meeting-history.js', './meeting-memory.js',
   './chat-memory.js', './meeting-relay.js', './meeting-doc-actions.js',
   './meeting-ui.js', './meeting-archive-ui.js', './memory-ui.js',
   './memory-import-ui.js', './memory-ui-styles.css', './search-ui.js',
   './search-ui-styles.css', './token-monitor-styles.css',
-  './search-caller.js', './tool-registry.js', './prompt-builder.js',
+  './search-caller.js', './tool-registry.js', './prompt-builder.js', './promise-followup.js', './scroll-latest.js', './md-fix.js',
   './consultation-ui.js',
   './meeting-voice.js', './doc-generator.js', './file-handler.js',
-  './tts-provider.js', './openai-tts-provider.js',
+  './tone-style.js', './tts-provider.js', './openai-tts-provider.js', './pcm-stream-player.js', './gemini-tts-provider.js',
   './voicevox-tts-provider.js', './speech-provider.js',
-  './web-speech-provider.js', './debug-logger.js', './whisper-provider.js',
+  './web-speech-provider.js', './debug-logger.js', './whisper-vad-guard.js', './stt-noise-filter.js', './whisper-provider.js', './whisper-recovery.js', './whisper-preread.js', './voice-prep.js', './mic-indicator.js', './stt-model.js', './stt-timing.js',
   './voice-output.js', './voice-ui.js', './audio-health.js',
-  './voice-state.js', './voice-command.js', './voice-input.js',
-  './voice-sender.js', './app-settings.js',
+  './voice-state.js', './voice-command.js', './voice-input.js', './voice-fast.js', './voice-stream.js',
+  './voice-sender.js', './effort-settings-ui.js', './app-settings.js',
   './chat-style-modes.js', './style-resolver.js',
   './escape-hatch-detector.js',
   './vision-engine.js', './vision-ui-controller.js',
-  './prompts/koko-system.js', './prompts/gpt-system.js',
-  './prompts/claude-system.js', './manifest.json',
+  './prompts/common-env.js', './prompts/koko-system.js', './prompts/gpt-system.js',
+  './prompts/claude-system.js', './prompts/aoi-system.js', './prompts/kimi-system.js', './manifest.json',
 ];
 
 const CACHE_FONTS = [

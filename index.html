@@ -11,9 +11,10 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
+  <!-- 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30 （太字補正: md-fix.js追加／最新の会話へボタン: scroll-latest.js追加／目が動く小さな顔: mascot-eyes.js / mascot-eyes.css追加／起動オープニング: opening*.js / opening.css追加／モデル3段階化: model-tiers.js等のscript追加／お散歩費用上限: walk-spend*.js追加／画面レイアウト: layout-*.css・layout-ui.js追加・設定sectionにid／レイアウトv2: layout2-*追加・model-indicatorの直書き文字を中立に） -->
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <meta name="theme-color" content="#FF6B9D">
+  <meta name="theme-color" content="#4A76A8">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title>COCOMITalk</title>
@@ -34,6 +35,15 @@
   <link rel="stylesheet" href="consultation-styles.css">
   <!-- v2.2追加 - ビジョンエンジンスタイル -->
   <link rel="stylesheet" href="vision-styles.css">
+  <!-- v3.67追加 - 画面レイアウト改善（最後に読み込んで上書き。外せば元の見た目に戻る） -->
+  <link rel="stylesheet" href="layout-main.css">
+  <link rel="stylesheet" href="layout-panels.css">
+  <link rel="stylesheet" href="layout2-main.css">
+  <link rel="stylesheet" href="layout2-panels.css">
+  <!-- v3.78追加 - 上の帯の目が動く小さな顔（見た目だけ。無くてもアプリは動く） -->
+  <link rel="stylesheet" href="mascot-eyes.css">
+  <!-- v3.76追加 - 起動オープニング（スプラッシュの上に重なる全画面。#opening-overlay専用） -->
+  <link rel="stylesheet" href="opening.css">
 </head>
 <body>
 
@@ -47,6 +57,8 @@
         <span class="dot dot-koko"></span>
         <span class="dot dot-gpt"></span>
         <span class="dot dot-claude"></span>
+        <span class="dot dot-aoi"></span>
+        <span class="dot dot-kimi"></span>
       </div>
     </div>
   </div>
@@ -107,6 +119,7 @@
                min="1.0" max="4.0" step="0.1" value="1.0">
         <span id="vision-zoom-value" class="vision-zoom-value">1.0x</span>
         <span id="vision-walk-status" class="vision-walk-status hidden"></span>
+        <span id="walk-spend-badge" class="hidden" role="button" tabindex="0" title="お散歩の費用（概算）"></span>
       </div>
     </div>
     <footer class="input-area">
@@ -131,7 +144,7 @@
         <button id="btn-search" class="btn-search" aria-label="検索" title="🔍 ウェブ検索">🔍</button>
       </div>
       <div class="input-footer">
-        <span id="model-indicator" class="model-indicator">Gemini 2.5 Flash</span>
+        <span id="model-indicator" class="model-indicator">…</span>
         <button id="btn-generate-doc" class="btn-download" aria-label="指示書生成" title="📋 指示書を自動生成">📋</button>
         <button id="btn-download" class="btn-download" aria-label="会話を保存" title="💾 会話をダウンロード">💾</button>
         <span id="token-cost" class="token-cost" title="今月のトークン使用量">--</span>
@@ -188,7 +201,7 @@
           <span class="send-arrow">▶</span>
         </button>
         <!-- v1.6追加 Step 5c: 会議用マイクボタン -->
-        <button id="btn-meeting-mic" class="cocomi-mic-btn" aria-label="音声入力" style="width:36px;height:36px;border-radius:50%;border:2px solid var(--active-primary,#6c5ce7);background:white;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;transition:all 0.2s ease;">🎤</button>
+        <button id="btn-meeting-mic" class="cocomi-mic-btn" aria-label="音声入力" style="width:36px;height:36px;border-radius:50%;border:2px solid var(--active-primary,#4A76A8);background:white;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;padding:0;transition:all 0.2s ease;">🎤</button>
       </div>
       <!-- v1.6改善 - ラウンド完了後のアクション（わかりやすいガイド付き） -->
       <div class="meeting-actions hidden">
@@ -221,7 +234,7 @@
         <button id="btn-close-settings" class="icon-btn">✕</button>
       </div>
       <div class="modal-body">
-        <section class="settings-section">
+        <section id="sec-auth" class="settings-section">
           <h3>🔑 認証</h3>
           <div class="setting-item">
             <label for="key-gemini">COCOMI認証トークン</label>
@@ -229,13 +242,13 @@
             <p class="setting-hint">Worker経由で全API共通の認証トークン</p>
           </div>
         </section>
-        <section class="settings-section">
+        <section id="sec-models" class="settings-section">
           <h3>🤖 モデル設定</h3>
           <div id="model-settings-area"></div>
           <button id="btn-reset-models" class="btn-secondary" style="margin-top:12px;">デフォルトに戻す</button>
         </section>
         <button id="btn-save-settings" class="btn-primary">保存する</button>
-        <section class="settings-section" style="margin-top:24px;">
+        <section id="sec-voice" class="settings-section" style="margin-top:24px;">
           <h3>🎤 音声設定</h3>
           <div class="setting-item">
             <label class="setting-toggle">
@@ -253,14 +266,44 @@
             <label style="font-size:0.85em; color:#888;">STT音声認識エンジン</label>
             <select id="sel-stt-provider" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
               <option value="webspeech">Web Speech API（無料・ブラウザ内蔵）</option>
-              <option value="whisper">Whisper API（高精度・ピコン音なし・$0.006/分）</option>
+              <option value="whisper">Whisper API（高精度・ピコン音なし）</option>
+            </select>
+          </div>
+          <!-- v3.63追加 - 文字起こしモデルと区切り秒数（stt-model.js） -->
+          <div class="setting-item" style="margin-top:12px;">
+            <label style="font-size:0.85em; color:#888;">文字起こしモデル（Whisper API選択時）</label>
+            <select id="sel-stt-model" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
+              <option value="gpt-transcribe">gpt-transcribe（新・$0.0045/分）</option>
+              <option value="whisper-1">whisper-1（旧・$0.006/分・2027-02-26で停止）</option>
+            </select>
+            <label style="font-size:0.85em; color:#888; display:block; margin-top:8px;">発話の区切り（無音の長さ）</label>
+            <select id="sel-stt-silence" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
+              <option value="1200">1.2秒（いちばん速い・文の途中で切れやすい）</option>
+              <option value="1500">1.5秒（標準・速い）</option>
+              <option value="2000">2秒（少し切れにくい）</option>
+              <option value="2500">2.5秒（切れにくい・まだ速め）</option>
+              <option value="3000">3秒（前の標準）</option>
+              <option value="4000">4秒（文の途中で切れにくい）</option>
+              <option value="5000">5秒（さらに切れにくい・反応は遅め）</option>
+            </select>
+            <!-- v4.2追加 - 先読みの保険（whisper-preread.js。既定OFF＝費用を増やさない） -->
+            <label style="font-size:0.85em; color:#888; display:block; margin-top:8px;">先読みのつなぎ目が不自然な時の保険</label>
+            <select id="sel-stt-confirm-resend" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
+              <option value="0">OFF（標準・仮をつないで確定。送り直さない）</option>
+              <option value="1">ON（確定時に全体を1回送り直す・費用が増える）</option>
             </select>
           </div>
           <div class="setting-item" style="margin-top:12px;">
             <label style="font-size:0.85em; color:#888;">TTS声エンジン</label>
             <select id="sel-tts-provider" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
-              <option value="openai">OpenAI TTS（nova/shimmer/alloy）</option>
-              <option value="voicevox">VOICEVOX（日本語可愛い声）</option>
+              <option value="gemini">Gemini TTS（標準・5人の声。場面で口調が変わる）</option>
+              <option value="openai">OpenAI TTS（控え・Geminiが失敗した時の戻り先）</option>
+              <option value="voicevox">VOICEVOX（控え・日本語可愛い声）</option>
+            </select>
+            <label style="font-size:0.85em; color:#888; display:block; margin-top:8px;">Gemini TTSの品質</label>
+            <select id="sel-gemini-tts-quality" style="width:100%; margin-top:4px; padding:8px; border-radius:8px; border:1px solid #333; background:#1a1a24; color:#e8e8f0; font-size:0.85em;">
+              <option value="lite">Flash-Lite（日常・散歩向け・安い）</option>
+              <option value="flash">Flash（高音質・やや高い）</option>
             </select>
           </div>
           <div id="vv-key-setting" style="display:none; margin-top:8px;">
@@ -270,23 +313,27 @@
           <!-- v1.6追加 - 話すスピード調整 -->
           <div class="setting-item" style="margin-top:12px;">
             <label style="font-size:0.85em; color:#888;">話すスピード: <span id="tts-speed-label">1.0x</span></label>
-            <input type="range" id="range-tts-speed" min="0.75" max="1.5" step="0.05" value="1.0" style="width:100%; margin-top:4px; accent-color:var(--active-primary,#6c5ce7);">
+            <input type="range" id="range-tts-speed" min="0.75" max="1.5" step="0.05" value="1.0" style="width:100%; margin-top:4px; accent-color:var(--active-primary,#4A76A8);">
             <div style="display:flex; justify-content:space-between; font-size:0.75em; color:#666;">
               <span>ゆっくり 0.75x</span><span>普通 1.0x</span><span>はやい 1.5x</span>
             </div>
           </div>
         </section>
-        <section class="settings-section" style="margin-top:24px;">
+        <section id="sec-memory" class="settings-section" style="margin-top:24px;">
           <h3>🧠 記憶管理（KV）</h3>
           <p style="font-size:0.82rem;color:#888;margin:0 0 8px;">会議のAI要約記憶を確認・削除できます</p>
           <button id="btn-open-memory-ui" class="btn-secondary" style="width:100%;">🧠 記憶管理を開く</button>
           <button id="btn-open-memory-import" class="btn-secondary" style="width:100%;margin-top:8px;">📁 記憶インポート</button>
         </section>
-        <section class="settings-section" style="margin-top:24px;">
+        <section id="sec-history" class="settings-section" style="margin-top:24px;">
           <h3>🗑️ 会話履歴</h3>
           <button id="btn-clear-history" class="btn-danger">全ての会話履歴をクリア</button>
         </section>
-        <section class="settings-section" style="margin-top:24px;">
+        <section id="sec-walk" class="settings-section" style="margin-top:24px;">
+          <h3>🚶 お散歩の費用上限（概算）</h3>
+          <div id="walk-spend-area">読み込み中...</div>
+        </section>
+        <section id="sec-tokens" class="settings-section" style="margin-top:24px;">
           <h3>📊 トークン使用量</h3>
           <div id="token-detail-area">読み込み中...</div>
           <button id="btn-clear-tokens" class="btn-danger" style="margin-top:12px;">使用量データをリセット</button>
@@ -343,18 +390,34 @@
 
   <!-- スクリプト読み込み -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+  <script src="tone-style.js"></script>
+  <script src="prompts/common-env.js"></script>
   <script src="prompts/koko-system.js"></script>
   <script src="prompts/gpt-system.js"></script>
   <script src="prompts/claude-system.js"></script>
+  <script src="prompts/aoi-system.js"></script>
+  <script src="prompts/kimi-system.js"></script>
+  <!-- v2.x 2026-10-28 追加 - モデル3段階・キャラ登録簿・設定移行（mode-switcher/api-*より前に読む） -->
+  <script src="model-tiers.js"></script>
+  <script src="model-effort.js"></script>
+  <script src="characters.js"></script>
+  <script src="model-migration.js"></script>
   <script src="api-common.js"></script>
   <script src="api-gemini.js"></script>
   <script src="api-openai.js"></script>
+  <script src="api-openai-responses.js"></script>
   <script src="api-claude.js"></script>
+  <!-- step2: 葵(xAI)・きみ(Kimi)用。キャラ登録簿が無効の間は呼ばれない -->
+  <script src="api-compat-core.js"></script>
+  <script src="api-xai.js"></script>
+  <script src="api-kimi.js"></script>
   <script src="chat-history.js"></script>
   <script src="token-monitor.js"></script>
   <script src="file-handler.js"></script>
   <script src="doc-generator.js"></script>
   <script src="mode-switcher.js"></script>
+  <script src="walk-spend-core.js"></script>
+  <script src="walk-spend.js"></script>
   <script src="meeting-router.js"></script>
   <script src="meeting-history.js"></script>
   <script src="meeting-memory.js"></script>
@@ -369,6 +432,7 @@
   <script src="search-caller.js"></script>
   <script src="tool-registry.js"></script>
   <script src="prompt-builder.js"></script>
+  <script src="promise-followup.js"></script>
   <!-- v1.8追加 - ワイワイモード: スタイル定義 + 判定ロジック -->
   <script src="chat-style-modes.js"></script>
   <script src="style-resolver.js"></script>
@@ -382,24 +446,49 @@
   <script src="consultation-ui.js"></script>
   <script src="meeting-voice.js"></script>
   <script src="chat-group.js"></script>
+  <script src="md-fix.js"></script>
   <script src="chat-ui.js"></script>
   <script src="chat-core.js"></script>
   <!-- Step 5b: 音声会話モジュール v1.1 -->
   <script src="tts-provider.js"></script>
   <script src="openai-tts-provider.js"></script>
+  <script src="pcm-stream-player.js"></script>
+  <script src="gemini-tts-provider.js"></script>
   <script src="voicevox-tts-provider.js"></script>
   <script src="speech-provider.js"></script>
   <script src="web-speech-provider.js"></script>
   <script src="debug-logger.js"></script>
+  <script src="stt-model.js"></script>
+  <script src="stt-timing.js"></script>
+  <script src="voice-fast.js"></script>
+  <script src="whisper-vad-guard.js"></script>
+  <script src="stt-noise-filter.js"></script>
   <script src="whisper-provider.js"></script>
+  <script src="whisper-recovery.js"></script>
+  <script src="whisper-preread.js"></script>
+  <script src="voice-prep.js"></script>
+  <script src="mic-indicator.js"></script>
   <script src="voice-output.js"></script>
+  <script src="voice-stream.js"></script>
   <script src="voice-ui.js"></script>
   <script src="audio-health.js"></script>
   <script src="voice-state.js"></script>
   <script src="voice-command.js"></script>
   <script src="voice-input.js"></script>
   <script src="voice-sender.js"></script>
+  <script src="effort-settings-ui.js"></script>
+  <script src="walk-spend-ui.js"></script>
+  <script src="layout-ui.js"></script>
+  <!-- v3.78追加 - 目が動く小さな顔（layout2-ui.jsが帯を作る時に取り付けるので、その前に読む） -->
+  <script src="mascot-eyes.js"></script>
+  <script src="scroll-latest.js"></script>
+  <script src="layout2-core.js"></script>
+  <script src="layout2-ui.js"></script>
   <script src="app-settings.js"></script>
+  <!-- v3.76追加 - 起動オープニング（app.jsより前。scene/audio→本体の順） -->
+  <script src="opening-scene.js"></script>
+  <script src="opening-audio.js"></script>
+  <script src="opening.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

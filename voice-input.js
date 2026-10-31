@@ -1,11 +1,12 @@
-// voice-input.js v2.5.0
+// voice-input.js v2.6.2
 // 音声会話の全体フロー制御（マイク→STT→バッファ→確認→送信→TTS）
-// UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js
+// UI→voice-ui.js / 送信→voice-sender.js（mixin） / 状態→voice-state.js / v2.6.2 2026-10-31 葵(Aoi): 文字起こし順番待ち(_inflight)中も送信を待つ
 // v2.0〜v2.3.0: 履歴省略（バッファ方式/TTS待機フラグ/voice-state連携/吹き出し読み上げ）
 // v2.4.0 修正 - speakQueueマイク復帰バグ修正（onSisterChange/フェイルセーフ/ガード緩和）
 // v2.4.1 修正 - pause済みWhisperのhealthCheckスキップ（recorder=inactive誤判定回避）
 // v2.5.0 修正 - STT再開ガードを_canResumeSTT()に一元化（isPlaying欠落drift解消）＋
 //   フェイルセーフのTTS再生中誤爆防止＋onPlayError後のマイク復帰経路追加（音声途切れバグ根本修正）
+// v2.5.1 2026-10-29 修正 - speakBubbleを二重再生ガード付き(AudioPlaybackManager.speakBubble)に委譲 / v2.6.0 2026-10-30 速く: 送信前の待ち3.5→1.0秒(話し中・文字起こし中は延長)＋こだま除け＋時間ログ（マイク復帰の1.5秒待ちは変えない） / v2.5.2 2026-10-30 発光の消灯を登録簿の全員に（葵/きみが光りっぱなしにならない） / v2.6.1 2026-10-30 送信前の待ち1.0→0.5秒・確認0.5→0.25秒（延長ルールとマイク復帰1.5秒・こだま除けは変えない）
 
 class VoiceController {
   constructor() {
@@ -21,8 +22,8 @@ class VoiceController {
     this._bufferTimer = null;
     this._confirmTimer = null;
     this._lastBufferText = '';
-    this._BUFFER_DELAY = 3500;
-    this._CONFIRM_DELAY = 500;
+    this._BUFFER_DELAY = 500; // v2.6.1: 1000→500（v2.6.0: 3500→1000）文字起こしの前に無音判定(1.2〜5秒)が済んでいるので短く。まだ話し中/文字起こし中なら今まで通り延長
+    this._CONFIRM_DELAY = 250; // v2.6.1: 500→250（「送信するよ」表示の時間）
     this._NOISE_MIN_LENGTH = 2;
     this._lastText = '';
     this._sttStartTime = 0;
@@ -194,7 +195,7 @@ class VoiceController {
 
     // v2.4.0追加 - キュー中の姉妹切替（アイコン発光のみ）
     this._playback.onSisterChange = (sisterId) => {
-      ['koko', 'gpt', 'claude'].forEach(id => this._ui.highlightSister(id, false));
+      (typeof CharacterRegistry !== 'undefined' ? CharacterRegistry.keys() : ['koko', 'gpt', 'claude']).forEach(id => this._ui.highlightSister(id, false)); // 2026-10-30 葵/きみも消灯
       this._ui.highlightSister(sisterId, true);
     };
 
@@ -209,7 +210,7 @@ class VoiceController {
     // onQueueEnd: キュー全完了 → フラグクリア＋全姉妹消灯＋フェイルセーフ付き復帰
     this._playback.onQueueEnd = () => {
       this._waitingForTTS = false;
-      ['koko', 'gpt', 'claude'].forEach(id => this._ui.highlightSister(id, false));
+      (typeof CharacterRegistry !== 'undefined' ? CharacterRegistry.keys() : ['koko', 'gpt', 'claude']).forEach(id => this._ui.highlightSister(id, false)); // 2026-10-30 葵/きみも消灯
       this._voiceState.transition('recovering_input');
       if (this._enabled) {
         this._resumeSTTAfterTTS();
@@ -233,6 +234,7 @@ class VoiceController {
   }
 
   _appendBuffer(text) {
+    if ((typeof VoiceFast !== 'undefined') && VoiceFast.isEcho(text)) { VoiceFast.mark('こだま除け: AI自身の声と判断して捨てた「' + text + '」'); return; }
     if (this._waitingForTTS || this._voiceState.isSpeaking()) {
       console.log(`[Voice] TTS待ち/speaking中のバッファ追記を拒否: "${text}"`);
       return;
@@ -249,6 +251,7 @@ class VoiceController {
     this._bufferTimer = setTimeout(() => {
       this._bufferTimer = null;
       if (!this._buffer) return;
+      if (this._stt._hasVoiceStarted || this._stt._processing || this._stt._inflight > 0) { this._resetBufferTimer(); return; } // v2.6.0: まだ話し中/文字起こし中→待つ
       if (this._waitingForTTS || this._voiceState.isSpeaking()) {
         console.log('[Voice] TTS待ち/speaking中 → バッファタイマー発火を無視');
         return;
@@ -274,7 +277,7 @@ class VoiceController {
       this._finalText = '';
       if (sendText) {
         console.log(`[Voice] 確認完了 → 送信: "${sendText}"`);
-        this._waitingForTTS = true;
+        this._waitingForTTS = true; if ((typeof VoiceFast !== 'undefined')) VoiceFast.mark('send');
         this._sendVoiceMessage(sendText);
       }
     }, this._CONFIRM_DELAY);
@@ -307,7 +310,8 @@ class VoiceController {
 
   // v2.4.1修正 - pause済みWhisperはhealthCheckスキップ（recorder=inactiveは正常）
   async _resumeSTTAfterTTS() {
-    await new Promise(r => setTimeout(r, 1500));
+    if ((typeof VoiceFast !== 'undefined')) VoiceFast.endSpeaking(); // こだま判定の10秒は読み上げ終わりから
+    await new Promise(r => setTimeout(r, 1500)); // ★ハウリング防止: 読み上げ後すぐにマイクを開けない（この1.5秒は短くしない）
     // v2.5.0変更 - ガード一元化＋isPlaying()欠落を修正（TTS実再生中の復帰を確実に中止）
     if (!this._canResumeSTT()) {
       console.log(`[Voice] _resumeSTTAfterTTS: 復帰中止 (waitTTS=${this._waitingForTTS}, speaking=${this._voiceState.isSpeaking()}, playing=${this._playback.isPlaying()}, queue=${this._playback.isQueuePlaying()})`);
@@ -453,7 +457,7 @@ class VoiceController {
         }
         console.warn('[Voice] フェイルセーフ発動: recovering 7秒超過 → 強制STT再開');
         this._waitingForTTS = false;
-        ['koko', 'gpt', 'claude'].forEach(id => this._ui.highlightSister(id, false));
+        (typeof CharacterRegistry !== 'undefined' ? CharacterRegistry.keys() : ['koko', 'gpt', 'claude']).forEach(id => this._ui.highlightSister(id, false)); // 2026-10-30 葵/きみも消灯
         this._voiceState.forceReset();
         this._voiceState.transition('listening');
         this.startListening();
@@ -479,9 +483,8 @@ class VoiceController {
     await this._playback.speak(responseText, sisterId, { speed: this._speed });
   }
 
-  async speakBubble(text, sisterId) {
-    if (!this._playback) return;
-    await this._playback.speak(text, sisterId, { speed: this._speed || 1.25 });
+  async speakBubble(text, sisterId, hooks) {
+    return this._playback ? this._playback.speakBubble(text, sisterId, { ...hooks, speed: this._speed || 1.25 }) : false;
   }
 
   async speakQueue(items) {

@@ -1,0 +1,40 @@
+/* COCOMITalk - 画面レイアウトv2（パネル類）: カメラ・お散歩の小さな映像 + 大きなボタン1列 / AF・画質の見える名前 / 設定・記憶などの上の余白 */
+/* このファイルは何をするか: html.lx2 の時だけ、カメラやお散歩が出ている間も会話の場所をできるだけ残すよう上書きする */
+/* 外し方: layout2-main.css と同じ（☰「旧レイアウト(v1)に戻す」 / ?layout=v1 / <link>を消す） */
+/* v1.0 2026-10-28 - 新規作成（follow-up #7） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28 */
+
+/* ===== カメラ・お散歩: 映像は小さく(折りたためる) / 大きなボタン1列 / 状態は細い帯 ===== */
+html.lx2 .vision-panel { flex: 0 0 auto; }
+html.lx2 .vision-preview-wrapper { padding: 6px 8px 0; gap: 6px; }
+html.lx2 .vision-preview { max-height: 84px; transition: max-height 0.2s, opacity 0.2s; }
+html.lx2 .vision-panel:has(.walk-active) .vision-preview { max-height: 72px; }
+/* 映像を隠す: 高さを0に（要素は残す＝撮影や自動ピントは動いたまま） */
+html.lx2 .vision-panel.lx2-preview-off .vision-preview { max-height: 0; opacity: 0; }
+html.lx2 .vision-panel.lx2-preview-off .vision-preview-wrapper { gap: 0; }
+html.lx2 .vision-controls { grid-template-columns: 1.6fr 1fr 1fr 1fr var(--lx-tap); gap: 6px; }
+html.lx2 .vision-btn { height: 52px; font-size: 22px; }
+html.lx2 .vision-btn.lx2-prev-toggle { background: rgba(255, 255, 255, 0.85); font-size: 18px; padding: 0; }
+html.lx2 .lx2-prev-toggle::before { content: '🖼️'; }
+html.lx2 .lx2-prev-toggle[aria-pressed="true"]::before { content: '🙈'; }
+html.lx2 .vision-btn-walk.lx2-hint { outline: 3px solid #fff; outline-offset: 2px; animation: lx2-hint 1s ease-in-out 3; }
+@keyframes lx2-hint { 50% { transform: scale(1.08); } }
+/* 状態の行: ピント AF | 画質 | ズーム。散歩中だけ次の行に「間隔・費用」 */
+html.lx2 .vision-zoom-bar { flex-wrap: wrap; align-items: center; gap: 2px 8px; padding: 2px 12px 6px; }
+html.lx2 .vision-zoom-bar::after { display: none; }
+html.lx2 .vision-panel:has(.walk-active) .vision-zoom-bar::after { display: block; content: ''; order: 4; flex-basis: 100%; height: 0; }
+html.lx2 .vision-zoom-label { display: none; }
+html.lx2 .vision-zoom-bar > .vision-zoom-slider { flex: 1 1 90px; order: 2; }
+html.lx2 .vision-zoom-bar > .vision-zoom-value { order: 3; }
+html.lx2 .vision-zoom-bar > .vision-walk-status, html.lx2 .vision-zoom-bar > #walk-spend-badge { order: 5; }
+html.lx2 .vision-zoom-bar > .vision-focus-indicator, html.lx2 .vision-zoom-bar > .vision-resolution-btn { order: 1; }
+/* AF・エコの見える名前（意味不明だった2つ）: タップで説明が出る */
+html.lx2 .vision-focus-indicator {
+  display: inline-flex; align-items: center; gap: 4px; min-height: var(--lx-tap); padding: 0 8px; font-size: 13px; color: #fff; background: rgba(255, 255, 255, 0.14); cursor: help;
+}
+html.lx2 .vision-focus-indicator::before { content: 'ピント'; font-size: 11px; font-weight: 500; color: rgba(255, 255, 255, 0.85); }
+html.lx2 .vision-focus-indicator.af-active { color: #8FE093; }
+html.lx2 .vision-focus-indicator.af-unsupported { color: rgba(255, 255, 255, 0.7); }
+html.lx2 .vision-resolution-btn { display: inline-flex; align-items: center; gap: 4px; }
+html.lx2 .vision-resolution-btn::before { content: '画質'; font-size: 11px; font-weight: 500; opacity: 0.85; }
+html.lx2 .vision-walk-status { margin-left: 0; font-size: 13px; }

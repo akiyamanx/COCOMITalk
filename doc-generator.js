@@ -13,6 +13,8 @@
 // v3.0.1 2026-03-24 - クロちゃんAPI失敗時もお姉ちゃん版で出力＋エラー詳細表示（API上限時の無駄消費防止）
 // v3.0.2 2026-03-24 - プリフライトチェック追加（生成前にAPI疎通確認、両方OKでないと開始しない）
 // v3.0.3 2026-03-24 - エラー時デバッグ表示が消えるバグ修正（ステータス保持＋タイムアウト検出＋エラー詳細強化）
+// v3.1.0 2026-10-28 - モデルをModelTiersから決定（GPT-6のreasoning_effort付与・Claudeのtemperature送信を段階表で判定）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
 
 'use strict';
 
@@ -330,23 +332,26 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
    * v3.0.3 - ストリーミング対応（stream:trueで30秒タイムアウト回避）
    */
   async function _callOpenAIRaw(systemPrompt, messages) {
+    // 段階キー(lite/standard/high)または旧キー → モデルID。不明なら軽量（旧フォールバック gpt-4o-mini は廃止予定のため使わない）
     const modelKey = (typeof ModeSwitcher !== 'undefined')
-      ? ModeSwitcher.getModelKey('gpt') : 'mini';
-    const models = (typeof ApiOpenAI !== 'undefined') ? ApiOpenAI.getModels() : {};
-    const modelName = models[modelKey] || 'gpt-4o-mini';
+      ? ModeSwitcher.getModelKey('gpt') : 'lite';
+    const tier = ModelTiers.resolve('openai', modelKey);
+    const modelName = tier.id;
+    const isReasoning = ModelTiers.isReasoningOpenAI(modelName); // gpt-5 / gpt-6
 
     const body = {
       model: modelName,
       stream: true, // v3.0.3 - ストリーミング有効化
       messages: [
-        // v1.1準拠 - GPT-5系はdeveloperロール
-        { role: modelName.startsWith('gpt-5') ? 'developer' : 'system', content: systemPrompt },
+        // v1.1準拠 - GPT-5/6系はdeveloperロール
+        { role: isReasoning ? 'developer' : 'system', content: systemPrompt },
         ...messages,
       ],
     };
-    // v1.1準拠 - GPT-5系はmax_completion_tokens
-    if (modelName.startsWith('gpt-5')) {
+    // v1.1準拠 - GPT-5/6系はmax_completion_tokens（temperatureは送らない）
+    if (isReasoning) {
       body.max_completion_tokens = MAX_TOKENS;
+      Object.assign(body, tier.params); // reasoning_effort（実API未確認）
     } else {
       body.max_tokens = MAX_TOKENS;
       body.temperature = 0.3;
@@ -373,9 +378,9 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
    */
   async function _callClaudeRaw(systemPrompt, messages) {
     const modelKey = (typeof ModeSwitcher !== 'undefined')
-      ? ModeSwitcher.getModelKey('claude') : 'haiku';
-    const models = (typeof ApiClaude !== 'undefined') ? ApiClaude.getModels() : {};
-    const modelName = models[modelKey] || 'claude-haiku-4-5-20251001';
+      ? ModeSwitcher.getModelKey('claude') : 'lite';
+    const tier = ModelTiers.resolve('anthropic', modelKey);
+    const modelName = tier.id;
 
     const body = {
       model: modelName,
@@ -384,8 +389,8 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
       max_tokens: MAX_TOKENS,
       stream: true, // v3.0.3 - ストリーミング有効化
     };
-    // v1.3準拠 - Opus 4.6はtemperature非対応
-    if (!modelName.includes('opus')) {
+    // Claude 4.7以降は temperature を送ると400になる（公式ドキュメント記載・実API未確認）→段階表で送信可否を判定
+    if (tier.sendTemperature) {
       body.temperature = 0.2;
     }
 

@@ -5,15 +5,19 @@
 // v1.8 2026-03-28 - 相談トピック連携: ConsultationUI.init()呼び出し＋会議終了時の回答ダイアログ
 // v1.8.1 2026-03-28 - バグ修正: 回答ダイアログ表示時にhide()が先に走って見えない問題を修正
 // v1.9 2026-04-05 - ワイワイモード: meeting-full時のスタイルボタングレーアウト制御追加
+// v3.77 2026-10-29 - 姉妹の色を彩度控えめに
+// v3.86 2026-10-30 - 太字補正: _renderMarkdownをMdFix.render（md-fix.js）経由に
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 /** 会議UIモジュール */
 const MeetingUI = (() => {
 
-  const SISTER_DISPLAY = {
-    koko: { name: 'ここちゃん', emoji: '🌸', color: '#FF6B9D' },
-    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#6B5CE7' },
-    claude: { name: 'クロちゃん', emoji: '🔮', color: '#E6783E' },
+  // 2026-10-30 - 登録簿から作る（葵・きみも同じ表示に）。登録簿が無い時だけ従来の3人
+  const SISTER_DISPLAY = (typeof CharacterRegistry !== 'undefined') ? CharacterRegistry.displayMap() : {
+    koko: { name: 'ここちゃん', emoji: '🌸', color: '#E8779F' },
+    gpt: { name: 'お姉ちゃん', emoji: '🌙', color: '#7469D4' },
+    claude: { name: 'クロちゃん', emoji: '🔮', color: '#DB8250' },
   };
 
   let meetingScreen = null;
@@ -290,9 +294,7 @@ const MeetingUI = (() => {
   function _clearChat() { if (chatArea) chatArea.innerHTML = ''; }
 
   function _renderMarkdown(text) {
-    if (typeof marked !== 'undefined' && marked.parse) {
-      try { return marked.parse(text, { breaks: true, gfm: true }); } catch (e) { console.warn('[MeetingUI] Markdownパースエラー:', e); }
-    }
+    if (typeof MdFix !== 'undefined') return MdFix.render(text); // 太字補正（md-fix.js）
     return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
   }
 

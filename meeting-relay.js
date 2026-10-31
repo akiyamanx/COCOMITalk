@@ -3,6 +3,9 @@
 // v1.8-1.9 ファイル添付対応 / v2.0 会議グレード3段階 / v2.1 APIリトライ / v2.2 Vectorize議題検索
 // v2.3 エラー日本語化+致命的エラー判定（B案: クレジット切れ等は即停止）
 
+// 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
+// v2.4 2026-10-29 - step2有効化の準備: SISTERS に aoi(ApiXai) / kimi(ApiKimi) を追加（登録簿が enabled の時だけ api を返す。今は無効=呼ばれない。手順は chat-core.js 冒頭）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 'use strict';
 
 /**
@@ -18,6 +21,9 @@ const MeetingRelay = (() => {
 
   // --- 姉妹情報 ---
   // v2.0改修 - prompt()に会議グレード引数を追加（meeting-lite/meeting/meeting-full）
+  /** 登録簿で有効なキャラの時だけ mod を返す（無効・登録簿なしは null） */
+  const _on = (key, mod) => (typeof CharacterRegistry !== 'undefined' && CharacterRegistry.isEnabled(key)) ? mod : null;
+
   const SISTERS = {
     koko: {
       name: 'ここちゃん',
@@ -37,6 +43,10 @@ const MeetingRelay = (() => {
       api: () => (typeof ApiClaude !== 'undefined') ? ApiClaude : null,
       prompt: (grade) => (typeof ClaudeSystemPrompt !== 'undefined') ? ClaudeSystemPrompt.getPrompt(grade || 'meeting') : '',
     },
+    aoi: { name: '葵ちゃん', emoji: '🦋', api: () => _on('aoi', typeof ApiXai !== 'undefined' ? ApiXai : null),
+      prompt: (grade) => (typeof AoiSystemPrompt !== 'undefined') ? AoiSystemPrompt.getPrompt(grade || 'meeting') : '' },
+    kimi: { name: 'きみちゃん', emoji: '🌟', api: () => _on('kimi', typeof ApiKimi !== 'undefined' ? ApiKimi : null),
+      prompt: (grade) => (typeof KimiSystemPrompt !== 'undefined') ? KimiSystemPrompt.getPrompt(grade || 'meeting') : '' },
   };
 
   // --- 状態 ---
@@ -319,7 +329,7 @@ const MeetingRelay = (() => {
       opts,
     );
 
-    return reply;
+    return (typeof ToneStyle !== 'undefined') ? ToneStyle.consume(reply) : reply; // 声のトーンタグを外す
   }
 
   /** 会議コンテキストを構築（v1.1: 全ラウンド履歴含む） */
@@ -483,6 +493,7 @@ const MeetingRelay = (() => {
     getCurrentMeetingId,
     getMeetingGrade,
     restoreFromDB,
+    SISTERS,
     MAX_ROUNDS,
   };
 })();
