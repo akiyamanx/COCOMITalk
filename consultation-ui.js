@@ -7,12 +7,18 @@
 // v1.1 2026-03-28 - バグ修正: 議題テキスト短縮＋会議自動開始＋回答ダイアログ条件修正
 // v1.2 2026-03-28 - バグ修正: 会議開始後に通知バーが再表示される問題＋resolve後のバー非表示
 // v1.3 2026-03-28 - バグ修正: 回答選択後にcloseMeetingScreen()を呼んで画面を閉じる
+// v1.4 2026-11-01 - 相談回答を書記のまとめ（cocomi.meeting.v1: 結果MD＋JSON＋議事ログ）に。3人だけの名前表を廃止（登録簿へ）
+// v1.5 2026-11-01 - 未回答の相談を全件リスト表示（タイトル・誰から・日時）、タップで中身表示と会議する相談の選択、
+//   取り消しボタン（確認あり）で既存 POST /consultation/resolve に「取り消し（済み）」を書いて件数を更新（consultation-list.js）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
 /** 相談トピック連携UIモジュール */
 const ConsultationUI = (() => {
 
   let _currentConsultation = null;
+  // v1.5追加 - 未回答の相談の全件
+  let _consultations = [];
   let _barEl = null;
   let _panelEl = null;
   let _dialogEl = null;
@@ -46,6 +52,8 @@ const ConsultationUI = (() => {
           <button class="consultation-close-btn" aria-label="閉じる">✕</button>
         </div>
         <div class="consultation-panel-body">
+          <div class="consultation-list-label">相談の一覧（タップで中身を表示・この相談で会議）</div>
+          <div class="consultation-list"></div>
           <div class="consultation-topic"></div>
           <div class="consultation-question"></div>
           <div class="consultation-context"></div>
@@ -104,7 +112,7 @@ const ConsultationUI = (() => {
       const authToken = ApiCommon.getAuthToken();
       if (!workerUrl || !authToken) return;
 
-      const res = await fetch(`${workerUrl}/consultation?status=pending&limit=5`, {
+      const res = await fetch(`${workerUrl}/consultation?status=pending&limit=${_listLimit()}`, {
         method: 'GET',
         headers: { 'X-COCOMI-AUTH': authToken },
       });
@@ -115,6 +123,7 @@ const ConsultationUI = (() => {
       const data = await res.json();
       const consultations = data.consultations || [];
 
+      _consultations = consultations;
       if (consultations.length > 0) {
         _currentConsultation = consultations[0];
         _meetingExecuted = false;
@@ -131,7 +140,7 @@ const ConsultationUI = (() => {
   function _showBar(count) {
     if (!_barEl) return;
     const text = _barEl.querySelector('.consultation-bar-text');
-    text.textContent = `クロちゃんからの相談が${count}件あるよ！`;
+    text.textContent = (typeof ConsultationList !== 'undefined') ? ConsultationList.barText(count) : `クロちゃんからの相談が${count}件あるよ！`;
     _barEl.classList.remove('hidden');
   }
 
@@ -151,6 +160,7 @@ const ConsultationUI = (() => {
 
   function _showPanel() {
     if (!_panelEl || !_currentConsultation) return;
+    _renderList();
     const c = _currentConsultation;
     _panelEl.querySelector('.consultation-topic').textContent = `📌 ${c.topic}`;
     _panelEl.querySelector('.consultation-question').textContent = c.question;
@@ -165,6 +175,40 @@ const ConsultationUI = (() => {
     _panelEl.classList.remove('hidden');
     const arrow = _barEl.querySelector('.consultation-bar-arrow');
     if (arrow) arrow.textContent = '▲';
+  }
+
+  function _listLimit() {
+    return (typeof ConsultationList !== 'undefined') ? ConsultationList.FETCH_LIMIT : 5;
+  }
+
+  // v1.5追加 - 一覧の描画（選択・取り消し）
+  function _renderList() {
+    if (!_panelEl || typeof ConsultationList === 'undefined') return;
+    ConsultationList.render(_panelEl.querySelector('.consultation-list'), _consultations,
+      _currentConsultation && _currentConsultation.id, { onSelect: _selectConsultation, onCancel: _cancelConsultation });
+  }
+
+  function _selectConsultation(c) {
+    _currentConsultation = c;
+    _showPanel();
+  }
+
+  // v1.5追加 - 取り消し（確認ダイアログ→既存 /consultation/resolve に「取り消し（済み）」）
+  async function _cancelConsultation(c) {
+    if (typeof confirm === 'function' && !confirm(`「${c.topic}」を取り消す？\n（済みとして未回答の一覧から外します）`)) return;
+    const ok = await ConsultationList.cancelOnServer(c.id, fetch,
+      ApiCommon.getWorkerURL(), ApiCommon.getAuthToken());
+    if (!ok) {
+      if (typeof alert === 'function') alert('取り消しに失敗しました（通信を確認してもう一度試してね）');
+      return;
+    }
+    _consultations = ConsultationList.without(_consultations, c.id);
+    if (_currentConsultation && String(_currentConsultation.id) === String(c.id)) _currentConsultation = _consultations[0] || null;
+    if (_consultations.length === 0) { _hideBar(); return; }
+    _showBar(_consultations.length);
+    _showPanel();
+    // 取得上限で見えていなかった分を取り直す
+    if (_consultations.length >= _listLimit() - 1) _checkPendingConsultations();
   }
 
   function _hidePanel() {
@@ -224,15 +268,11 @@ const ConsultationUI = (() => {
     if (_dialogEl) _dialogEl.classList.add('hidden');
     if (!_currentConsultation) return;
 
+    // v1.4 2026-11-01 - 生ログ連結をやめ、書記のまとめ（cocomi.meeting.v1）の結果MD＋JSONブロック＋議事ログにする（名前は登録簿から）
     let resolution = '';
-    if (typeof MeetingRelay !== 'undefined') {
-      const history = MeetingRelay.getHistory();
-      if (history && history.length > 0) {
-        resolution = history.map(msg => {
-          const name = { koko: 'ここちゃん', gpt: 'お姉ちゃん', claude: 'クロちゃん' }[msg.sister] || msg.sister;
-          return `【${name}】\n${msg.content}`;
-        }).join('\n\n---\n\n');
-      }
+    if (typeof MeetingRelay !== 'undefined' && typeof MeetingShare !== 'undefined' && typeof MeetingResult !== 'undefined') {
+      const out = await MeetingShare.getResult({ topic: _currentConsultation.topic, consultationId: _currentConsultation.id });
+      if (out) resolution = MeetingResult.toResolution({ ...out.result, consultation_id: _currentConsultation.id }, MeetingRelay.getHistory());
     }
 
     _downloadResolution(resolution);
@@ -263,8 +303,7 @@ const ConsultationUI = (() => {
   function _downloadResolution(resolution) {
     if (!_currentConsultation) return;
     const c = _currentConsultation;
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
+    const dateStr = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10); // 2026-11-01 JST
 
     let md = `# 📨 相談トピック回答\n\n`;
     md += `- 相談ID: ${c.id}\n`;
@@ -277,7 +316,7 @@ const ConsultationUI = (() => {
     if (c._akiyaComment) {
       md += `## アキヤの補足\n\n${c._akiyaComment}\n\n`;
     }
-    md += `## 三姉妹の回答\n\n${resolution || '（会議が実行されませんでした）'}\n`;
+    md += `## 会議の結果\n\n${resolution || '（会議が実行されませんでした）'}\n`;
 
     const blob = new Blob([md], { type: 'text/markdown; charset=utf-8' });
     const url = URL.createObjectURL(blob);

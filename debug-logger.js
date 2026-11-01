@@ -1,4 +1,6 @@
 // COCOMITalk - デバッグログ記録＋ファイル出力
+// 2026-11-01 - 日付・時刻をJST（日本時間）にそろえる（UTC日付＋JST時刻のずれ修正）
+// 最終更新: 葵(Aoi), 2026-11-01
 // このファイルはデバッグパネルのログをバッファに蓄積し、
 // パネルOFF時にテキストファイルとしてダウンロードする機能を提供する。
 // OFFにするとバッファは自動クリアされる。
@@ -51,9 +53,9 @@ const DebugLogger = (() => {
     _buffer.push(`[${ts}] === DebugLogger 記録終了（${_buffer.length}行） ===`);
 
     // ファイル名: COCOMITalk_debug_YYYY-MM-DD_HHmmss.txt
-    const now = new Date();
-    const dateStr = now.toISOString().slice(0, 10);
-    const timeStr = now.toTimeString().slice(0, 8).replace(/:/g, '');
+    const j = new Date(Date.now() + 9 * 3600 * 1000).toISOString(); // 2026-11-01 JSTで日付・時刻をそろえる
+    const dateStr = j.slice(0, 10);
+    const timeStr = j.slice(11, 19).replace(/:/g, '');
     const fileName = `COCOMITalk_debug_${dateStr}_${timeStr}.txt`;
 
     // テキストファイルとしてダウンロード

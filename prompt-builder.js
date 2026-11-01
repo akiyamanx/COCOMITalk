@@ -13,6 +13,10 @@
 // v1.6.1 2026-03-30 - テンプレート修正: グループで本人が既に答えた場合は自然に受ける指示を追加
 // v1.7 2026-04-05 - ワイワイモード: スタイルプロンプト末尾アペンド（ChatStyleModes連携）
 // v1.8 2026-04-05 - エスケープハッチ統合: ユーザー発話からトリガー検出→一時的にじっくりモードで回答（Sprint 2+3統合）
+// v1.9 2026-10-29 - 現在の日本時間(JST)の1行を全キャラ・全モードの注入文の先頭に追加（nowLine。時計は options.now で差し替え可）
+// v1.10 2026-10-30 - 注入テキストの取得（記憶/話題/ベクトル/会話メモリー）を並列化（音声会話の「送信→AI」短縮。順番・中身は同じ）
+// v1.11 2026-10-31 - prefetch()/prefetchVector() と build の options.prefetched（音声会話で文字起こしと並行に取り始めた分を使う。中身・順番は同じ）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
 'use strict';
 
 const PromptBuilder = (() => {
@@ -31,12 +35,16 @@ const PromptBuilder = (() => {
     koko: '🌸ここちゃん',
     onee: '🌙お姉ちゃん',
     kuro: '🔮クロちゃん',
+    aoi: '🦋葵ちゃん',   // 2026-10-30 葵・きみの記憶にも持ち主の札を付ける（今までは "aoi" のまま出ていた）
+    kimi: '🌟きみちゃん',
   };
 
   const SISTER_KEY_TO_DB = {
     koko: 'koko',
     gpt: 'onee',
     claude: 'kuro',
+    aoi: 'aoi',
+    kimi: 'kimi',
   };
 
   const SHARED_CATEGORIES = ['会議決定', '共通認識', '開発ルール', 'ロードマップ'];
@@ -95,29 +103,19 @@ const PromptBuilder = (() => {
     const skipSearch = options.skipSearch || false;
     const skipHotTopic = options.skipHotTopic || mode === 'meeting';
 
-    let extra = '';
+    let extra = nowLine(options.now);
 
-    if (options.preBuiltMemory) {
-      extra += options.preBuiltMemory;
-    } else if (!skipMemory) {
-      extra += await _getMemoryText(memoryLimit);
-    }
-
-    if (!skipHotTopic) {
-      extra += await _getHotTopicText(mode, sister);
-    }
-
-    if (!skipSearch) {
-      extra += _getSearchText(clearSearch);
-    }
-
-    if (!options.skipVector && options.userText) {
-      extra += await _getVectorSearchText(options.userText, undefined, mode, sister);
-    }
-
-    if (!options.skipChatMemory && mode === 'chat') {
-      extra += await _getChatMemoryText(options.chatMemoryLimit || 3);
-    }
+    // v1.10: 記憶・話題・ベクトル検索・会話メモリーは同時に取りに行く（順番に待っていた分を短縮。つなぐ順は今まで通り）
+    const none = Promise.resolve('');
+    const pf = (mode === 'chat' && options.prefetched) || {}; // v1.11 - 先に取り始めた分（chatモードの既定設定で取ったものだけ）
+    const pMem = options.preBuiltMemory ? Promise.resolve(options.preBuiltMemory) : (!skipMemory ? (pf.pMem || _getMemoryText(memoryLimit)) : none);
+    const pHot = !skipHotTopic ? (pf.pHot || _getHotTopicText(mode, sister)) : none;
+    const pVec = (!options.skipVector && options.userText) ? (pf.pVec || _getVectorSearchText(options.userText, undefined, mode, sister)) : none;
+    const pChat = (!options.skipChatMemory && mode === 'chat') ? (pf.pChat || _getChatMemoryText(options.chatMemoryLimit || 3)) : none;
+    const [tMem, tHot, tVec, tChat] = await Promise.all([pMem, pHot, pVec, pChat]);
+    extra += tMem + tHot;
+    if (!skipSearch) extra += _getSearchText(clearSearch);
+    extra += tVec + tChat;
 
     // v1.8更新 - ワイワイモード + エスケープハッチ統合
     if (typeof ChatStyleModes !== 'undefined' && sister) {
@@ -332,6 +330,30 @@ const PromptBuilder = (() => {
     return await _getVectorSearchText(topicText, count, 'meeting', null);
   }
 
+  /**
+   * v1.9追加 - 現在の日本時間の1行（端末のタイムゾーンに依存しない）
+   * @param {Date|number} [now] - テスト用に時計を差し替え（省略時は現在時刻）
+   */
+  function nowLine(now) {
+    const d = (now === undefined) ? new Date() : new Date(now);
+    const f = new Intl.DateTimeFormat('ja-JP', {
+      timeZone: 'Asia/Tokyo', year: 'numeric', month: 'numeric', day: 'numeric',
+      weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false,
+    });
+    const p = {};
+    for (const x of f.formatToParts(d)) p[x.type] = x.value;
+    const hh = String(Number(p.hour) % 24).padStart(2, '0');
+    return `\n\n今は${p.year}年${p.month}月${p.day}日(${p.weekday}) ${hh}:${p.minute}（日本時間）。今日の日付や時刻はこれを使って答える。\n`;
+  }
+
+  /** v1.11 - 文字に依存しない部分を先に取り始める（chatモードの既定値。取得関数は失敗しても '' を返す） */
+  function prefetch(o = {}) {
+    const d = MODE_DEFAULTS.chat;
+    return { pMem: _getMemoryText(d.memoryLimit), pHot: _getHotTopicText('chat', o.sister || null), pChat: _getChatMemoryText(3) };
+  }
+  /** v1.11 - 記憶検索（文字に依存）を先に取り始める */
+  function prefetchVector(text, sister) { return _getVectorSearchText(text, undefined, 'chat', sister || null); }
+
   function clearHotTopicCache() {
     _hotTopicRawCache = null;
     _hotTopicCacheTime = 0;
@@ -340,9 +362,12 @@ const PromptBuilder = (() => {
 
   return {
     build,
+    nowLine,
     clearSearch,
     preloadMemory,
     preloadVectorSearch,
+    prefetch,
+    prefetchVector,
     clearHotTopicCache,
   };
 })();

@@ -8,6 +8,11 @@
 // v1.0 2026-03-11 - Phase 2a+ Function Calling対応（web_search自動検索）
 // v1.1 2026-03-11 - Phase 2c ToolRegistry統合（複数ツール対応）
 // v1.2 2026-03-12 - history末尾のuserMessage二重送信防止
+// v1.3 2026-10-28 - モデルをModelTiers(軽量/標準/高頭脳)から決定（旧モデルID表を廃止）
+// v1.4 2026-10-28 - 思考レベル: 設定で選ばれた時だけ generationConfig.thinkingConfig.thinkingLevel を送る。思考トークン(thoughtsTokenCount)も出力として記録
+// v1.6 2026-10-30 - 実行したツール名を options.toolNames に記録（吹き出しの印用）
+// v1.5 2026-10-30 - Function Calling 2回目に元のpartsをそのまま返す（thoughtSignature保持）。複数functionCallに対応。ツール使用をoptions.toolUsedで通知
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
 
 'use strict';
 
@@ -18,19 +23,12 @@
 const ApiGemini = (() => {
 
   // --- モデル定義 ---
-  // v0.8 Step 3 - モデルグレード切替用に追加
-  // v0.9.5修正 - 正しいAPIモデル名に修正（Gemini 3系は-preview必須）
-  const MODELS = {
-    'flash-lite': 'gemini-2.0-flash-lite',
-    'flash': 'gemini-2.0-flash',
-    'flash-25': 'gemini-2.5-flash',
-    'flash-3': 'gemini-3-flash-preview',
-    'pro': 'gemini-2.5-pro-preview-03-25',
-    'pro-31': 'gemini-3.1-pro-preview',
-  };
+  // v1.3変更 - モデルIDは model-tiers.js が唯一の定義元（lite/standard/high。旧キー flash-25/flash-3/pro-31 等も受け付ける）
+  // ※旧 gemini-2.0-flash 系は停止済みのため、旧キー flash-lite/flash は軽量(3.5 Flash-Lite)へ寄せる
+  const PROVIDER = 'gemini';
 
-  // デフォルトモデル
-  const DEFAULT_MODEL = 'flash-25';
+  // デフォルトモデル（段階名）
+  const DEFAULT_MODEL = 'lite';
 
   /**
    * Gemini APIにメッセージを送信（Worker中継版）
@@ -47,14 +45,18 @@ const ApiGemini = (() => {
       throw new Error('COCOMI認証トークンが設定されていません。設定画面のGemini APIキー欄にトークンを入力してください。');
     }
 
-    const modelKey = options.model || DEFAULT_MODEL;
-    const modelName = MODELS[modelKey] || MODELS[DEFAULT_MODEL];
+    // v1.3変更 - 段階/旧キー → モデルID。不明なキーは軽量にフォールバック
+    const tier = ModelTiers.resolve(PROVIDER, options.model || DEFAULT_MODEL);
+    const modelName = tier.id;
 
     // リクエストボディ構築（v1.0変更 - 添付ファイル対応）
     const body = _buildRequestBody(userMessage, systemPrompt, history, options.attachment);
 
     // v0.9修正 - 出力上限を4096に増加（会議モードでここちゃんの発言が途切れるバグ修正）
     body.generationConfig.maxOutputTokens = options.maxTokens || 4096;
+
+    // v1.4追加 - 思考レベル（公式REST: generationConfig.thinkingConfig.thinkingLevel。思考トークンも出力枠に含まれる）【実API未確認】
+    if (tier.effort) body.generationConfig.thinkingConfig = { thinkingLevel: tier.effort };
 
     // v0.5追加 - Worker用にmodelフィールドを追加
     body.model = modelName;
@@ -78,7 +80,8 @@ const ApiGemini = (() => {
       const usage = data?.usageMetadata;
       if (usage && typeof TokenMonitor !== 'undefined') {
         const inputTokens = usage.promptTokenCount || 0;
-        const outputTokens = usage.candidatesTokenCount || 0;
+        // v1.4: 思考トークン(thoughtsTokenCount)は出力として課金される（公式）ので足して記録
+        const outputTokens = (usage.candidatesTokenCount || 0) + (usage.thoughtsTokenCount || 0);
         TokenMonitor.record(modelName, inputTokens, outputTokens);
       }
 
@@ -172,18 +175,27 @@ const ApiGemini = (() => {
 
     const fc = fcPart.functionCall;
     if (typeof ToolRegistry === 'undefined' || !ToolRegistry.hasTool(fc.name)) return null;
+    if (options) options.toolUsed = true; // v1.5: 自動フォローアップ判定用
 
     console.log(`[ApiGemini] Function Call検出: ${fc.name}(${JSON.stringify(fc.args)})`);
 
     // ToolRegistryでツール実行
-    const toolResult = await ToolRegistry.execute(fc.name, fc.args || {});
+    // v1.5: モデルの返したparts（thoughtSignature含む）をそのまま返す。functionCallが複数なら全部に答える（最大3つ）
+    const responses = [];
+    for (const [i, p] of parts.filter(x => x.functionCall).entries()) {
+      const f = p.functionCall;
+      const ok = i < 3 && ToolRegistry.hasTool(f.name);
+      if (ok && options) (options.toolNames = options.toolNames || []).push(f.name); // v1.6: 吹き出しの「ツールを使ったよ」印用
+      const result = ok ? await ToolRegistry.execute(f.name, f.args || {}) : '（このツールは実行しませんでした）';
+      responses.push({ functionResponse: { name: f.name, response: { result } } });
+    }
 
     // ツール結果をGeminiに返す（functionResponse形式）
     const followUpBody = { ...originalBody };
     followUpBody.contents = [
       ...originalBody.contents,
-      { role: 'model', parts: [{ functionCall: fc }] },
-      { role: 'user', parts: [{ functionResponse: { name: fc.name, response: { result: toolResult } } }] },
+      { role: 'model', parts },
+      { role: 'user', parts: responses },
     ];
     // 2回目はツール定義なし（ループ防止）
     delete followUpBody.tools;
@@ -194,7 +206,7 @@ const ApiGemini = (() => {
     // トークン記録（2回目の分）
     const usage2 = data2?.usageMetadata;
     if (usage2 && typeof TokenMonitor !== 'undefined') {
-      TokenMonitor.record(modelName, usage2.promptTokenCount || 0, usage2.candidatesTokenCount || 0);
+      TokenMonitor.record(modelName, usage2.promptTokenCount || 0, (usage2.candidatesTokenCount || 0) + (usage2.thoughtsTokenCount || 0));
     }
 
     console.log(`[ApiGemini] Function Calling完了（${fc.name}） → 最終回答取得`);
@@ -233,7 +245,7 @@ const ApiGemini = (() => {
    * 利用可能なモデル一覧を取得
    */
   function getModels() {
-    return { ...MODELS };
+    return ModelTiers.idMap(PROVIDER);
   }
 
   return {

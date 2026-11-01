@@ -5,6 +5,7 @@
 // v1.1 2026-04-05 - エスケープハッチ案内追加＋Gemini微調整（Sprint 2+3統合）
 // v1.2 2026-04-05 - プロンプト強化: 全モデルで短文をより徹底（2〜3文→1〜2文、箇条書き禁止強化）
 // v1.3 2026-04-05 - Gemini用にfew-shot例文追加（good/bad例で短文を具体的に誘導）
+// v1.4 2026-10-29 - aoi/kimi のキーを明示（claudeと同じ文。未知キー任せのフォールバックをやめる）
 'use strict';
 
 const ChatStyleModes = (() => {
@@ -103,6 +104,12 @@ const ChatStyleModes = (() => {
 【次のメッセージの良い例】「えへへ、どういたしまして！楽しんできてね💖」←こういう短さに戻る！`,
     },
   };
+
+  // v1.4 2026-10-29 - 葵・きみ用の明示キー（今までは未知キーとして claude の文に落ちていた。同じ文を明示的に割り当てるだけで挙動は変えない）
+  for (const k of ['aoi', 'kimi']) {
+    STYLE_PROMPTS.waiwai[k] = STYLE_PROMPTS.waiwai.claude;
+    STYLE_PROMPTS.escape[k] = STYLE_PROMPTS.escape.claude;
+  }
 
   let _currentStyle = 'normal';
 

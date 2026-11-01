@@ -7,6 +7,8 @@
 // v1.0.1 修正 - 会議マイクもリングウェーブ＋呼吸グローデザインに対応
 // v1.1 2026-07-17 - isVoiceTurnBusy()/getVoiceTurnBusyReason()をmixin追加（お散歩ゲートPoC A。voice-input.jsが既に516行=500行ルール超過のため、行数削減の先例に倣い本ファイルへ配置）
 // v1.2 2026-07-17 - バッファ待ち窓(認識済みテキストの送信待ち約4秒)もbusy扱いに追加（Day117実測: 20:34:44に画像ターンが割り込みアキヤの発話が入力欄に取り残された事故の修正）
+// v3.77 2026-10-29 - マイクの状態色を青系に
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29
 
 /**
  * VoiceControllerに送信系メソッドをmixin注入
@@ -98,17 +100,17 @@ VoiceController.prototype._updateMeetingMicState = function(state) {
   if (!btn) return;
 
   if (state === 'listening') {
-    btn.style.background = 'linear-gradient(135deg, #ec4899, #a855f7)';
+    btn.style.background = 'linear-gradient(135deg, #5B8EC4, #3D6591)';
     btn.style.borderColor = 'transparent';
     btn.innerHTML = '🎤';
     btn.style.animation = 'cocomi-breath-scale 3s ease-in-out infinite';
-    btn.style.boxShadow = '0 0 14px rgba(236,72,153,0.3)';
+    btn.style.boxShadow = '0 0 14px rgba(91, 142, 196,0.3)';
   } else if (state === 'speaking') {
-    btn.style.background = 'linear-gradient(135deg, #a855f7, #6c5ce7)';
+    btn.style.background = 'linear-gradient(135deg, #4E9A94, #3D6591)';
     btn.style.borderColor = 'transparent';
     btn.innerHTML = '🔊';
     btn.style.animation = 'none';
-    btn.style.boxShadow = '0 0 12px rgba(108,92,231,0.4)';
+    btn.style.boxShadow = '0 0 12px rgba(61, 101, 145,0.4)';
   } else if (state === 'error') {
     btn.style.background = '#e74c3c';
     btn.style.borderColor = '#e74c3c';
@@ -117,7 +119,7 @@ VoiceController.prototype._updateMeetingMicState = function(state) {
     btn.style.boxShadow = 'none';
   } else {
     btn.style.background = 'white';
-    btn.style.borderColor = 'var(--active-primary,#6c5ce7)';
+    btn.style.borderColor = 'var(--active-primary,#4A76A8)';
     btn.innerHTML = '🎤';
     btn.style.animation = 'none';
     btn.style.boxShadow = 'none';

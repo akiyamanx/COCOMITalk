@@ -1,0 +1,57 @@
+/* working-indicator.css v1.0 */
+/* このファイルは COCOMITalk の「作業中」表示（working-indicator.js）の見た目と動き。CSSのkeyframesだけ（画像なし） */
+/* 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01 */
+/* v1.0 2026-11-01 - 新規作成（v4.9）。左上の顔: think=ぷるぷる(wobble) / speak=びよ〜ん(bounce) / write=キーボードをカタカタ(typing)。 */
+/*   左端に小さな顔＋ラベルの札。prefers-reduced-motion ではそっと点滅(pulse)だけ */
+
+/* ---- 左上の小さな顔（mascot-eyes の外側の箱に掛ける。内側の .me-face のピョンとは別要素） ---- */
+body.wi-wobble .mascot-eyes { animation: wi-wobble 0.6s ease-in-out infinite; }
+body.wi-bounce .mascot-eyes { animation: wi-bounce 0.9s ease-in-out infinite; }
+body.wi-typing .mascot-eyes { animation: wi-type-head 0.5s ease-in-out infinite; }
+body.wi-typing .mascot-eyes::after {          /* 顔の下の小さなキーボード */
+  content: ''; position: absolute; left: 3px; right: 3px; bottom: -6px; height: 5px; border-radius: 2px;
+  background: repeating-linear-gradient(90deg, #8a7a6e 0 3px, #fff 3px 4px); border: 1px solid #8a7a6e;
+  animation: wi-keys 0.25s steps(2) infinite;
+}
+
+/* ---- 左端の札（AIの吹き出し列のさらに左。タップは素通し） ---- */
+.wi-box {
+  position: fixed; left: 4px; bottom: calc(150px + env(safe-area-inset-bottom, 0px)); z-index: 900;
+  display: none; align-items: center; gap: 5px; padding: 3px 8px 3px 4px; max-width: 60vw;
+  background: rgba(255, 243, 227, 0.94); border: 1px solid #F0C9A8; border-radius: 14px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15); font-size: 11px; color: #6b4a36; pointer-events: none;
+}
+.wi-box.wi-show { display: flex; }
+.wi-face {
+  position: relative; flex: 0 0 18px; width: 18px; height: 18px; border-radius: 50%; box-sizing: border-box;
+  background: #FFF3E3; border: 1px solid #F0C9A8; display: flex; align-items: center; justify-content: center; gap: 2px;
+}
+.wi-eye { width: 4px; height: 6px; border-radius: 50%; background: #3a2a20; }
+.wi-kb { display: none; width: 12px; height: 4px; margin-left: -4px; align-self: flex-end;
+  background: repeating-linear-gradient(90deg, #8a7a6e 0 2px, #fff 2px 3px); border: 1px solid #8a7a6e; border-radius: 1px; }
+.wi-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+body.wi-wobble .wi-face { animation: wi-wobble 0.6s ease-in-out infinite; }
+body.wi-bounce .wi-face { animation: wi-bounce 0.9s ease-in-out infinite; }
+body.wi-typing .wi-face { animation: wi-type-head 0.5s ease-in-out infinite; }
+body.wi-typing .wi-kb { display: block; animation: wi-keys 0.25s steps(2) infinite; }
+
+@keyframes wi-wobble {   /* ぷるぷる */
+  0%, 100% { transform: rotate(0deg) scale(1, 1); }
+  25% { transform: rotate(-7deg) scale(1.04, 0.96); }
+  75% { transform: rotate(7deg) scale(0.96, 1.04); }
+}
+@keyframes wi-bounce {   /* びよ〜ん */
+  0%, 100% { transform: translateY(0) scale(1, 1); }
+  20% { transform: translateY(1px) scale(1.12, 0.86); }
+  50% { transform: translateY(-6px) scale(0.92, 1.12); }
+  80% { transform: translateY(0) scale(1.05, 0.95); }
+}
+@keyframes wi-type-head { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(1px) rotate(-3deg); } }
+@keyframes wi-keys { 0% { filter: brightness(1); } 100% { filter: brightness(0.75); } }
+@keyframes wi-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
+
+@media (prefers-reduced-motion: reduce) {
+  body.wi-on .mascot-eyes, body.wi-on .wi-face, body.wi-typing .mascot-eyes::after, body.wi-typing .wi-kb {
+    animation: wi-pulse 2s ease-in-out infinite !important;
+  }
+}

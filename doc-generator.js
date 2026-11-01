@@ -13,6 +13,9 @@
 // v3.0.1 2026-03-24 - クロちゃんAPI失敗時もお姉ちゃん版で出力＋エラー詳細表示（API上限時の無駄消費防止）
 // v3.0.2 2026-03-24 - プリフライトチェック追加（生成前にAPI疎通確認、両方OKでないと開始しない）
 // v3.0.3 2026-03-24 - エラー時デバッグ表示が消えるバグ修正（ステータス保持＋タイムアウト検出＋エラー詳細強化）
+// v3.1.0 2026-10-28 - モデルをModelTiersから決定（GPT-6のreasoning_effort付与・Claudeのtemperature送信を段階表で判定）
+// v3.2.0 2026-11-01 - クロのチェック失敗の理由（HTTP番号/種類・どのファイル）を reviewFailures で返す・空応答も失敗扱い（秘密は出さない）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 
 'use strict';
 
@@ -153,6 +156,7 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
     _isGenerating = true;
     const allFiles = [];
     let reviewSkipped = false; // v3.0.1 - クロちゃんチェックがスキップされたか
+    const reviewFailures = []; // v3.2.0 - { file, reason }
 
     try {
       // v3.0.2 - プリフライトチェック（本番生成前にAPI疎通確認、コスト無駄遣い防止）
@@ -197,10 +201,13 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
             reviewPages = await _callWithContinuation(
               'claude', KURO_SYSTEM, reviewUserContent, fileDef.label
             );
+            if (reviewPages.length === 0) throw new Error('応答が空（途中で切れた・エラーイベントの可能性）');
           } catch (reviewError) {
-            console.warn(`[DocGenerator] ${fileDef.name}: クロちゃんチェック失敗、お姉ちゃん版で出力:`, reviewError.message);
-            _updateStatus(`⚠️ クロちゃんチェック失敗、お姉ちゃん版で出力するよ`);
+            const reason = describeError(reviewError);
+            console.warn(`[DocGenerator] ${fileDef.name}: クロちゃんチェック失敗、お姉ちゃん版で出力: ${reason}`);
+            _updateStatus(`⚠️ クロちゃんチェック失敗（${fileDef.name}: ${reason}）、お姉ちゃん版で出力するよ`);
             reviewSkipped = true;
+            reviewFailures.push({ file: fileDef.outName || fileDef.name, reason });
           }
           // クロちゃんが失敗したらお姉ちゃん版をそのまま使う
           const finalPages = (reviewPages.length > 0) ? reviewPages : draftPages;
@@ -233,7 +240,7 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
       }
 
       _updateStatus('');
-      return { files: allFiles, success: true, reviewSkipped };
+      return { files: allFiles, success: true, reviewSkipped, reviewFailures };
 
     } catch (error) {
       console.error('[DocGenerator] 生成エラー:', error);
@@ -330,23 +337,26 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
    * v3.0.3 - ストリーミング対応（stream:trueで30秒タイムアウト回避）
    */
   async function _callOpenAIRaw(systemPrompt, messages) {
+    // 段階キー(lite/standard/high)または旧キー → モデルID。不明なら軽量（旧フォールバック gpt-4o-mini は廃止予定のため使わない）
     const modelKey = (typeof ModeSwitcher !== 'undefined')
-      ? ModeSwitcher.getModelKey('gpt') : 'mini';
-    const models = (typeof ApiOpenAI !== 'undefined') ? ApiOpenAI.getModels() : {};
-    const modelName = models[modelKey] || 'gpt-4o-mini';
+      ? ModeSwitcher.getModelKey('gpt') : 'lite';
+    const tier = ModelTiers.resolve('openai', modelKey);
+    const modelName = tier.id;
+    const isReasoning = ModelTiers.isReasoningOpenAI(modelName); // gpt-5 / gpt-6
 
     const body = {
       model: modelName,
       stream: true, // v3.0.3 - ストリーミング有効化
       messages: [
-        // v1.1準拠 - GPT-5系はdeveloperロール
-        { role: modelName.startsWith('gpt-5') ? 'developer' : 'system', content: systemPrompt },
+        // v1.1準拠 - GPT-5/6系はdeveloperロール
+        { role: isReasoning ? 'developer' : 'system', content: systemPrompt },
         ...messages,
       ],
     };
-    // v1.1準拠 - GPT-5系はmax_completion_tokens
-    if (modelName.startsWith('gpt-5')) {
+    // v1.1準拠 - GPT-5/6系はmax_completion_tokens（temperatureは送らない）
+    if (isReasoning) {
       body.max_completion_tokens = MAX_TOKENS;
+      Object.assign(body, tier.params); // reasoning_effort（実API未確認）
     } else {
       body.max_tokens = MAX_TOKENS;
       body.temperature = 0.3;
@@ -373,9 +383,9 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
    */
   async function _callClaudeRaw(systemPrompt, messages) {
     const modelKey = (typeof ModeSwitcher !== 'undefined')
-      ? ModeSwitcher.getModelKey('claude') : 'haiku';
-    const models = (typeof ApiClaude !== 'undefined') ? ApiClaude.getModels() : {};
-    const modelName = models[modelKey] || 'claude-haiku-4-5-20251001';
+      ? ModeSwitcher.getModelKey('claude') : 'lite';
+    const tier = ModelTiers.resolve('anthropic', modelKey);
+    const modelName = tier.id;
 
     const body = {
       model: modelName,
@@ -384,8 +394,8 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
       max_tokens: MAX_TOKENS,
       stream: true, // v3.0.3 - ストリーミング有効化
     };
-    // v1.3準拠 - Opus 4.6はtemperature非対応
-    if (!modelName.includes('opus')) {
+    // Claude 4.7以降は temperature を送ると400になる（公式ドキュメント記載・実API未確認）→段階表で送信可否を判定
+    if (tier.sendTemperature) {
       body.temperature = 0.2;
     }
 
@@ -461,8 +471,28 @@ Markdown形式で出力してください。===FILE:などの区切りは不要�
     return _isGenerating;
   }
 
+  /**
+   * v3.2.0 - エラーを「種類（HTTP番号）: 短い説明」にする。鍵・トークンらしき文字は伏せる
+   */
+  function describeError(err) {
+    const raw = String((err && err.message) || err || '不明');
+    const msg = raw.replace(/(sk-[\w-]{4})[\w-]+/g, '$1…').replace(/(Bearer\s+)\S+/gi, '$1…').replace(/\s+/g, ' ');
+    const code = (msg.match(/HTTP\s?(\d{3})/) || msg.match(/\b(40[0-9]|429|5\d\d)\b/) || [])[1];
+    let kind = 'その他のエラー';
+    if (err && err.name === 'AbortError') kind = '中断（AbortError）';
+    else if (code === '402' || /credit|billing|残高|クレジット/i.test(msg)) kind = 'クレジット不足(402等)';
+    else if (code === '429' || /rate.?limit/i.test(msg)) kind = '回数・トークン上限(429)';
+    else if (code === '529' || /overloaded/i.test(msg)) kind = '混雑(529 overloaded)';
+    else if (/timeout|タイムアウト|Failed to fetch|NetworkError|通信/i.test(msg)) kind = 'タイムアウト/通信切れ';
+    else if (/応答が空/.test(msg)) kind = '空の応答';
+    else if (code && code[0] === '4') kind = `リクエストエラー(${code})`;
+    else if (code && code[0] === '5') kind = `サーバーエラー(${code})`;
+    return `${kind}${code && !kind.includes(code) ? ` HTTP ${code}` : ''} / ${msg.slice(0, 140)}`;
+  }
+
   return {
     generate,
     isGenerating,
+    describeError,
   };
 })();

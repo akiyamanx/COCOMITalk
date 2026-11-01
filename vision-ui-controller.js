@@ -8,6 +8,9 @@
 // v1.4 2026-04-06 - 会話ラリー中の自動キャプチャ一時停止 + 表示/送信分離（カスタムイベント方式）
 // v1.5 2026-07-17 - 音声ターン優先ゲート＋スキップ時の一時画像破棄＋DebugLoggerログ（お姉ちゃんレポートNo.010 PoC A）
 // v1.5.1 2026-07-17 - _walkLogに時刻プレフィックス追加（書き出しログの時系列追跡用・whisper-providerと同形式）
+// v1.6 2026-10-28 - お散歩開始/停止をModeSwitcherに通知（お散歩中は軽量モデル枠を使う）
+// v1.7 2026-10-28 - 費用上限ゲート（上限に達したら自動送信を止める。walk-spend.js）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-28
 
 'use strict';
 
@@ -251,6 +254,8 @@ const VisionUIController = (() => {
     const interval = WALK_INTERVALS[_walkIntervalIndex];
     VisionEngine.startAutoCapture(interval.ms, WALK_CHANGE_THRESHOLD);
     _isWalkMode = true;
+    // v1.6 - お散歩中は設定画面の『🚶お散歩』枠のモデル段階（既定: 軽量）を使う
+    if (typeof ModeSwitcher !== 'undefined') ModeSwitcher.setWalkMode(true);
 
     const btnWalk = document.getElementById('btn-vision-walk');
     const walkStatus = document.getElementById('vision-walk-status');
@@ -269,6 +274,7 @@ const VisionUIController = (() => {
     VisionEngine.stopAutoCapture();
     _isWalkMode = false;
     _isPaused = false;
+    if (typeof ModeSwitcher !== 'undefined') ModeSwitcher.setWalkMode(false);
     if (_pauseResumeTimer) {
       clearTimeout(_pauseResumeTimer);
       _pauseResumeTimer = null;
@@ -375,6 +381,15 @@ const VisionUIController = (() => {
       _walkLog('入力欄にテキストがあるため自動送信スキップ'); // v1.5変更
       _discardAutoCapture('inputText'); // v1.5追加
       return;
+    }
+    // v1.7追加 - 費用上限ゲート（walk-spend.js）。上限に達していたら自動送信しない（「今回だけ続ける」は1回だけ通す）
+    if (window.WalkSpend) {
+      const g = window.WalkSpend.gate();
+      if (!g.allow) {
+        _walkLog('費用上限に達しているため自動送信スキップ');
+        _discardAutoCapture('capReached');
+        return;
+      }
     }
     const event = new CustomEvent('vision-auto-send', {
       detail: { displayText: WALK_DISPLAY_MESSAGE, apiText: WALK_API_MESSAGE }

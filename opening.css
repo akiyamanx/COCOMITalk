@@ -1,0 +1,21 @@
+/* COCOMITalk - オープニング用スタイル
+   このファイルは opening.js が作る全画面オーバーレイ（#opening-overlay）だけに効く。既存のスプラッシュ(.splash)は変えない
+   v1.0 2026-10-29 - cocomi_opening_v3.html のスタイルを移植（IDは op- 接頭辞で衝突回避）。スキップは常時表示・44px以上
+   作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-29 */
+#opening-overlay{position:fixed;inset:0;z-index:1100;background:#000;overflow:hidden;font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP","Noto Sans CJK JP","Segoe UI",Meiryo,sans-serif;-webkit-font-smoothing:antialiased;touch-action:manipulation}
+#opening-overlay canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+#opening-overlay .op-ui{position:absolute;z-index:8;display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;font-size:13px;letter-spacing:.18em;color:rgba(255,240,220,.85);background:rgba(0,0,0,.35);border:1px solid rgba(255,230,200,.25);border-radius:999px;padding:9px 18px;cursor:pointer;transition:opacity .6s,background .3s;font-family:inherit;-webkit-tap-highlight-color:transparent}
+#opening-overlay .op-ui:hover{background:rgba(255,220,180,.12)}
+#opening-overlay .op-ui:focus-visible,#opening-overlay #op-start:focus-visible{outline:2px solid rgba(255,230,200,.8);outline-offset:3px}
+#op-skip{top:calc(env(safe-area-inset-top,0px) + 12px);right:calc(env(safe-area-inset-right,0px) + 12px)}
+#op-mute{right:calc(env(safe-area-inset-right,0px) + 18px);bottom:calc(env(safe-area-inset-bottom,0px) + 18px);opacity:0;pointer-events:none;padding:8px 14px}
+#opening-overlay .op-show{opacity:1!important;pointer-events:auto!important}
+#op-start{position:absolute;inset:0;z-index:6;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#000;cursor:pointer;transition:opacity .8s;border:0;padding:0;font-family:inherit;-webkit-tap-highlight-color:transparent}
+#op-start .op-btn{display:flex;width:84px;height:84px;border-radius:50%;border:1px solid rgba(255,220,180,.45);align-items:center;justify-content:center;color:#ffe9cc;font-size:24px;padding-left:6px;box-shadow:0 0 40px rgba(255,180,90,.25),inset 0 0 20px rgba(255,180,90,.15);animation:opBreathe 2.4s ease-in-out infinite}
+#op-start .op-lbl{color:rgba(255,235,210,.75);font-size:14px;letter-spacing:.5em;padding-left:.5em}
+#op-start .op-sub{color:rgba(255,235,210,.35);font-size:10px;letter-spacing:.3em}
+@keyframes opBreathe{50%{box-shadow:0 0 70px rgba(255,180,90,.45),inset 0 0 26px rgba(255,180,90,.25)}}
+#op-start.op-hide{opacity:0;pointer-events:none}
+#op-fade{position:absolute;inset:0;z-index:7;background:#000;opacity:0;pointer-events:none;transition:opacity .8s ease}
+#op-fade.op-on{opacity:1;pointer-events:auto}
+@media (prefers-reduced-motion:reduce){#op-start .op-btn{animation:none}#opening-overlay .op-ui,#op-start,#op-fade{transition:none}}

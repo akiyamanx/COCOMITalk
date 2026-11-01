@@ -3,6 +3,11 @@
 // v1.8-1.9 ファイル添付対応 / v2.0 会議グレード3段階 / v2.1 APIリトライ / v2.2 Vectorize議題検索
 // v2.3 エラー日本語化+致命的エラー判定（B案: クレジット切れ等は即停止）
 
+// 2026-10-28 - 返信の先頭の声のトーンタグ[tone:xxx]を受け取り直後に外す（ToneStyle.consume。画面・履歴・読み上げにタグを出さない）
+// v2.4 2026-10-29 - step2有効化の準備: SISTERS に aoi(ApiXai) / kimi(ApiKimi) を追加（登録簿が enabled の時だけ api を返す。今は無効=呼ばれない。手順は chat-core.js 冒頭）
+// v2.6 2026-11-01 - 短すぎる返答（約40文字未満）は1回だけ聞き直す
+  // v2.5 2026-11-01 - 会議の共通手順ブロックを会議モード時だけ5人全員に連結（Phase A・クロ§5-③）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
 /**
@@ -18,25 +23,23 @@ const MeetingRelay = (() => {
 
   // --- 姉妹情報 ---
   // v2.0改修 - prompt()に会議グレード引数を追加（meeting-lite/meeting/meeting-full）
+  /** 登録簿で有効なキャラの時だけ mod を返す（無効・登録簿なしは null） */
+  const _on = (key, mod) => (typeof CharacterRegistry !== 'undefined' && CharacterRegistry.isEnabled(key)) ? mod : null;
+
+  // v2.5 2026-11-01 - 会議の共通手順（prompts/meeting-procedure.js）を会議モードの時だけ全員の末尾に足す
+  const _p = (mod, grade) => { const g = grade || 'meeting'; const s = mod ? mod.getPrompt(g) : '';
+    return (typeof MeetingProcedure !== 'undefined') ? MeetingProcedure.append(s, g) : s; };
   const SISTERS = {
-    koko: {
-      name: 'ここちゃん',
-      emoji: '🌸',
-      api: () => (typeof ApiGemini !== 'undefined') ? ApiGemini : null,
-      prompt: (grade) => (typeof KokoSystemPrompt !== 'undefined') ? KokoSystemPrompt.getPrompt(grade || 'meeting') : '',
-    },
-    gpt: {
-      name: 'お姉ちゃん',
-      emoji: '🌙',
-      api: () => (typeof ApiOpenAI !== 'undefined') ? ApiOpenAI : null,
-      prompt: (grade) => (typeof GptSystemPrompt !== 'undefined') ? GptSystemPrompt.getPrompt(grade || 'meeting') : '',
-    },
-    claude: {
-      name: 'クロちゃん',
-      emoji: '🔮',
-      api: () => (typeof ApiClaude !== 'undefined') ? ApiClaude : null,
-      prompt: (grade) => (typeof ClaudeSystemPrompt !== 'undefined') ? ClaudeSystemPrompt.getPrompt(grade || 'meeting') : '',
-    },
+    koko: { name: 'ここちゃん', emoji: '🌸', api: () => (typeof ApiGemini !== 'undefined') ? ApiGemini : null,
+      prompt: (grade) => _p(typeof KokoSystemPrompt !== 'undefined' ? KokoSystemPrompt : null, grade) },
+    gpt: { name: 'お姉ちゃん', emoji: '🌙', api: () => (typeof ApiOpenAI !== 'undefined') ? ApiOpenAI : null,
+      prompt: (grade) => _p(typeof GptSystemPrompt !== 'undefined' ? GptSystemPrompt : null, grade) },
+    claude: { name: 'クロちゃん', emoji: '🔮', api: () => (typeof ApiClaude !== 'undefined') ? ApiClaude : null,
+      prompt: (grade) => _p(typeof ClaudeSystemPrompt !== 'undefined' ? ClaudeSystemPrompt : null, grade) },
+    aoi: { name: '葵ちゃん', emoji: '🦋', api: () => _on('aoi', typeof ApiXai !== 'undefined' ? ApiXai : null),
+      prompt: (grade) => _p(typeof AoiSystemPrompt !== 'undefined' ? AoiSystemPrompt : null, grade) },
+    kimi: { name: 'きみちゃん', emoji: '🌟', api: () => _on('kimi', typeof ApiKimi !== 'undefined' ? ApiKimi : null),
+      prompt: (grade) => _p(typeof KimiSystemPrompt !== 'undefined' ? KimiSystemPrompt : null, grade) },
   };
 
   // --- 状態 ---
@@ -185,6 +188,10 @@ const MeetingRelay = (() => {
         if (reply === null) {
           throw lastError || new Error('不明なエラー');
         }
+        // v2.6 2026-11-01 - 短すぎる返答（「確認してから答えるね」だけ等）は1回だけ聞き直す
+        if (typeof MeetingProcedure !== 'undefined' && MeetingProcedure.isTooShort(reply) && !/API未接続/.test(reply)) {
+          try { const r2 = await _callSisterAPI(sisterKey, topic + MeetingProcedure.RETRY_NOTE, isLead, roundNum); if (r2 && r2.trim().length > reply.trim().length) reply = r2; } catch (e) { console.warn(`[MeetingRelay] ${sister.name} 聞き直し失敗（最初の返答を使う）:`, e.message); }
+        }
 
         // タイピング消去＋メッセージ表示
         if (typeof MeetingUI !== 'undefined') {
@@ -319,7 +326,7 @@ const MeetingRelay = (() => {
       opts,
     );
 
-    return reply;
+    return (typeof ToneStyle !== 'undefined') ? ToneStyle.consume(reply) : reply; // 声のトーンタグを外す
   }
 
   /** 会議コンテキストを構築（v1.1: 全ラウンド履歴含む） */
@@ -482,7 +489,9 @@ const MeetingRelay = (() => {
     getCurrentRound,
     getCurrentMeetingId,
     getMeetingGrade,
+    getTopic: () => originalTopic, // v2.5 書記・共有用
     restoreFromDB,
+    SISTERS,
     MAX_ROUNDS,
   };
 })();
