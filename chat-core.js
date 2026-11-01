@@ -18,7 +18,7 @@
 // v2.6 2026-10-30 - 登録簿で有効な葵/きみを1対1の表(SISTERS)・履歴に入れる（staging試験用に enabled:true）
 // v2.7 2026-10-30 - 履歴の読み込みも SISTERS の全員（葵/きみの履歴が戻らなかった）
 // v2.8 2026-10-30 - 音声会話中は軽いモデル(lite)＋短い話し言葉の指示、LLM返答の⏱計測（VoiceFast） / v2.9 同日 - 音声会話中は返事を受け取りながら最初の1文から読み上げ（voice-stream.js。対応APIだけ・ほかは今まで通り） / v3.0 2026-10-31 - 音声会話は文字起こしと並行に始めた「記憶などの準備」(voice-prep.js)を確定文で受け取って使う（AIへ渡すのは確定文のみ）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-31
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 //
 // ■ 葵ちゃん/きみちゃんを有効にする手順（スイッチの場所）。まだ全部OFF。実際の中継には一度もつないでいない
 //   1. 中継Worker(cocomi-api-relay)に /xai /kimi をデプロイ + XAI_API_KEY / KIMI_API_KEY を設定（deliverables_v2/relay_xai_kimi_v2.patch）
@@ -417,7 +417,7 @@ const ChatCore = (() => {
       if (welcomeMsg) welcomeMsg.classList.add('hidden');
       history.forEach(msg => {
         addMessage(msg.role === 'user' ? 'user' : 'ai', msg.content);
-      });
+      }); if (typeof ScrollLatest !== 'undefined') ScrollLatest.jumpToLatest(chatArea);
     }
 
     msgInput.placeholder = sister.placeholder;
@@ -455,7 +455,7 @@ const ChatCore = (() => {
         if (welcomeMsg) welcomeMsg.classList.add('hidden');
         history.forEach(msg => {
           addMessage(msg.role === 'user' ? 'user' : 'ai', msg.content);
-        });
+        }); if (typeof ScrollLatest !== 'undefined') ScrollLatest.jumpToLatest(chatArea);
       }
 
       console.log('[ChatCore] 履歴読み込み完了');

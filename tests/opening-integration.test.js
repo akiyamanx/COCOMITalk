@@ -123,7 +123,7 @@ test('sw.js: CACHE_FILES に4ファイルが入り、キャッシュ名は cocom
   const sw = read('sw.js');
   const files = sw.slice(sw.indexOf('const CACHE_FILES'), sw.indexOf('const CACHE_FONTS'));
   for (const f of ALL) assert.ok(files.includes(`'./${f}'`), f);
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.9';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v5.0';"));
   assert.ok(!sw.includes("const CACHE_NAME = 'cocomitalk-v3.75'"));
 });
 

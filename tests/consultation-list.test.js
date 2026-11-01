@@ -58,5 +58,5 @@ test('index.html は consultation-list.js を consultation-ui.js の前に読み
   const h = read('index.html');
   assert.ok(h.indexOf('consultation-list.js') > 0 && h.indexOf('consultation-list.js') < h.indexOf('consultation-ui.js'));
   const sw = read('sw.js');
-  assert.ok(sw.includes("'./consultation-list.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v4.9';"));
+  assert.ok(sw.includes("'./consultation-list.js'") && sw.includes("const CACHE_NAME = 'cocomitalk-v5.0';"));
 });

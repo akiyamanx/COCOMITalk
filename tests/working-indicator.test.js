@@ -71,12 +71,12 @@ test('hooks: 会議の考え中・チャット・読み上げ・書類/議事録
   assert.deepEqual(calls, ['show:koko', 'show:kimi', 'hide', 'cshow', 'chide', 'speak']);
 });
 
-test('配線: index.html で app.js の前に読み、sw.js v4.9 にキャッシュ・CSSは動きを減らす設定に対応', () => {
+test('配線: index.html で app.js の前に読み、sw.js v5.0 にキャッシュ・CSSは動きを減らす設定に対応', () => {
   const html = read('index.html');
   assert.ok(html.indexOf('working-indicator.js') < html.indexOf('working-hooks.js') && html.indexOf('working-hooks.js') < html.indexOf('src="app.js"'));
   const sw = read('sw.js');
   for (const f of ['working-indicator.js', 'working-hooks.js', 'working-indicator.css']) assert.ok(sw.includes(`'./${f}'`));
-  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v4.9';"));
+  assert.ok(sw.includes("const CACHE_NAME = 'cocomitalk-v5.0';"));
   const css = read('working-indicator.css');
   for (const k of ['@keyframes wi-wobble', '@keyframes wi-bounce', '@keyframes wi-keys', 'prefers-reduced-motion', 'wi-pulse']) assert.ok(css.includes(k), k);
   assert.ok(read('working-indicator.js').includes("'aria-live', 'polite'"));

@@ -1,7 +1,7 @@
 // COCOMITalk - テスト: 「最新の会話へ」ボタン（scroll-latest.js）とツール使用の印（toolLabel）
 // このファイルは偽のDOMで、上にスクロールすると出る・下の近くでは隠れる・タップで一番下へ・新着で点、を確かめる
 // v1.0 2026-10-30 - 新規作成
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 const test = require('node:test');
 const assert = require('node:assert');
@@ -52,7 +52,7 @@ test('CSS: 44px・--app-primary・動きを減らす設定に対応／index.html
   assert.ok(s.includes('width:44px;height:44px') && s.includes('var(--app-primary') && s.includes('prefers-reduced-motion'));
   assert.ok(fs.readFileSync(path.join(ROOT, 'index.html'), 'utf8').includes('<script src="scroll-latest.js"></script>'));
   const sw = fs.readFileSync(path.join(ROOT, 'sw.js'), 'utf8');
-  assert.ok(sw.includes("'./scroll-latest.js'") && sw.includes("'cocomitalk-v4.9'"));
+  assert.ok(sw.includes("'./scroll-latest.js'") && sw.includes("'cocomitalk-v5.0'"));
 });
 
 test('ツールの印: 名前→ラベル、無ければ空', () => {
@@ -64,4 +64,13 @@ test('ツールの印: 名前→ラベル、無ければ空', () => {
 test('隠し指示: 知識が要る質問は web_search を必ず呼ぶ・結果にない数字は書かない', () => {
   assert.ok(/必ず web_search/.test(PromiseFollowup.HIDDEN_INSTRUCTION));
   assert.ok(/結果に書いていない数字/.test(PromiseFollowup.HIDDEN_INSTRUCTION));
+});
+
+test('v5.0: jumpToLatest で履歴描画後に一番下へ・chat-core から呼ぶ', async () => {
+  const area = { scrollTop: 0, scrollHeight: 1500, querySelectorAll: () => [] };
+  assert.strictEqual(ScrollLatest.jumpToLatest(area), true);
+  assert.strictEqual(area.scrollTop, 1500);
+  assert.strictEqual(ScrollLatest.jumpToLatest(null, { querySelector: () => null }), false);
+  const core = fs.readFileSync(path.join(ROOT, 'chat-core.js'), 'utf8');
+  assert.strictEqual((core.match(/ScrollLatest\.jumpToLatest\(chatArea\)/g) || []).length, 2);
 });

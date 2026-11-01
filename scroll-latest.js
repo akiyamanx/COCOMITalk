@@ -2,7 +2,8 @@
 // このファイルは、チャット欄（1対1/グループ=#chat-area、会議=.meeting-chat）を上に戻した時に
 // 入力欄のすぐ上・右下に丸い↓ボタンを出し、タップで一番下へ戻す。見ていない間に新着が来たら小さな点を付ける
 // v1.0 2026-10-30 - 新規作成（44px・--app-primary・aria-label「最新の会話へ」・動きを減らす設定ではスムーズスクロールしない）
-// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-10-30
+// v1.1 2026-11-01 - 開いた時・姉妹切替・履歴読込の後に自動で一番下へ（jumpToLatest: 描画後rAF＋少し後＋画像読込後。画面が見えた瞬間も）
+// 作成: 葵(Aoi) / 最終更新: 葵(Aoi), 2026-11-01
 'use strict';
 
 const ScrollLatest = (() => {
@@ -83,9 +84,37 @@ const ScrollLatest = (() => {
     return { btn, update };
   }
 
+  /** 履歴を描いた後に一番下へ（描画・画像読込の遅れに備え、rAF後と少し後にもう一度） */
+  function jumpToLatest(area, doc = (typeof document !== 'undefined' ? document : null)) {
+    const el = area || (doc && doc.querySelector('#chat-area'));
+    if (!el) return false;
+    const go = () => { el.scrollTop = el.scrollHeight; };
+    go();
+    const later = (f, ms) => { if (typeof setTimeout === 'function') setTimeout(f, ms); };
+    const raf = (typeof requestAnimationFrame === 'function') ? requestAnimationFrame : (f) => later(f, 16);
+    raf(() => { go(); later(go, 120); later(go, 400); });
+    if (el.querySelectorAll) {
+      el.querySelectorAll('img').forEach(img => { if (!img.complete) img.addEventListener('load', go, { once: true }); });
+    }
+    return true;
+  }
+
+  /** チャット欄が「見えない→見える」になった時（画面を開いた時）に一番下へ */
+  function _watchOpen(area) {
+    if (!area || typeof ResizeObserver === 'undefined') return;
+    let wasHidden = area.clientHeight === 0;
+    new ResizeObserver(() => {
+      const hidden = area.clientHeight === 0;
+      if (wasHidden && !hidden) jumpToLatest(area);
+      wasHidden = hidden;
+    }).observe(area);
+  }
+
   function init(doc = document) {
     _injectStyle(doc);
     for (const t of TARGETS) attach(doc.querySelector(t.area), doc.querySelector(t.footer), doc);
+    _watchOpen(doc.querySelector('#chat-area'));
+    jumpToLatest(doc.querySelector('#chat-area'), doc);
   }
 
   if (typeof document !== 'undefined' && document.addEventListener) {
@@ -93,5 +122,5 @@ const ScrollLatest = (() => {
     else init();
   }
 
-  return { init, attach, isNearBottom, NEAR_PX };
+  return { init, attach, isNearBottom, jumpToLatest, NEAR_PX };
 })();
